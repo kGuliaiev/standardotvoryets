@@ -443,10 +443,10 @@ export function WorkingGroupDetail({ id }: Props) {
                     if (!addForm.email) return;
                     inviteMutation.mutate({ email: addForm.email, workingGroupId: id, role: addForm.role });
                   }}
-                  disabled={inviteMutation.isLoading || !addForm.email}
+                  disabled={inviteMutation.isPending || !addForm.email}
                   className="flex-1 py-2 text-sm bg-blue-700 text-white rounded-lg hover:bg-blue-800 disabled:opacity-50 transition-colors font-medium"
                 >
-                  {inviteMutation.isLoading ? 'Додавання…' : 'Додати'}
+                  {inviteMutation.isPending ? 'Додавання…' : 'Додати'}
                 </button>
               </div>
             </div>
@@ -487,10 +487,10 @@ export function WorkingGroupDetail({ id }: Props) {
                 </button>
                 <button
                   onClick={() => updateMutation.mutate({ id, name: editForm.name, description: editForm.description })}
-                  disabled={updateMutation.isLoading}
+                  disabled={updateMutation.isPending}
                   className="flex-1 py-2 text-sm bg-blue-700 text-white rounded-lg hover:bg-blue-800 disabled:opacity-50 transition-colors font-medium"
                 >
-                  {updateMutation.isLoading ? 'Збереження…' : 'Зберегти'}
+                  {updateMutation.isPending ? 'Збереження…' : 'Зберегти'}
                 </button>
               </div>
             </div>

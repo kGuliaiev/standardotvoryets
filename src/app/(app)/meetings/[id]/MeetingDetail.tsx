@@ -264,10 +264,10 @@ export function MeetingDetail({ id }: Props) {
               </button>
               <button
                 onClick={() => uploadMinutesMutation.mutate({ meetingId: id, minutesText })}
-                disabled={uploadMinutesMutation.isLoading || minutesText.length < 10}
+                disabled={uploadMinutesMutation.isPending || minutesText.length < 10}
                 className="flex-1 py-2 text-sm bg-blue-700 text-white rounded-lg hover:bg-blue-800 disabled:opacity-50 transition-colors font-medium"
               >
-                {uploadMinutesMutation.isLoading ? 'Збереження…' : 'Зберегти'}
+                {uploadMinutesMutation.isPending ? 'Збереження…' : 'Зберегти'}
               </button>
             </div>
           </div>

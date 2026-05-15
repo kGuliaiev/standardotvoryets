@@ -194,10 +194,10 @@ export function WorkingGroupsList() {
                 </button>
                 <button
                   type="submit"
-                  disabled={createMutation.isLoading}
+                  disabled={createMutation.isPending}
                   className="flex-1 py-2 text-sm bg-blue-700 text-white rounded-lg hover:bg-blue-800 disabled:opacity-50 transition-colors font-medium"
                 >
-                  {createMutation.isLoading ? 'Створення…' : 'Створити'}
+                  {createMutation.isPending ? 'Створення…' : 'Створити'}
                 </button>
               </div>
             </form>

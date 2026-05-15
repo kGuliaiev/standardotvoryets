@@ -127,7 +127,7 @@ export function StandardDetail({ id }: { id: string }) {
                 <button
                   key={next}
                   onClick={() => changeStatus.mutate({ id, status: next })}
-                  disabled={changeStatus.isLoading}
+                  disabled={changeStatus.isPending}
                   className="px-3 py-2 text-xs font-medium rounded-lg border border-slate-200 hover:bg-slate-50 text-slate-700 transition-colors disabled:opacity-50"
                 >
                   → {STATUS_LABELS[next]}
@@ -324,7 +324,7 @@ export function StandardDetail({ id }: { id: string }) {
                 {canOpenVoting && (
                   <button
                     onClick={() => closeVoting.mutate({ votingId: currentVoting.id })}
-                    disabled={closeVoting.isLoading}
+                    disabled={closeVoting.isPending}
                     className="text-xs px-3 py-1.5 border border-slate-200 rounded-lg text-slate-600 hover:bg-slate-50 disabled:opacity-50"
                   >
                     Закрити голосування
@@ -358,7 +358,7 @@ export function StandardDetail({ id }: { id: string }) {
                     <button
                       key={choice}
                       onClick={() => castVote.mutate({ votingId: currentVoting.id, choice })}
-                      disabled={castVote.isLoading}
+                      disabled={castVote.isPending}
                       className={`flex-1 py-2 text-xs font-medium rounded-lg border transition-colors ${
                         myVote?.choice === choice
                           ? choice === 'FOR' ? 'bg-green-600 text-white border-green-600'

@@ -253,10 +253,10 @@ export function UsersAdmin() {
                       role: inviteForm.role,
                     });
                   }}
-                  disabled={inviteMutation.isLoading || !inviteForm.email || !inviteForm.workingGroupId}
+                  disabled={inviteMutation.isPending || !inviteForm.email || !inviteForm.workingGroupId}
                   className="flex-1 py-2 text-sm bg-blue-700 text-white rounded-lg hover:bg-blue-800 disabled:opacity-50 transition-colors font-medium"
                 >
-                  {inviteMutation.isLoading ? 'Відправка…' : 'Запросити'}
+                  {inviteMutation.isPending ? 'Відправка…' : 'Запросити'}
                 </button>
               </div>
             </div>

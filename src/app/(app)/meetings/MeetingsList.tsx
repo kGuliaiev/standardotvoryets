@@ -331,10 +331,10 @@ export function MeetingsList() {
                       startAt: new Date(form.startAt),
                     });
                   }}
-                  disabled={createMutation.isLoading || !form.workingGroupId || !form.title || !form.startAt}
+                  disabled={createMutation.isPending || !form.workingGroupId || !form.title || !form.startAt}
                   className="flex-1 py-2 text-sm bg-blue-700 text-white rounded-lg hover:bg-blue-800 disabled:opacity-50 transition-colors font-medium"
                 >
-                  {createMutation.isLoading ? 'Створення…' : 'Створити'}
+                  {createMutation.isPending ? 'Створення…' : 'Створити'}
                 </button>
               </div>
             </div>
