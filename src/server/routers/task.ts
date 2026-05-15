@@ -77,7 +77,8 @@ export const taskRouter = createTRPCRouter({
             include: { workingGroup: true },
           },
           assignee: { select: { id: true, name: true, avatarUrl: true } },
-          createdBy: { select: { id: true, name: true } },
+          createdBy: { select: { id: true, name: true, avatarUrl: true } },
+          completedBy: { select: { id: true, name: true, avatarUrl: true } },
         },
       });
       if (!task) throw new TRPCError({ code: 'NOT_FOUND' });
@@ -186,6 +187,7 @@ export const taskRouter = createTRPCRouter({
         data: {
           status: input.status,
           completedAt: input.status === 'DONE' ? new Date() : null,
+          completedById: input.status === 'DONE' ? ctx.session.user.id : null,
         },
       });
       await logActivity(ctx.db, {

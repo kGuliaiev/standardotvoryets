@@ -497,14 +497,14 @@ function TaskRowItem({
       <span
         className={`w-2 h-2 rounded-full shrink-0 ${PRIORITY_DOT[task.priority] ?? 'bg-slate-300'}`}
       />
-      <button
-        onClick={onEdit}
+      <Link
+        href={`/tasks/${task.id}`}
         className={`flex-1 text-left text-sm truncate transition-colors ${
           isDone ? 'text-light line-through' : 'text-ink hover:text-brand'
         }`}
       >
         {task.title}
-      </button>
+      </Link>
       {showStandard && (
         <Link
           href={`/standards/${task.standardId}`}
