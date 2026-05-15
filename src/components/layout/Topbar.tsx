@@ -1,11 +1,12 @@
 'use client';
 
 import { type Session } from 'next-auth';
-import { Bell, Search, Sun, Moon } from 'lucide-react';
+import { Bell, Sun, Moon } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { trpc } from '@/lib/trpc/client';
 import { useTheme } from '@/components/providers/ThemeProvider';
+import { GlobalSearch } from '@/components/GlobalSearch';
 
 interface TopbarProps {
   session: Session;
@@ -44,14 +45,7 @@ export function Topbar({ session: _session }: TopbarProps) {
       <div className="flex-1" />
 
       {/* Search */}
-      <div className="relative hidden md:flex items-center">
-        <Search size={15} className="absolute left-3 text-light pointer-events-none" />
-        <input
-          type="search"
-          placeholder="Пошук стандартів…"
-          className="pl-9 pr-4 py-1.5 bg-page border border-hairline rounded-[10px] text-sm text-ink placeholder:text-light focus:outline-none focus:border-brand transition-all w-60"
-        />
-      </div>
+      <GlobalSearch />
 
       {/* Theme toggle */}
       <button
