@@ -1,7 +1,6 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
 import { trpc } from '@/lib/trpc/client';
 import { useSession } from 'next-auth/react';
 import Link from 'next/link';
@@ -41,7 +40,6 @@ const STATUS_LABELS: Record<StandardStatus, string> = {
 
 export function StandardDetail({ id }: { id: string }) {
   const { data: session } = useSession();
-  const router = useRouter();
   const [activeTab, setActiveTab] = useState<Tab>('overview');
 
   const { data: standard, isLoading, refetch } = trpc.standard.byId.useQuery({ id });
@@ -49,21 +47,23 @@ export function StandardDetail({ id }: { id: string }) {
   const { data: votingHistory } = trpc.vote.history.useQuery({ standardId: id });
   const { data: tasks } = trpc.task.list.useQuery({ standardId: id });
 
-  const changeStatus = trpc.standard.changeStatus.useMutation({ onSuccess: () => refetch() });
-  const castVote = trpc.vote.cast.useMutation({ onSuccess: () => refetch() });
-  const closeVoting = trpc.vote.closeVoting.useMutation({ onSuccess: () => refetch() });
-  const getDownloadUrl = trpc.document.getDownloadUrl.useQuery;
+  const changeStatus = trpc.standard.changeStatus.useMutation({ onSuccess: () => void refetch() });
+  const castVote = trpc.vote.cast.useMutation({ onSuccess: () => void refetch() });
+  const closeVoting = trpc.vote.closeVoting.useMutation({ onSuccess: () => void refetch() });
 
   if (isLoading) return <div className="py-16 text-center text-slate-400">Завантаження…</div>;
-  if (!standard) return <div className="py-16 text-center text-slate-400">Стандарт не знайдено</div>;
+  if (!standard)
+    return <div className="py-16 text-center text-slate-400">Стандарт не знайдено</div>;
 
   const userCtx = session?.user
     ? {
         globalRole: session.user.globalRole as GlobalRole,
-        memberships: (session.user.memberships ?? []).map((m: { workingGroupId: string; role: string }) => ({
-          workingGroupId: m.workingGroupId,
-          role: m.role as WorkingGroupRole,
-        })),
+        memberships: (session.user.memberships ?? []).map(
+          (m: { workingGroupId: string; role: string }) => ({
+            workingGroupId: m.workingGroupId,
+            role: m.role as WorkingGroupRole,
+          }),
+        ),
       }
     : null;
 
@@ -86,7 +86,9 @@ export function StandardDetail({ id }: { id: string }) {
     <div className="space-y-6">
       {/* Breadcrumb */}
       <nav className="flex items-center gap-2 text-sm text-slate-500">
-        <Link href="/standards" className="hover:text-blue-600">Стандарти</Link>
+        <Link href="/standards" className="hover:text-blue-600">
+          Стандарти
+        </Link>
         <span>/</span>
         <span className="font-mono text-slate-400">{standard.code}</span>
       </nav>
@@ -100,7 +102,9 @@ export function StandardDetail({ id }: { id: string }) {
                 className="inline-block w-3 h-3 rounded-full flex-shrink-0"
                 style={{ backgroundColor: standard.workingGroup.color }}
               />
-              <span className="text-sm font-medium text-slate-500">{standard.workingGroup.code}</span>
+              <span className="text-sm font-medium text-slate-500">
+                {standard.workingGroup.code}
+              </span>
               <span className="text-slate-300">·</span>
               <span className="font-mono text-sm text-slate-400">{standard.code}</span>
             </div>
@@ -164,14 +168,25 @@ export function StandardDetail({ id }: { id: string }) {
           {standard.responsible && (
             <div className="flex items-center gap-2">
               <span className="text-slate-400 text-xs">Відповідальний:</span>
-              <Avatar name={standard.responsible.name} avatarUrl={standard.responsible.avatarUrl} size="xs" />
+              <Avatar
+                name={standard.responsible.name}
+                avatarUrl={standard.responsible.avatarUrl}
+                size="xs"
+              />
               <span className="text-slate-700 text-xs">{standard.responsible.name}</span>
             </div>
           )}
           {standard.deadline && (
             <div className="text-xs">
               <span className="text-slate-400">Дедлайн: </span>
-              <span className={new Date(standard.deadline) < new Date() && !['ADOPTED', 'ARCHIVED'].includes(standard.status) ? 'text-red-600 font-medium' : 'text-slate-700'}>
+              <span
+                className={
+                  new Date(standard.deadline) < new Date() &&
+                  !['ADOPTED', 'ARCHIVED'].includes(standard.status)
+                    ? 'text-red-600 font-medium'
+                    : 'text-slate-700'
+                }
+              >
                 {formatDate(standard.deadline)}
               </span>
             </div>
@@ -218,7 +233,9 @@ export function StandardDetail({ id }: { id: string }) {
             {standard.description && (
               <div className="bg-white rounded-xl border border-slate-200 p-5">
                 <h3 className="font-semibold text-slate-800 mb-3">Опис</h3>
-                <p className="text-sm text-slate-600 leading-relaxed whitespace-pre-line">{standard.description}</p>
+                <p className="text-sm text-slate-600 leading-relaxed whitespace-pre-line">
+                  {standard.description}
+                </p>
               </div>
             )}
             <div className="bg-white rounded-xl border border-slate-200 p-5">
@@ -289,7 +306,8 @@ export function StandardDetail({ id }: { id: string }) {
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-medium text-slate-800 truncate">{doc.filename}</p>
                     <p className="text-xs text-slate-400">
-                      {doc.type} · v{doc.version} · {formatBytes(doc.sizeBytes)} · {doc.uploadedBy.name}
+                      {doc.type} · v{doc.version} · {formatBytes(doc.sizeBytes)} ·{' '}
+                      {doc.uploadedBy.name}
                     </p>
                   </div>
                   {doc.isCurrent && (
@@ -314,11 +332,15 @@ export function StandardDetail({ id }: { id: string }) {
                 <div>
                   <div className="flex items-center gap-2 mb-1">
                     <span className="w-2 h-2 bg-amber-500 rounded-full animate-pulse" />
-                    <span className="text-xs font-medium text-amber-700 uppercase">Активне голосування</span>
+                    <span className="text-xs font-medium text-amber-700 uppercase">
+                      Активне голосування
+                    </span>
                   </div>
                   <h3 className="font-semibold text-slate-800">{currentVoting.title}</h3>
                   {currentVoting.deadline && (
-                    <p className="text-xs text-slate-500 mt-1">Дедлайн: {formatDateTime(currentVoting.deadline)}</p>
+                    <p className="text-xs text-slate-500 mt-1">
+                      Дедлайн: {formatDateTime(currentVoting.deadline)}
+                    </p>
                   )}
                 </div>
                 {canOpenVoting && (
@@ -337,9 +359,18 @@ export function StandardDetail({ id }: { id: string }) {
                 <div className="flex gap-1 h-3 rounded-full overflow-hidden bg-slate-100">
                   {totalVotes > 0 && (
                     <>
-                      <div className="bg-green-500 transition-all" style={{ width: `${(forVotes / totalVotes) * 100}%` }} />
-                      <div className="bg-red-500 transition-all" style={{ width: `${(againstVotes / totalVotes) * 100}%` }} />
-                      <div className="bg-slate-300 transition-all" style={{ width: `${(abstainVotes / totalVotes) * 100}%` }} />
+                      <div
+                        className="bg-green-500 transition-all"
+                        style={{ width: `${(forVotes / totalVotes) * 100}%` }}
+                      />
+                      <div
+                        className="bg-red-500 transition-all"
+                        style={{ width: `${(againstVotes / totalVotes) * 100}%` }}
+                      />
+                      <div
+                        className="bg-slate-300 transition-all"
+                        style={{ width: `${(abstainVotes / totalVotes) * 100}%` }}
+                      />
                     </>
                   )}
                 </div>
@@ -361,13 +392,19 @@ export function StandardDetail({ id }: { id: string }) {
                       disabled={castVote.isPending}
                       className={`flex-1 py-2 text-xs font-medium rounded-lg border transition-colors ${
                         myVote?.choice === choice
-                          ? choice === 'FOR' ? 'bg-green-600 text-white border-green-600'
-                          : choice === 'AGAINST' ? 'bg-red-600 text-white border-red-600'
-                          : 'bg-slate-600 text-white border-slate-600'
+                          ? choice === 'FOR'
+                            ? 'bg-green-600 text-white border-green-600'
+                            : choice === 'AGAINST'
+                              ? 'bg-red-600 text-white border-red-600'
+                              : 'bg-slate-600 text-white border-slate-600'
                           : 'border-slate-200 text-slate-600 hover:bg-slate-50'
                       } disabled:opacity-50`}
                     >
-                      {choice === 'FOR' ? '✓ За' : choice === 'AGAINST' ? '✗ Проти' : '○ Утриматись'}
+                      {choice === 'FOR'
+                        ? '✓ За'
+                        : choice === 'AGAINST'
+                          ? '✗ Проти'
+                          : '○ Утриматись'}
                     </button>
                   ))}
                 </div>
@@ -382,26 +419,31 @@ export function StandardDetail({ id }: { id: string }) {
                 <h3 className="font-semibold text-slate-800">Архів голосувань</h3>
               </div>
               <div className="divide-y divide-slate-50">
-                {votingHistory.filter((v) => v.status === 'CLOSED').map((v) => {
-                  const f = v.votes.filter((x) => x.choice === 'FOR').length;
-                  const a = v.votes.filter((x) => x.choice === 'AGAINST').length;
-                  const total = v.votes.length;
-                  const passed = total > 0 && f / (f + a) > 0.5;
-                  return (
-                    <div key={v.id} className="px-5 py-4">
-                      <div className="flex items-center gap-3 mb-1">
-                        <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${passed ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700'}`}>
-                          {passed ? 'Прийнято' : 'Відхилено'}
-                        </span>
-                        <span className="text-sm font-medium text-slate-800">{v.title}</span>
+                {votingHistory
+                  .filter((v) => v.status === 'CLOSED')
+                  .map((v) => {
+                    const f = v.votes.filter((x) => x.choice === 'FOR').length;
+                    const a = v.votes.filter((x) => x.choice === 'AGAINST').length;
+                    const total = v.votes.length;
+                    const passed = total > 0 && f / (f + a) > 0.5;
+                    return (
+                      <div key={v.id} className="px-5 py-4">
+                        <div className="flex items-center gap-3 mb-1">
+                          <span
+                            className={`text-xs font-medium px-2 py-0.5 rounded-full ${passed ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700'}`}
+                          >
+                            {passed ? 'Прийнято' : 'Відхилено'}
+                          </span>
+                          <span className="text-sm font-medium text-slate-800">{v.title}</span>
+                        </div>
+                        <p className="text-xs text-slate-400">
+                          За: {f} / Проти: {a} / Утрим:{' '}
+                          {v.votes.filter((x) => x.choice === 'ABSTAIN').length} ·{' '}
+                          {v.closedAt ? formatDate(v.closedAt) : ''}
+                        </p>
                       </div>
-                      <p className="text-xs text-slate-400">
-                        За: {f} / Проти: {a} / Утрим: {v.votes.filter((x) => x.choice === 'ABSTAIN').length} ·{' '}
-                        {v.closedAt ? formatDate(v.closedAt) : ''}
-                      </p>
-                    </div>
-                  );
-                })}
+                    );
+                  })}
               </div>
             </div>
           )}
@@ -418,8 +460,15 @@ export function StandardDetail({ id }: { id: string }) {
         <div className="space-y-4">
           <div className="bg-white rounded-xl border border-slate-200">
             <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between">
-              <h3 className="font-semibold text-slate-800">Відкриті завдання ({openTasks.length})</h3>
-              <Link href={`/standards/${id}/tasks/new`} className="text-xs text-blue-700 hover:underline">+ Додати</Link>
+              <h3 className="font-semibold text-slate-800">
+                Відкриті завдання ({openTasks.length})
+              </h3>
+              <Link
+                href={`/standards/${id}/tasks/new`}
+                className="text-xs text-blue-700 hover:underline"
+              >
+                + Додати
+              </Link>
             </div>
             {openTasks.length === 0 ? (
               <div className="py-10 text-center text-slate-400 text-sm">Завдань немає</div>
@@ -427,10 +476,15 @@ export function StandardDetail({ id }: { id: string }) {
               <div className="divide-y divide-slate-50">
                 {openTasks.map((task) => (
                   <div key={task.id} className="flex items-center gap-4 px-5 py-3.5">
-                    <div className={`w-2 h-2 rounded-full flex-shrink-0 ${
-                      task.priority === 'HIGH' ? 'bg-red-500' :
-                      task.priority === 'MEDIUM' ? 'bg-amber-400' : 'bg-slate-300'
-                    }`} />
+                    <div
+                      className={`w-2 h-2 rounded-full flex-shrink-0 ${
+                        task.priority === 'HIGH'
+                          ? 'bg-red-500'
+                          : task.priority === 'MEDIUM'
+                            ? 'bg-amber-400'
+                            : 'bg-slate-300'
+                      }`}
+                    />
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-medium text-slate-800">{task.title}</p>
                       <p className="text-xs text-slate-400">
@@ -439,7 +493,11 @@ export function StandardDetail({ id }: { id: string }) {
                       </p>
                     </div>
                     {task.assignee && (
-                      <Avatar name={task.assignee.name} avatarUrl={task.assignee.avatarUrl} size="xs" />
+                      <Avatar
+                        name={task.assignee.name}
+                        avatarUrl={task.assignee.avatarUrl}
+                        size="xs"
+                      />
                     )}
                   </div>
                 ))}
@@ -485,11 +543,11 @@ export function StandardDetail({ id }: { id: string }) {
                     <div className="flex items-center gap-2 mb-0.5">
                       {h.fromStatus ? (
                         <>
-                          <StatusBadge status={h.fromStatus as StandardStatus} size="sm" />
+                          <StatusBadge status={h.fromStatus} size="sm" />
                           <span className="text-slate-400 text-xs">→</span>
                         </>
                       ) : null}
-                      <StatusBadge status={h.toStatus as StandardStatus} size="sm" />
+                      <StatusBadge status={h.toStatus} size="sm" />
                     </div>
                     {h.note && <p className="text-sm text-slate-600 mt-1">{h.note}</p>}
                     <p className="text-xs text-slate-400 mt-1">{formatDateTime(h.changedAt)}</p>
@@ -507,10 +565,7 @@ export function StandardDetail({ id }: { id: string }) {
 // Окремий компонент для завантаження — lazy query per-document
 function DownloadButton({ documentId }: { documentId: string }) {
   const [enabled, setEnabled] = useState(false);
-  const { data, isLoading } = trpc.document.getDownloadUrl.useQuery(
-    { documentId },
-    { enabled },
-  );
+  const { data, isLoading } = trpc.document.getDownloadUrl.useQuery({ documentId }, { enabled });
 
   useEffect(() => {
     if (data?.url) {

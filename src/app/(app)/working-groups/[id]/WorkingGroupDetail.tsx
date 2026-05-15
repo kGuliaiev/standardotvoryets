@@ -17,7 +17,7 @@ const TABS = [
   { id: 'meetings', label: 'Засідання' },
 ] as const;
 
-type TabId = typeof TABS[number]['id'];
+type TabId = (typeof TABS)[number]['id'];
 
 const ROLE_OPTIONS: { value: WorkingGroupRole; label: string }[] = [
   { value: 'LEADER', label: 'Керівник РГ' },
@@ -40,7 +40,9 @@ const MEETING_STATUS_LABELS: Record<string, { label: string; cls: string }> = {
   CANCELLED: { label: 'Скасовано', cls: 'bg-slate-100 text-slate-400' },
 };
 
-interface Props { id: string }
+interface Props {
+  id: string;
+}
 
 export function WorkingGroupDetail({ id }: Props) {
   const { data: session } = useSession();
@@ -55,16 +57,16 @@ export function WorkingGroupDetail({ id }: Props) {
   const { data: group, isLoading } = trpc.workingGroup.byId.useQuery({ id });
   const { data: standards } = trpc.standard.list.useQuery(
     { workingGroupId: id, page: 1, pageSize: 50 },
-    { enabled: tab === 'standards' }
+    { enabled: tab === 'standards' },
   );
   const { data: meetings } = trpc.meeting.list.useQuery(
     { workingGroupId: id },
-    { enabled: tab === 'meetings' }
+    { enabled: tab === 'meetings' },
   );
 
   const inviteMutation = trpc.user.invite.useMutation({
     onSuccess: () => {
-      utils.workingGroup.byId.invalidate({ id });
+      void utils.workingGroup.byId.invalidate({ id });
       setShowAddMember(false);
       setAddForm({ email: '', role: 'MEMBER' });
       setAddError('');
@@ -82,7 +84,7 @@ export function WorkingGroupDetail({ id }: Props) {
 
   const updateMutation = trpc.workingGroup.update.useMutation({
     onSuccess: () => {
-      utils.workingGroup.byId.invalidate({ id });
+      void utils.workingGroup.byId.invalidate({ id });
       setShowEditName(false);
     },
   });
@@ -94,27 +96,32 @@ export function WorkingGroupDetail({ id }: Props) {
     return <div className="py-16 text-center text-slate-400 text-sm">Групу не знайдено</div>;
   }
 
-  const userCtx = session ? {
-    globalRole: session.user.globalRole as GlobalRole,
-    memberships: (session.user.memberships ?? []) as { workingGroupId: string; role: WorkingGroupRole }[],
-  } : null;
+  const userCtx = session
+    ? {
+        globalRole: session.user.globalRole as GlobalRole,
+        memberships: (session.user.memberships ?? []) as {
+          workingGroupId: string;
+          role: WorkingGroupRole;
+        }[],
+      }
+    : null;
   const isAdmin = session?.user.globalRole === 'ADMIN';
-  const canInvite = userCtx ? (isAdmin || can(userCtx, 'wg:invite', id)) : false;
+  const canInvite = userCtx ? isAdmin || can(userCtx, 'wg:invite', id) : false;
 
   return (
     <div className="space-y-5">
       {/* Header */}
       <div className="flex items-start justify-between">
         <div className="flex items-center gap-3">
-          <Link href="/working-groups" className="text-slate-400 hover:text-slate-600 text-sm transition-colors">
+          <Link
+            href="/working-groups"
+            className="text-slate-400 hover:text-slate-600 text-sm transition-colors"
+          >
             ← Робочі групи
           </Link>
           <span className="text-slate-200">/</span>
           <div className="flex items-center gap-2">
-            <span
-              className="w-3 h-3 rounded-full"
-              style={{ backgroundColor: group.color }}
-            />
+            <span className="w-3 h-3 rounded-full" style={{ backgroundColor: group.color }} />
             <span className="font-mono text-sm text-slate-500">{group.code}</span>
             <h1 className="text-xl font-bold text-slate-900">{group.name}</h1>
           </div>
@@ -204,7 +211,8 @@ export function WorkingGroupDetail({ id }: Props) {
           {/* Header */}
           <div className="flex items-center justify-between px-5 py-3.5 border-b border-slate-100">
             <span className="text-sm font-medium text-slate-700">
-              {group.members.length} учасник{group.members.length === 1 ? '' : group.members.length < 5 ? 'и' : 'ів'}
+              {group.members.length} учасник
+              {group.members.length === 1 ? '' : group.members.length < 5 ? 'и' : 'ів'}
             </span>
             {canInvite && (
               <button
@@ -254,7 +262,9 @@ export function WorkingGroupDetail({ id }: Props) {
                           className="text-xs border border-slate-200 rounded-lg px-2 py-1 focus:outline-none focus:ring-2 focus:ring-blue-500"
                         >
                           {ROLE_OPTIONS.map((o) => (
-                            <option key={o.value} value={o.value}>{o.label}</option>
+                            <option key={o.value} value={o.value}>
+                              {o.label}
+                            </option>
                           ))}
                         </select>
                       ) : (
@@ -316,8 +326,12 @@ export function WorkingGroupDetail({ id }: Props) {
                   <tr key={s.id} className="hover:bg-slate-50 transition-colors">
                     <td className="px-5 py-3.5 max-w-xs">
                       <Link href={`/standards/${s.id}`} className="block group">
-                        <span className="font-mono text-xs text-slate-400 group-hover:text-blue-500">{s.code}</span>
-                        <p className="font-medium text-slate-800 group-hover:text-blue-700 line-clamp-1 mt-0.5">{s.title}</p>
+                        <span className="font-mono text-xs text-slate-400 group-hover:text-blue-500">
+                          {s.code}
+                        </span>
+                        <p className="font-medium text-slate-800 group-hover:text-blue-700 line-clamp-1 mt-0.5">
+                          {s.title}
+                        </p>
                       </Link>
                     </td>
                     <td className="px-3 py-3.5">
@@ -326,7 +340,10 @@ export function WorkingGroupDetail({ id }: Props) {
                     <td className="px-3 py-3.5">
                       <div className="flex items-center gap-2">
                         <div className="w-16 h-1.5 bg-slate-100 rounded-full overflow-hidden">
-                          <div className="h-full bg-blue-500 rounded-full" style={{ width: `${s.progress}%` }} />
+                          <div
+                            className="h-full bg-blue-500 rounded-full"
+                            style={{ width: `${s.progress}%` }}
+                          />
                         </div>
                         <span className="text-xs text-slate-400">{s.progress}%</span>
                       </div>
@@ -372,7 +389,10 @@ export function WorkingGroupDetail({ id }: Props) {
                   return (
                     <tr key={m.id} className="hover:bg-slate-50 transition-colors">
                       <td className="px-5 py-3.5 max-w-xs">
-                        <Link href={`/meetings/${m.id}`} className="font-medium text-slate-800 hover:text-blue-700 line-clamp-1">
+                        <Link
+                          href={`/meetings/${m.id}`}
+                          className="font-medium text-slate-800 hover:text-blue-700 line-clamp-1"
+                        >
                           {m.title}
                         </Link>
                       </td>
@@ -383,11 +403,11 @@ export function WorkingGroupDetail({ id }: Props) {
                         {FORMAT_LABELS[m.format] ?? m.format}
                       </td>
                       <td className="px-3 py-3.5">
-                        <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${s.cls}`}>{s.label}</span>
+                        <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${s.cls}`}>
+                          {s.label}
+                        </span>
                       </td>
-                      <td className="px-3 py-3.5 text-xs text-slate-400">
-                        {m._count.attendances}
-                      </td>
+                      <td className="px-3 py-3.5 text-xs text-slate-400">{m._count.attendances}</td>
                     </tr>
                   );
                 })}
@@ -417,11 +437,15 @@ export function WorkingGroupDetail({ id }: Props) {
                 <label className="block text-xs font-medium text-slate-600 mb-1">Роль</label>
                 <select
                   value={addForm.role}
-                  onChange={(e) => setAddForm((f) => ({ ...f, role: e.target.value as WorkingGroupRole }))}
+                  onChange={(e) =>
+                    setAddForm((f) => ({ ...f, role: e.target.value as WorkingGroupRole }))
+                  }
                   className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                 >
                   {ROLE_OPTIONS.map((o) => (
-                    <option key={o.value} value={o.value}>{o.label}</option>
+                    <option key={o.value} value={o.value}>
+                      {o.label}
+                    </option>
                   ))}
                 </select>
               </div>
@@ -433,7 +457,10 @@ export function WorkingGroupDetail({ id }: Props) {
               </p>
               <div className="flex gap-3 pt-1">
                 <button
-                  onClick={() => { setShowAddMember(false); setAddError(''); }}
+                  onClick={() => {
+                    setShowAddMember(false);
+                    setAddError('');
+                  }}
                   className="flex-1 py-2 text-sm border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors"
                 >
                   Скасувати
@@ -441,7 +468,11 @@ export function WorkingGroupDetail({ id }: Props) {
                 <button
                   onClick={() => {
                     if (!addForm.email) return;
-                    inviteMutation.mutate({ email: addForm.email, workingGroupId: id, role: addForm.role });
+                    inviteMutation.mutate({
+                      email: addForm.email,
+                      workingGroupId: id,
+                      role: addForm.role,
+                    });
                   }}
                   disabled={inviteMutation.isPending || !addForm.email}
                   className="flex-1 py-2 text-sm bg-blue-700 text-white rounded-lg hover:bg-blue-800 disabled:opacity-50 transition-colors font-medium"
@@ -486,7 +517,13 @@ export function WorkingGroupDetail({ id }: Props) {
                   Скасувати
                 </button>
                 <button
-                  onClick={() => updateMutation.mutate({ id, name: editForm.name, description: editForm.description })}
+                  onClick={() =>
+                    updateMutation.mutate({
+                      id,
+                      name: editForm.name,
+                      description: editForm.description,
+                    })
+                  }
                   disabled={updateMutation.isPending}
                   className="flex-1 py-2 text-sm bg-blue-700 text-white rounded-lg hover:bg-blue-800 disabled:opacity-50 transition-colors font-medium"
                 >

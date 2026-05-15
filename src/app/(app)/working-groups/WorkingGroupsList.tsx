@@ -4,7 +4,6 @@ import { useState } from 'react';
 import { trpc } from '@/lib/trpc/client';
 import Link from 'next/link';
 import { useSession } from 'next-auth/react';
-import { formatDate } from '@/lib/utils';
 
 const ROLE_LABELS: Record<string, string> = {
   LEADER: 'Керівник',
@@ -25,7 +24,7 @@ export function WorkingGroupsList() {
   const { data: groups, isLoading } = trpc.workingGroup.list.useQuery();
   const createMutation = trpc.workingGroup.create.useMutation({
     onSuccess: () => {
-      utils.workingGroup.list.invalidate();
+      void utils.workingGroup.list.invalidate();
       setShowCreate(false);
       setForm({ code: '', name: '', description: '', color: '#1A56DB' });
       setError('');
@@ -114,7 +113,8 @@ export function WorkingGroupsList() {
                     <span className="font-semibold text-slate-600">{g._count.members}</span> учасн.
                   </span>
                   <span>
-                    <span className="font-semibold text-slate-600">{g._count.standards}</span> станд.
+                    <span className="font-semibold text-slate-600">{g._count.standards}</span>{' '}
+                    станд.
                   </span>
                 </div>
               </Link>
@@ -187,7 +187,10 @@ export function WorkingGroupsList() {
               <div className="flex gap-3 pt-2">
                 <button
                   type="button"
-                  onClick={() => { setShowCreate(false); setError(''); }}
+                  onClick={() => {
+                    setShowCreate(false);
+                    setError('');
+                  }}
                   className="flex-1 py-2 text-sm border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors"
                 >
                   Скасувати
