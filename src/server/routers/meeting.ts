@@ -65,13 +65,36 @@ export const meetingRouter = createTRPCRouter({
       const meeting = await ctx.db.meeting.findUnique({
         where: { id: input.id },
         include: {
-          workingGroup: { select: { id: true, code: true, name: true, color: true } },
-          createdBy: { select: { id: true, name: true } },
-          agendaItems: { orderBy: { order: 'asc' } },
+          workingGroup: {
+            select: {
+              id: true,
+              code: true,
+              name: true,
+              color: true,
+              members: {
+                include: {
+                  user: { select: { id: true, name: true, rank: true, position: true } },
+                },
+                orderBy: { joinedAt: 'asc' },
+              },
+            },
+          },
+          createdBy: { select: { id: true, name: true, rank: true, position: true } },
+          chairman: { select: { id: true, name: true, rank: true, position: true } },
+          agendaItems: {
+            orderBy: { order: 'asc' },
+            include: {
+              speaker: { select: { id: true, name: true, rank: true, position: true } },
+              responsible: { select: { id: true, name: true, rank: true, position: true } },
+            },
+          },
           attendances: {
             include: {
-              user: { select: { id: true, name: true, avatarUrl: true } },
+              user: {
+                select: { id: true, name: true, avatarUrl: true, rank: true, position: true },
+              },
             },
+            orderBy: { user: { name: 'asc' } },
           },
         },
       });
@@ -200,6 +223,120 @@ export const meetingRouter = createTRPCRouter({
           },
         },
         data: { status: input.status, note: input.note },
+      });
+    }),
+
+  // ── setAttendance (secretary / leader / admin can change for anyone) ─
+  setAttendance: protectedProcedure
+    .input(
+      z.object({
+        meetingId: z.string().cuid(),
+        userId: z.string().cuid(),
+        status: z.enum(['PENDING', 'CONFIRMED', 'DECLINED']),
+        note: z.string().optional(),
+      }),
+    )
+    .mutation(async ({ ctx, input }) => {
+      const meeting = await ctx.db.meeting.findUniqueOrThrow({
+        where: { id: input.meetingId },
+      });
+      const uctx = userCtx(ctx.session);
+      const isAdmin = ctx.session.user.globalRole === 'ADMIN';
+      const isPrivileged = isAdmin || can(uctx, 'meeting:uploadMinutes', meeting.workingGroupId);
+      if (!isPrivileged) throw new TRPCError({ code: 'FORBIDDEN' });
+
+      return ctx.db.attendance.upsert({
+        where: { meetingId_userId: { meetingId: input.meetingId, userId: input.userId } },
+        update: { status: input.status, note: input.note },
+        create: {
+          meetingId: input.meetingId,
+          userId: input.userId,
+          status: input.status,
+          note: input.note,
+        },
+      });
+    }),
+
+  // ── upsertAgendaItem (secretary / leader / admin) ────────────────────
+  upsertAgendaItem: protectedProcedure
+    .input(
+      z.object({
+        id: z.string().cuid().optional(),
+        meetingId: z.string().cuid(),
+        order: z.number().int().min(0),
+        title: z.string().min(2).max(500),
+        speakerId: z.string().cuid().optional().nullable(),
+        heardText: z.string().optional().nullable(),
+        discussionText: z.string().optional().nullable(),
+        decisionText: z.string().optional().nullable(),
+        deadline: z.date().optional().nullable(),
+        responsibleId: z.string().cuid().optional().nullable(),
+      }),
+    )
+    .mutation(async ({ ctx, input }) => {
+      const meeting = await ctx.db.meeting.findUniqueOrThrow({
+        where: { id: input.meetingId },
+      });
+      if (!can(userCtx(ctx.session), 'meeting:uploadMinutes', meeting.workingGroupId)) {
+        throw new TRPCError({ code: 'FORBIDDEN' });
+      }
+      const data = {
+        meetingId: input.meetingId,
+        order: input.order,
+        title: input.title,
+        speakerId: input.speakerId ?? null,
+        heardText: input.heardText ?? null,
+        discussionText: input.discussionText ?? null,
+        decisionText: input.decisionText ?? null,
+        deadline: input.deadline ?? null,
+        responsibleId: input.responsibleId ?? null,
+      };
+      if (input.id) {
+        return ctx.db.agendaItem.update({ where: { id: input.id }, data });
+      }
+      return ctx.db.agendaItem.create({ data });
+    }),
+
+  // ── deleteAgendaItem ─────────────────────────────────────────────────
+  deleteAgendaItem: protectedProcedure
+    .input(z.object({ id: z.string().cuid() }))
+    .mutation(async ({ ctx, input }) => {
+      const item = await ctx.db.agendaItem.findUniqueOrThrow({
+        where: { id: input.id },
+        include: { meeting: { select: { workingGroupId: true } } },
+      });
+      if (!can(userCtx(ctx.session), 'meeting:uploadMinutes', item.meeting.workingGroupId)) {
+        throw new TRPCError({ code: 'FORBIDDEN' });
+      }
+      return ctx.db.agendaItem.delete({ where: { id: input.id } });
+    }),
+
+  // ── assignProtocolNumber: sequence per WG per year ───────────────────
+  assignProtocolNumber: protectedProcedure
+    .input(z.object({ meetingId: z.string().cuid() }))
+    .mutation(async ({ ctx, input }) => {
+      const meeting = await ctx.db.meeting.findUniqueOrThrow({
+        where: { id: input.meetingId },
+      });
+      if (!can(userCtx(ctx.session), 'meeting:uploadMinutes', meeting.workingGroupId)) {
+        throw new TRPCError({ code: 'FORBIDDEN' });
+      }
+      if (meeting.protocolNumber) return meeting;
+
+      const yearStart = new Date(meeting.startAt.getFullYear(), 0, 1);
+      const yearEnd = new Date(meeting.startAt.getFullYear() + 1, 0, 1);
+      const sameWgYear = await ctx.db.meeting.findMany({
+        where: {
+          workingGroupId: meeting.workingGroupId,
+          startAt: { gte: yearStart, lt: yearEnd },
+          protocolNumber: { not: null },
+        },
+        select: { protocolNumber: true },
+      });
+      const maxNum = sameWgYear.reduce((m, r) => Math.max(m, r.protocolNumber ?? 0), 0);
+      return ctx.db.meeting.update({
+        where: { id: input.meetingId },
+        data: { protocolNumber: maxNum + 1 },
       });
     }),
 

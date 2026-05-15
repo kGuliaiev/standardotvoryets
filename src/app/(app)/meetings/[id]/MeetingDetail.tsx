@@ -183,6 +183,21 @@ export function MeetingDetail({ id }: Props) {
               <div className="flex items-center justify-between mb-3 gap-2 flex-wrap">
                 <h3 className="text-sm font-semibold text-ink">Протокол</h3>
                 <div className="inline-flex items-center gap-3">
+                  <Link
+                    href={`/meetings/${id}/protocol`}
+                    className="text-xs font-bold text-brand hover:underline inline-flex items-center gap-1"
+                  >
+                    📝 Редактор протоколу
+                  </Link>
+                  <a
+                    href={`/api/meetings/${id}/protocol.docx`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-xs text-mid hover:text-brand inline-flex items-center gap-1"
+                    title="Завантажити Word"
+                  >
+                    📄 Word
+                  </a>
                   <a
                     href={`/api/meetings/${id}/protocol`}
                     target="_blank"
@@ -192,17 +207,6 @@ export function MeetingDetail({ id }: Props) {
                   >
                     📄 PDF
                   </a>
-                  {canManage && meeting.status !== 'CANCELLED' && (
-                    <button
-                      onClick={() => {
-                        setMinutesText(meeting.minutesText ?? '');
-                        setShowMinutes(true);
-                      }}
-                      className="text-xs text-brand hover:underline transition-colors"
-                    >
-                      {meeting.minutesText ? 'Редагувати' : '+ Додати протокол'}
-                    </button>
-                  )}
                 </div>
               </div>
               {meeting.minutesText ? (

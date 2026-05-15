@@ -145,7 +145,8 @@ model User {
   tasksCompleted    Task[]         @relation("TaskCompleter")
   agendaSpoke       AgendaItem[]   @relation("AgendaSpeaker")
   agendaResponsible AgendaItem[]   @relation("AgendaResponsible")
-  meetingsCreated Meeting[]
+  meetingsCreated  Meeting[]      @relation("MeetingCreator")
+  meetingsChaired  Meeting[]      @relation("MeetingChairman")
   attendances     Attendance[]
   notifications   Notification[]
   sessions        Session[]
@@ -410,7 +411,8 @@ model Meeting {
   updatedAt      DateTime      @updatedAt
 
   workingGroup WorkingGroup @relation(fields: [workingGroupId], references: [id])
-  createdBy    User         @relation(fields: [createdById], references: [id])
+  createdBy    User         @relation("MeetingCreator", fields: [createdById], references: [id])
+  chairman     User?        @relation("MeetingChairman", fields: [chairmanId], references: [id])
   attendances  Attendance[]
   agendaItems  AgendaItem[]
 
