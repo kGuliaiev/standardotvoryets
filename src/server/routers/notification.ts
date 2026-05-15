@@ -1,0 +1,71 @@
+import { z } from 'zod';
+import { createTRPCRouter, protectedProcedure } from '@/server/trpc';
+import type { NotificationType } from '@prisma/client';
+
+export const notificationRouter = createTRPCRouter({
+  // ── list ─────────────────────────────────────────────────────────────
+  list: protectedProcedure
+    .input(
+      z.object({
+        unreadOnly: z.boolean().default(false),
+        limit: z.number().min(1).max(50).default(20),
+      }),
+    )
+    .query(async ({ ctx, input }) => {
+      return ctx.db.notification.findMany({
+        where: {
+          userId: ctx.session.user.id,
+          ...(input.unreadOnly ? { read: false } : {}),
+        },
+        orderBy: { createdAt: 'desc' },
+        take: input.limit,
+      });
+    }),
+
+  // ── unreadCount ───────────────────────────────────────────────────────
+  unreadCount: protectedProcedure.query(async ({ ctx }) => {
+    return ctx.db.notification.count({
+      where: { userId: ctx.session.user.id, read: false },
+    });
+  }),
+
+  // ── markRead ─────────────────────────────────────────────────────────
+  markRead: protectedProcedure
+    .input(z.object({ id: z.string().cuid() }))
+    .mutation(async ({ ctx, input }) => {
+      return ctx.db.notification.update({
+        where: { id: input.id, userId: ctx.session.user.id },
+        data: { read: true },
+      });
+    }),
+
+  // ── markAllRead ───────────────────────────────────────────────────────
+  markAllRead: protectedProcedure.mutation(async ({ ctx }) => {
+    return ctx.db.notification.updateMany({
+      where: { userId: ctx.session.user.id, read: false },
+      data: { read: true },
+    });
+  }),
+});
+
+// ── Helper: create a notification (used by other routers) ─────────────────────
+export async function createNotification(
+  db: Parameters<Parameters<typeof notificationRouter['_def']['procedures']['markRead']['_def']['resolve']>[0]>[0]['ctx']['db'],
+  {
+    userId,
+    type,
+    title,
+    body,
+    link,
+  }: {
+    userId: string;
+    type: NotificationType;
+    title: string;
+    body: string;
+    link?: string;
+  },
+) {
+  return db.notification.create({
+    data: { userId, type, title, body, link },
+  });
+}

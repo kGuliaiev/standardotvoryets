@@ -1,0 +1,436 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─────────────────────────────────────────
+// ENUMS
+// ─────────────────────────────────────────
+
+enum GlobalRole {
+  ADMIN
+  USER
+}
+
+enum WorkingGroupRole {
+  LEADER     // Керівник РГ
+  DEPUTY     // Заступник керівника
+  SECRETARY  // Секретар засідань
+  MEMBER     // Учасник РГ
+  GUEST      // Запрошений експерт / Спостерігач
+}
+
+enum StandardStatus {
+  DRAFT
+  IN_REVIEW
+  VOTING
+  ADOPTED
+  REJECTED
+  ARCHIVED
+}
+
+enum DocumentType {
+  DRAFT_STANDARD  // Чернетка стандарту
+  MEETING_MINUTES // Протокол засідання
+  AGENDA          // Порядок денний
+  ATTACHMENT      // Додатковий матеріал
+  FINAL           // Фінальна версія
+}
+
+enum VoteChoice {
+  FOR
+  AGAINST
+  ABSTAIN
+}
+
+enum VoteStatus {
+  OPEN
+  CLOSED
+}
+
+enum MeetingFormat {
+  ONLINE
+  OFFLINE
+  HYBRID
+}
+
+enum MeetingStatus {
+  PLANNED
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+}
+
+enum AttendanceStatus {
+  PENDING
+  CONFIRMED
+  DECLINED
+}
+
+enum TaskPriority {
+  HIGH
+  MEDIUM
+  LOW
+}
+
+enum TaskStatus {
+  OPEN
+  IN_PROGRESS
+  DONE
+  CANCELLED
+}
+
+enum NotificationType {
+  MEETING_INVITE
+  MEETING_REMINDER
+  VOTE_OPENED
+  VOTE_CLOSED
+  DOCUMENT_UPLOADED
+  COMMENT_ADDED
+  TASK_ASSIGNED
+  TASK_OVERDUE
+  STANDARD_STATUS_CHANGED
+}
+
+// ─────────────────────────────────────────
+// USERS & AUTH
+// ─────────────────────────────────────────
+
+model User {
+  id           String     @id @default(cuid())
+  email        String     @unique
+  name         String
+  passwordHash String
+  globalRole   GlobalRole @default(USER)
+  avatarUrl    String?
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+
+  // Relations
+  memberships     WorkingGroupMember[]
+  documents       Document[]
+  comments        Comment[]
+  votes           Vote[]
+  tasksAssigned   Task[]         @relation("TaskAssignee")
+  tasksCreated    Task[]         @relation("TaskCreator")
+  meetingsCreated Meeting[]
+  attendances     Attendance[]
+  notifications   Notification[]
+  sessions        Session[]
+  accounts        Account[]
+  standards       Standard[]
+
+  @@map("users")
+}
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  access_token      String? @db.Text
+  refresh_token     String? @db.Text
+  expires_at        Int?
+  user              User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+  @@map("accounts")
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("sessions")
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+  @@map("verification_tokens")
+}
+
+model InviteToken {
+  id             String           @id @default(cuid())
+  token          String           @unique @default(cuid())
+  email          String
+  workingGroupId String
+  role           WorkingGroupRole
+  expiresAt      DateTime
+  usedAt         DateTime?
+  createdAt      DateTime         @default(now())
+  workingGroup   WorkingGroup     @relation(fields: [workingGroupId], references: [id])
+
+  @@map("invite_tokens")
+}
+
+// ─────────────────────────────────────────
+// WORKING GROUPS
+// ─────────────────────────────────────────
+
+model WorkingGroup {
+  id          String   @id @default(cuid())
+  code        String   @unique // "РГ №8"
+  name        String // "Управління якістю"
+  description String?
+  color       String   @default("#1A56DB") // hex, for UI
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relations
+  members   WorkingGroupMember[]
+  standards Standard[]
+  meetings  Meeting[]
+  invites   InviteToken[]
+
+  @@map("working_groups")
+}
+
+model WorkingGroupMember {
+  id             String           @id @default(cuid())
+  workingGroupId String
+  userId         String
+  role           WorkingGroupRole
+  joinedAt       DateTime         @default(now())
+
+  workingGroup WorkingGroup @relation(fields: [workingGroupId], references: [id], onDelete: Cascade)
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([workingGroupId, userId])
+  @@map("working_group_members")
+}
+
+// ─────────────────────────────────────────
+// STANDARDS
+// ─────────────────────────────────────────
+
+model Standard {
+  id             String         @id @default(cuid())
+  workingGroupId String
+  code           String // "ДСТУ 7.1"
+  title          String // "Вимоги до документації..."
+  description    String?
+  status         StandardStatus @default(DRAFT)
+  isoAnalog      String? // "ISO 9001:2015"
+  category       String? // "Управління якістю"
+  deadline       DateTime?
+  responsibleId  String?
+  progress       Int            @default(0) // 0–100
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+
+  workingGroup  WorkingGroup            @relation(fields: [workingGroupId], references: [id])
+  responsible   User?                   @relation(fields: [responsibleId], references: [id])
+  documents     Document[]
+  comments      Comment[]
+  votes         Voting[]
+  tasks         Task[]
+  statusHistory StandardStatusHistory[]
+
+  @@unique([workingGroupId, code])
+  @@map("standards")
+}
+
+model StandardStatusHistory {
+  id          String         @id @default(cuid())
+  standardId  String
+  fromStatus  StandardStatus?
+  toStatus    StandardStatus
+  changedById String
+  note        String?
+  changedAt   DateTime       @default(now())
+
+  standard Standard @relation(fields: [standardId], references: [id], onDelete: Cascade)
+
+  @@map("standard_status_history")
+}
+
+// ─────────────────────────────────────────
+// DOCUMENTS (versioned)
+// ─────────────────────────────────────────
+
+model Document {
+  id           String       @id @default(cuid())
+  standardId   String
+  uploadedById String
+  type         DocumentType
+  filename     String
+  s3Key        String       @unique
+  sizeBytes    Int
+  version      String // "v0.4"
+  isCurrent    Boolean      @default(false)
+  note         String? // "What changed in this version"
+  createdAt    DateTime     @default(now())
+
+  standard   Standard @relation(fields: [standardId], references: [id], onDelete: Cascade)
+  uploadedBy User     @relation(fields: [uploadedById], references: [id])
+
+  @@map("documents")
+}
+
+// ─────────────────────────────────────────
+// COMMENTS
+// ─────────────────────────────────────────
+
+model Comment {
+  id         String   @id @default(cuid())
+  standardId String
+  authorId   String
+  body       String   @db.Text
+  parentId   String?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  standard Standard  @relation(fields: [standardId], references: [id], onDelete: Cascade)
+  author   User      @relation(fields: [authorId], references: [id])
+  parent   Comment?  @relation("CommentReplies", fields: [parentId], references: [id])
+  replies  Comment[] @relation("CommentReplies")
+
+  @@map("comments")
+}
+
+// ─────────────────────────────────────────
+// VOTING
+// ─────────────────────────────────────────
+
+model Voting {
+  id          String     @id @default(cuid())
+  standardId  String
+  title       String
+  description String?
+  status      VoteStatus @default(OPEN)
+  openedAt    DateTime   @default(now())
+  closedAt    DateTime?
+  deadline    DateTime?
+
+  standard Standard @relation(fields: [standardId], references: [id], onDelete: Cascade)
+  votes    Vote[]
+
+  @@map("votings")
+}
+
+model Vote {
+  id       String     @id @default(cuid())
+  votingId String
+  userId   String
+  choice   VoteChoice
+  comment  String?
+  votedAt  DateTime   @default(now())
+
+  voting Voting @relation(fields: [votingId], references: [id], onDelete: Cascade)
+  user   User   @relation(fields: [userId], references: [id])
+
+  @@unique([votingId, userId])
+  @@map("votes")
+}
+
+// ─────────────────────────────────────────
+// MEETINGS
+// ─────────────────────────────────────────
+
+model Meeting {
+  id             String        @id @default(cuid())
+  workingGroupId String
+  createdById    String
+  title          String
+  format         MeetingFormat @default(ONLINE)
+  location       String? // URL or room name
+  startAt        DateTime
+  durationMins   Int           @default(60)
+  status         MeetingStatus @default(PLANNED)
+  agendaText     String?       @db.Text
+  minutesText    String?       @db.Text
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+
+  workingGroup WorkingGroup @relation(fields: [workingGroupId], references: [id])
+  createdBy    User         @relation(fields: [createdById], references: [id])
+  attendances  Attendance[]
+  agendaItems  AgendaItem[]
+
+  @@map("meetings")
+}
+
+model AgendaItem {
+  id        String  @id @default(cuid())
+  meetingId String
+  order     Int
+  title     String
+  duration  Int? // minutes
+  note      String?
+
+  meeting Meeting @relation(fields: [meetingId], references: [id], onDelete: Cascade)
+
+  @@map("agenda_items")
+}
+
+model Attendance {
+  id        String           @id @default(cuid())
+  meetingId String
+  userId    String
+  status    AttendanceStatus @default(PENDING)
+  note      String?
+  updatedAt DateTime         @updatedAt
+
+  meeting Meeting @relation(fields: [meetingId], references: [id], onDelete: Cascade)
+  user    User    @relation(fields: [userId], references: [id])
+
+  @@unique([meetingId, userId])
+  @@map("attendances")
+}
+
+// ─────────────────────────────────────────
+// TASKS
+// ─────────────────────────────────────────
+
+model Task {
+  id          String       @id @default(cuid())
+  standardId  String
+  createdById String
+  assigneeId  String?
+  title       String
+  description String?      @db.Text
+  priority    TaskPriority @default(MEDIUM)
+  status      TaskStatus   @default(OPEN)
+  dueDate     DateTime?
+  completedAt DateTime?
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+
+  standard  Standard @relation(fields: [standardId], references: [id], onDelete: Cascade)
+  createdBy User     @relation("TaskCreator", fields: [createdById], references: [id])
+  assignee  User?    @relation("TaskAssignee", fields: [assigneeId], references: [id])
+
+  @@map("tasks")
+}
+
+// ─────────────────────────────────────────
+// NOTIFICATIONS
+// ─────────────────────────────────────────
+
+model Notification {
+  id        String           @id @default(cuid())
+  userId    String
+  type      NotificationType
+  title     String
+  body      String
+  link      String? // e.g. /standards/abc123
+  read      Boolean          @default(false)
+  createdAt DateTime         @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, read])
+  @@map("notifications")
+}

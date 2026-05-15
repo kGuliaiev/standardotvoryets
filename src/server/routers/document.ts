@@ -1,0 +1,173 @@
+import { z } from 'zod';
+import { TRPCError } from '@trpc/server';
+import { createTRPCRouter, protectedProcedure } from '@/server/trpc';
+import { can } from '@/lib/rbac';
+import { s3, getPresignedUploadUrl, getPresignedDownloadUrl } from '@/server/s3';
+import { DeleteObjectCommand } from '@aws-sdk/client-s3';
+import { env } from '@/lib/env';
+import type { GlobalRole, WorkingGroupRole } from '@prisma/client';
+
+function userCtx(session: { user: { globalRole: string; memberships: Array<{ workingGroupId: string; role: string }> } }) {
+  return {
+    globalRole: session.user.globalRole as GlobalRole,
+    memberships: session.user.memberships.map((m) => ({
+      workingGroupId: m.workingGroupId,
+      role: m.role as WorkingGroupRole,
+    })),
+  };
+}
+
+const ALLOWED_MIME_TYPES = [
+  'application/pdf',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  'application/vnd.oasis.opendocument.text',
+];
+
+export const documentRouter = createTRPCRouter({
+  // ── getUploadUrl ──────────────────────────────────────────────────────
+  getUploadUrl: protectedProcedure
+    .input(
+      z.object({
+        standardId: z.string().cuid(),
+        filename: z.string().min(1).max(255),
+        contentType: z.string().refine((ct) => ALLOWED_MIME_TYPES.includes(ct), {
+          message: 'Дозволені формати: PDF, DOCX, XLSX, ODT',
+        }),
+        type: z.enum(['DRAFT_STANDARD', 'MEETING_MINUTES', 'AGENDA', 'ATTACHMENT', 'FINAL']),
+        version: z.string().min(1).max(20),
+      }),
+    )
+    .mutation(async ({ ctx, input }) => {
+      const standard = await ctx.db.standard.findUniqueOrThrow({
+        where: { id: input.standardId },
+        select: { workingGroupId: true },
+      });
+
+      if (!can(userCtx(ctx.session), 'document:upload', standard.workingGroupId)) {
+        throw new TRPCError({ code: 'FORBIDDEN' });
+      }
+
+      const s3Key = `standards/${input.standardId}/${Date.now()}-${input.filename}`;
+      const uploadUrl = await getPresignedUploadUrl(s3Key, input.contentType);
+
+      return { uploadUrl, s3Key };
+    }),
+
+  // ── confirmUpload ─────────────────────────────────────────────────────
+  confirmUpload: protectedProcedure
+    .input(
+      z.object({
+        standardId: z.string().cuid(),
+        s3Key: z.string(),
+        filename: z.string(),
+        sizeBytes: z.number().positive(),
+        version: z.string(),
+        type: z.enum(['DRAFT_STANDARD', 'MEETING_MINUTES', 'AGENDA', 'ATTACHMENT', 'FINAL']),
+        note: z.string().optional(),
+        isCurrent: z.boolean().default(false),
+      }),
+    )
+    .mutation(async ({ ctx, input }) => {
+      // If setting as current, unset previous current
+      if (input.isCurrent) {
+        await ctx.db.document.updateMany({
+          where: { standardId: input.standardId, isCurrent: true },
+          data: { isCurrent: false },
+        });
+      }
+
+      return ctx.db.document.create({
+        data: {
+          standardId: input.standardId,
+          uploadedById: ctx.session.user.id,
+          type: input.type,
+          filename: input.filename,
+          s3Key: input.s3Key,
+          sizeBytes: input.sizeBytes,
+          version: input.version,
+          note: input.note,
+          isCurrent: input.isCurrent,
+        },
+      });
+    }),
+
+  // ── list ─────────────────────────────────────────────────────────────
+  list: protectedProcedure
+    .input(z.object({ standardId: z.string().cuid() }))
+    .query(async ({ ctx, input }) => {
+      return ctx.db.document.findMany({
+        where: { standardId: input.standardId },
+        include: {
+          uploadedBy: { select: { id: true, name: true } },
+        },
+        orderBy: { createdAt: 'desc' },
+      });
+    }),
+
+  // ── setAsCurrent ──────────────────────────────────────────────────────
+  setAsCurrent: protectedProcedure
+    .input(z.object({ documentId: z.string().cuid() }))
+    .mutation(async ({ ctx, input }) => {
+      const doc = await ctx.db.document.findUniqueOrThrow({
+        where: { id: input.documentId },
+        include: { standard: { select: { workingGroupId: true } } },
+      });
+
+      if (!can(userCtx(ctx.session), 'document:setCurrent', doc.standard.workingGroupId)) {
+        throw new TRPCError({ code: 'FORBIDDEN' });
+      }
+
+      await ctx.db.document.updateMany({
+        where: { standardId: doc.standardId, isCurrent: true },
+        data: { isCurrent: false },
+      });
+
+      return ctx.db.document.update({
+        where: { id: input.documentId },
+        data: { isCurrent: true },
+      });
+    }),
+
+  // ── delete ────────────────────────────────────────────────────────────
+  delete: protectedProcedure
+    .input(z.object({ documentId: z.string().cuid() }))
+    .mutation(async ({ ctx, input }) => {
+      const doc = await ctx.db.document.findUniqueOrThrow({
+        where: { id: input.documentId },
+        include: { standard: { select: { workingGroupId: true } } },
+      });
+
+      if (!can(userCtx(ctx.session), 'document:delete', doc.standard.workingGroupId)) {
+        throw new TRPCError({ code: 'FORBIDDEN' });
+      }
+
+      // Delete from S3
+      await s3.send(
+        new DeleteObjectCommand({ Bucket: env.S3_BUCKET, Key: doc.s3Key }),
+      );
+
+      return ctx.db.document.delete({ where: { id: input.documentId } });
+    }),
+
+  // ── getDownloadUrl ────────────────────────────────────────────────────
+  getDownloadUrl: protectedProcedure
+    .input(z.object({ documentId: z.string().cuid() }))
+    .query(async ({ ctx, input }) => {
+      const doc = await ctx.db.document.findUniqueOrThrow({
+        where: { id: input.documentId },
+        include: { standard: { select: { workingGroupId: true } } },
+      });
+
+      // Verify ownership / membership
+      const isAdmin = ctx.session.user.globalRole === 'ADMIN';
+      const isMember = ctx.session.user.memberships?.some(
+        (m) => m.workingGroupId === doc.standard.workingGroupId,
+      );
+
+      if (!isAdmin && !isMember) throw new TRPCError({ code: 'FORBIDDEN' });
+
+      const url = await getPresignedDownloadUrl(doc.s3Key);
+      return { url, filename: doc.filename };
+    }),
+});
