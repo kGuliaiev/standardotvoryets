@@ -1,13 +1,14 @@
 import { createTRPCRouter, protectedProcedure } from '@/server/trpc';
+import { seesAllWorkingGroups } from '@/server/permissions';
 
 export const dashboardRouter = createTRPCRouter({
   // Aggregated KPIs for dashboard header
   kpis: protectedProcedure.query(async ({ ctx }) => {
     const userId = ctx.session.user.id;
-    const isAdmin = ctx.session.user.globalRole === 'ADMIN';
+    const seesAll = seesAllWorkingGroups(ctx.session.user);
     const memberGroupIds = ctx.session.user.memberships?.map((m) => m.workingGroupId) ?? [];
 
-    const wgFilter = isAdmin ? {} : { workingGroupId: { in: memberGroupIds } };
+    const wgFilter = seesAll ? {} : { workingGroupId: { in: memberGroupIds } };
 
     const now = new Date();
     const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
@@ -72,10 +73,10 @@ export const dashboardRouter = createTRPCRouter({
   // Counts for sidebar badges
   navCounts: protectedProcedure.query(async ({ ctx }) => {
     const userId = ctx.session.user.id;
-    const isAdmin = ctx.session.user.globalRole === 'ADMIN';
+    const seesAll = seesAllWorkingGroups(ctx.session.user);
     const memberGroupIds = ctx.session.user.memberships?.map((m) => m.workingGroupId) ?? [];
 
-    const wgFilter = isAdmin ? {} : { workingGroupId: { in: memberGroupIds } };
+    const wgFilter = seesAll ? {} : { workingGroupId: { in: memberGroupIds } };
 
     const now = new Date();
     const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);

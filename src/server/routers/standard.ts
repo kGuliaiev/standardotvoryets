@@ -3,6 +3,7 @@ import { TRPCError } from '@trpc/server';
 import { createTRPCRouter, protectedProcedure } from '@/server/trpc';
 import { can } from '@/lib/rbac';
 import { logActivity } from '@/server/audit';
+import { seesAllWorkingGroups } from '@/server/permissions';
 import type { GlobalRole, WorkingGroupRole } from '@prisma/client';
 
 function userCtx(session: {
@@ -32,13 +33,13 @@ export const standardRouter = createTRPCRouter({
       }),
     )
     .query(async ({ ctx, input }) => {
-      const isAdmin = ctx.session.user.globalRole === 'ADMIN';
+      const seesAll = seesAllWorkingGroups(ctx.session.user);
       const memberGroupIds = ctx.session.user.memberships?.map((m) => m.workingGroupId) ?? [];
 
       const where = {
         ...(input.workingGroupId
           ? { workingGroupId: input.workingGroupId }
-          : isAdmin
+          : seesAll
             ? {}
             : { workingGroupId: { in: memberGroupIds } }),
         ...(input.status ? { status: input.status } : {}),
@@ -119,9 +120,9 @@ export const standardRouter = createTRPCRouter({
 
       if (!standard) throw new TRPCError({ code: 'NOT_FOUND' });
 
-      const isAdmin = ctx.session.user.globalRole === 'ADMIN';
+      const seesAll = seesAllWorkingGroups(ctx.session.user);
       const isMember = standard.workingGroup.members.some((m) => m.userId === ctx.session.user.id);
-      if (!isAdmin && !isMember) throw new TRPCError({ code: 'FORBIDDEN' });
+      if (!seesAll && !isMember) throw new TRPCError({ code: 'FORBIDDEN' });
 
       return standard;
     }),

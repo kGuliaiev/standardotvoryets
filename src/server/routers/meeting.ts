@@ -3,6 +3,7 @@ import { TRPCError } from '@trpc/server';
 import { createTRPCRouter, protectedProcedure } from '@/server/trpc';
 import { can } from '@/lib/rbac';
 import { logActivity } from '@/server/audit';
+import { seesAllWorkingGroups } from '@/server/permissions';
 import type { GlobalRole, WorkingGroupRole } from '@prisma/client';
 
 function userCtx(session: {
@@ -29,7 +30,7 @@ export const meetingRouter = createTRPCRouter({
     )
     .query(async ({ ctx, input }) => {
       const memberGroupIds = ctx.session.user.memberships?.map((m) => m.workingGroupId) ?? [];
-      const isAdmin = ctx.session.user.globalRole === 'ADMIN';
+      const seesAll = seesAllWorkingGroups(ctx.session.user);
 
       // Date range filter
       let dateFilter = {};
@@ -43,7 +44,7 @@ export const meetingRouter = createTRPCRouter({
         where: {
           ...(input.workingGroupId
             ? { workingGroupId: input.workingGroupId }
-            : isAdmin
+            : seesAll
               ? {}
               : { workingGroupId: { in: memberGroupIds } }),
           ...dateFilter,

@@ -3,6 +3,7 @@ import { TRPCError } from '@trpc/server';
 import { createTRPCRouter, protectedProcedure } from '@/server/trpc';
 import { can } from '@/lib/rbac';
 import { logActivity } from '@/server/audit';
+import { seesAllWorkingGroups } from '@/server/permissions';
 import type { GlobalRole, WorkingGroupRole } from '@prisma/client';
 
 function userCtx(session: {
@@ -30,14 +31,14 @@ export const taskRouter = createTRPCRouter({
     )
     .query(async ({ ctx, input }) => {
       const memberGroupIds = ctx.session.user.memberships?.map((m) => m.workingGroupId) ?? [];
-      const isAdmin = ctx.session.user.globalRole === 'ADMIN';
+      const seesAll = seesAllWorkingGroups(ctx.session.user);
 
       // Build where clause
       const standardWhere = input.standardId
         ? { id: input.standardId }
         : input.workingGroupId
           ? { workingGroupId: input.workingGroupId }
-          : isAdmin
+          : seesAll
             ? undefined
             : { workingGroupId: { in: memberGroupIds } };
 

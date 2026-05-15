@@ -1,269 +1,618 @@
-import { PrismaClient, GlobalRole, WorkingGroupRole, StandardStatus } from '@prisma/client';
+/* eslint-disable @typescript-eslint/no-unused-vars */
+import {
+  PrismaClient,
+  GlobalRole,
+  WorkingGroupRole,
+  StandardStatus,
+  MilitaryRank,
+  Organization,
+} from '@prisma/client';
 import bcrypt from 'bcryptjs';
 
 const prisma = new PrismaClient();
 
+interface SeedUser {
+  email: string;
+  name: string; // "Перше Прізвище"
+  rank: MilitaryRank;
+  position: string;
+  organization: Organization;
+  globalRole?: GlobalRole;
+}
+
+interface WGSeed {
+  code: string;
+  name: string;
+  color: string;
+  description?: string;
+  leader: string; // email of leader
+  deputy?: string;
+  secretary: string;
+  members: string[]; // emails of plain members
+}
+
+/* ─── Helpers ────────────────────────────────────────────────────────── */
+
+const HASH_ROUNDS = 12;
+
+function emailFrom(name: string) {
+  // "Дмитро БОНДАРЕНКО" → "dmytro.bondarenko@dssszzi.ua"
+  const map: Record<string, string> = {
+    а: 'a',
+    б: 'b',
+    в: 'v',
+    г: 'h',
+    ґ: 'g',
+    д: 'd',
+    е: 'e',
+    є: 'ie',
+    ж: 'zh',
+    з: 'z',
+    и: 'y',
+    і: 'i',
+    ї: 'i',
+    й: 'i',
+    к: 'k',
+    л: 'l',
+    м: 'm',
+    н: 'n',
+    о: 'o',
+    п: 'p',
+    р: 'r',
+    с: 's',
+    т: 't',
+    у: 'u',
+    ф: 'f',
+    х: 'kh',
+    ц: 'ts',
+    ч: 'ch',
+    ш: 'sh',
+    щ: 'shch',
+    ь: '',
+    ю: 'iu',
+    я: 'ia',
+    "'": '',
+    ' ': '.',
+  };
+  const slug = name
+    .toLowerCase()
+    .split('')
+    .map((c) => map[c] ?? c)
+    .join('')
+    .replace(/\.+/g, '.');
+  return `${slug}@dssszzi.ua`;
+}
+
+/* ─── Master user roster from наказ + зміни ─────────────────────────── */
+// Format: name → seed user data
+const USERS: SeedUser[] = [
+  // Admin (system)
+  {
+    email: 'admin@test.ua',
+    name: 'Адміністратор',
+    rank: MilitaryRank.CIVILIAN,
+    position: 'Адміністратор системи',
+    organization: Organization.DERZH_NDI,
+    globalRole: GlobalRole.ADMIN,
+  },
+
+  // РГ №1 (Криптографічний захист)
+  {
+    email: emailFrom('Дмитро БОНДАРЕНКО'),
+    name: 'Дмитро БОНДАРЕНКО',
+    rank: MilitaryRank.COLONEL,
+    position: 'начальник 1 науково-дослідного центру',
+    organization: Organization.DERZH_NDI,
+  },
+  {
+    email: emailFrom('Олександр ДИРДА'),
+    name: 'Олександр ДИРДА',
+    rank: MilitaryRank.COLONEL,
+    position: 'начальник 6 центру тематичних досліджень',
+    organization: Organization.DERZH_NDI,
+  },
+  {
+    email: emailFrom('Олексій ПОНОМАРЬОВ'),
+    name: 'Олексій ПОНОМАРЬОВ',
+    rank: MilitaryRank.LIEUTENANT,
+    position: 'молодший науковий співробітник 1 наукового відділу 8 центру',
+    organization: Organization.DERZH_NDI,
+  },
+  {
+    email: emailFrom('Олексій БЕЗСМЕРТНИЙ'),
+    name: 'Олексій БЕЗСМЕРТНИЙ',
+    rank: MilitaryRank.COLONEL,
+    position: 'заступник начальника управління — начальник 1 відділу 3 управління ДЗІ',
+    organization: Organization.ADM_DSSZZI,
+  },
+  {
+    email: emailFrom('Михайло ТЕРЛЕЦЬКИЙ'),
+    name: 'Михайло ТЕРЛЕЦЬКИЙ',
+    rank: MilitaryRank.COLONEL,
+    position: 'заступник начальника 6 центру',
+    organization: Organization.DERZH_NDI,
+  },
+  {
+    email: emailFrom('Наталія ЛИСЕНКО'),
+    name: 'Наталія ЛИСЕНКО',
+    rank: MilitaryRank.COLONEL,
+    position: 'начальник 3 науково-дослідного відділу 1 НДЦ',
+    organization: Organization.DERZH_NDI,
+  },
+  {
+    email: emailFrom('Федір ІВАНОВ'),
+    name: 'Федір ІВАНОВ',
+    rank: MilitaryRank.COLONEL,
+    position: 'начальник 1 науково-дослідного відділу 3 центру',
+    organization: Organization.DERZH_NDI,
+  },
+  {
+    email: emailFrom('Микола СНІЖИНСЬКИЙ'),
+    name: 'Микола СНІЖИНСЬКИЙ',
+    rank: MilitaryRank.LIEUTENANT_COLONEL,
+    position: 'заступник начальника 2 відділу 3 управління ДЗІ',
+    organization: Organization.ADM_DSSZZI,
+  },
+  {
+    email: emailFrom('Валерій ЖУКОВИЧ'),
+    name: 'Валерій ЖУКОВИЧ',
+    rank: MilitaryRank.LIEUTENANT_COLONEL,
+    position: 'заступник начальника 2 відділу 6 центру',
+    organization: Organization.DERZH_NDI,
+  },
+  {
+    email: emailFrom('Олена ШМЕТАН'),
+    name: 'Олена ШМЕТАН',
+    rank: MilitaryRank.LIEUTENANT_COLONEL,
+    position: 'заступник начальника 3 відділу 6 центру',
+    organization: Organization.DERZH_NDI,
+  },
+  {
+    email: emailFrom('Назар ЗАЇКА'),
+    name: 'Назар ЗАЇКА',
+    rank: MilitaryRank.SENIOR_LIEUTENANT,
+    position: 'молодший науковий співробітник 2 НД відділу 1 НДЦ',
+    organization: Organization.DERZH_NDI,
+  },
+  {
+    email: emailFrom('Євген СТАРОДУБ'),
+    name: 'Євген СТАРОДУБ',
+    rank: MilitaryRank.CIVILIAN,
+    position: 'провідний інженер 1 НД відділу 3 центру',
+    organization: Organization.DERZH_NDI,
+  },
+  {
+    email: emailFrom('Ярослав СТЕФАНИШИН'),
+    name: 'Ярослав СТЕФАНИШИН',
+    rank: MilitaryRank.CIVILIAN,
+    position: 'науковий співробітник 3 НД відділу 1 НДЦ',
+    organization: Organization.DERZH_NDI,
+  },
+  {
+    email: emailFrom('Ігор МАРТИНЮК'),
+    name: 'Ігор МАРТИНЮК',
+    rank: MilitaryRank.CIVILIAN,
+    position: 'інженер І категорії 2 НД відділу 1 НДЦ',
+    organization: Organization.DERZH_NDI,
+  },
+
+  // РГ №2 (Технічний захист) — за змінами
+  {
+    email: emailFrom('Сергій ЛИСЕНКО'),
+    name: 'Сергій ЛИСЕНКО',
+    rank: MilitaryRank.COLONEL,
+    position: 'начальник 2 науково-дослідного центру',
+    organization: Organization.DERZH_NDI,
+  },
+  {
+    email: emailFrom('Олександр ТКАЧЕНКО'),
+    name: 'Олександр ТКАЧЕНКО',
+    rank: MilitaryRank.COLONEL,
+    position: 'заступник начальника центру — начальник 2 НД відділу 2 НДЦ',
+    organization: Organization.DERZH_NDI,
+  },
+  {
+    email: emailFrom('Олексій ГАВРИЛЕНКО'),
+    name: 'Олексій ГАВРИЛЕНКО',
+    rank: MilitaryRank.COLONEL,
+    position: 'заступник начальника управління — начальник 2 відділу 2 управління ДЗІ',
+    organization: Organization.ADM_DSSZZI,
+  },
+  {
+    email: emailFrom('Михайло РИБКА'),
+    name: 'Михайло РИБКА',
+    rank: MilitaryRank.COLONEL,
+    position: 'заступник начальника управління — начальник 1 відділу 4 управління ДЗІ',
+    organization: Organization.ADM_DSSZZI,
+  },
+  {
+    email: emailFrom('Роман САГАЙДАК'),
+    name: 'Роман САГАЙДАК',
+    rank: MilitaryRank.COLONEL,
+    position: 'заступник начальника 1 відділу 4 управління ДЗІ',
+    organization: Organization.ADM_DSSZZI,
+  },
+  {
+    email: emailFrom('Ігор НАВРОЦЬКИЙ'),
+    name: 'Ігор НАВРОЦЬКИЙ',
+    rank: MilitaryRank.COLONEL,
+    position: 'заступник начальника 4 центру технічного захисту',
+    organization: Organization.DERZH_NDI,
+  },
+  {
+    email: emailFrom('Руслан БОБРО'),
+    name: 'Руслан БОБРО',
+    rank: MilitaryRank.LIEUTENANT_COLONEL,
+    position: 'заступник начальника 1 НД відділу 2 НДЦ',
+    organization: Organization.DERZH_NDI,
+  },
+  {
+    email: emailFrom('Анатолій ГОЛІШЕВСЬКИЙ'),
+    name: 'Анатолій ГОЛІШЕВСЬКИЙ',
+    rank: MilitaryRank.LIEUTENANT_COLONEL,
+    position: 'провідний науковий співробітник 1 НД відділу 2 НДЦ',
+    organization: Organization.DERZH_NDI,
+  },
+  {
+    email: emailFrom('Олександр ДРОБКО'),
+    name: 'Олександр ДРОБКО',
+    rank: MilitaryRank.LIEUTENANT_COLONEL,
+    position: 'заступник начальника 3 відділу 4 центру технічного захисту',
+    organization: Organization.DERZH_NDI,
+  },
+  {
+    email: emailFrom('Максим КОЖИН'),
+    name: 'Максим КОЖИН',
+    rank: MilitaryRank.LIEUTENANT_COLONEL,
+    position: 'старший конструктор 1 відділу 4 центру технічного захисту',
+    organization: Organization.DERZH_NDI,
+  },
+  {
+    email: emailFrom('Юрій РОЗСОШАНСЬКИЙ'),
+    name: 'Юрій РОЗСОШАНСЬКИЙ',
+    rank: MilitaryRank.CAPTAIN,
+    position: 'старший фахівець 2 відділу 4 центру технічного захисту',
+    organization: Organization.DERZH_NDI,
+  },
+
+  // РГ №3 (Кіберзахист)
+  {
+    email: emailFrom('Максим КОМАРОВ'),
+    name: 'Максим КОМАРОВ',
+    rank: MilitaryRank.COLONEL,
+    position: 'начальник 5 центру захисту інформації',
+    organization: Organization.DERZH_NDI,
+  },
+  {
+    email: emailFrom('Олексій ВЕРХОВЕЦЬ'),
+    name: 'Олексій ВЕРХОВЕЦЬ',
+    rank: MilitaryRank.COLONEL,
+    position: 'заступник начальника 5 центру',
+    organization: Organization.DERZH_NDI,
+  },
+  {
+    email: emailFrom('Кирило ГУЛЯЄВ'),
+    name: 'Кирило ГУЛЯЄВ',
+    rank: MilitaryRank.CAPTAIN,
+    position: 'старший науковий співробітник 1 наукового відділу 8 центру',
+    organization: Organization.DERZH_NDI,
+  },
+  {
+    email: emailFrom('Віталій ГОЛЬНЄВ'),
+    name: 'Віталій ГОЛЬНЄВ',
+    rank: MilitaryRank.COLONEL,
+    position: 'начальник 1 відділу 5 центру',
+    organization: Organization.DERZH_NDI,
+  },
+  {
+    email: emailFrom('Олег РУЩАК'),
+    name: 'Олег РУЩАК',
+    rank: MilitaryRank.COLONEL,
+    position: 'начальник 2 відділу 5 центру',
+    organization: Organization.DERZH_NDI,
+  },
+  {
+    email: emailFrom('Ігор ПИСАНКО'),
+    name: 'Ігор ПИСАНКО',
+    rank: MilitaryRank.LIEUTENANT_COLONEL,
+    position: 'начальник 3 відділу 5 центру',
+    organization: Organization.DERZH_NDI,
+  },
+  {
+    email: emailFrom('Дмитро ЖАРУК'),
+    name: 'Дмитро ЖАРУК',
+    rank: MilitaryRank.MAJOR,
+    position: 'начальник 3 відділу Департаменту кіберзахисту',
+    organization: Organization.ADM_DSSZZI,
+  },
+  {
+    email: emailFrom('Тетяна ГРИЩИШИНА'),
+    name: 'Тетяна ГРИЩИШИНА',
+    rank: MilitaryRank.MAJOR,
+    position: 'заступник начальника 2 відділу Департаменту кіберзахисту',
+    organization: Organization.ADM_DSSZZI,
+  },
+
+  // РГ №4 (Протидія технічним розвідкам)
+  {
+    email: emailFrom('Максим ІЩУК'),
+    name: 'Максим ІЩУК',
+    rank: MilitaryRank.COLONEL,
+    position: 'начальник 7 ДВЦ протидії технічним розвідкам',
+    organization: Organization.DERZH_NDI,
+  },
+  {
+    email: emailFrom('Сергій ГНАТЮК'),
+    name: 'Сергій ГНАТЮК',
+    rank: MilitaryRank.COLONEL,
+    position: 'провідний науковий співробітник науково-дослідної лабораторії 7 ДВЦ',
+    organization: Organization.DERZH_NDI,
+  },
+  {
+    email: emailFrom('Ірина КИРИЛЛОВА'),
+    name: 'Ірина КИРИЛЛОВА',
+    rank: MilitaryRank.COLONEL,
+    position: 'заступник начальника управління — начальник 1 відділу 1 управління Департаменту ПТР',
+    organization: Organization.ADM_DSSZZI,
+  },
+  {
+    email: emailFrom('Юрій ЖУК'),
+    name: 'Юрій ЖУК',
+    rank: MilitaryRank.COLONEL,
+    position: 'заступник начальника центру — начальник 1 відділу 7 ДВЦ',
+    organization: Organization.DERZH_NDI,
+  },
+  {
+    email: emailFrom('Максим МАКСИМЕНКО'),
+    name: 'Максим МАКСИМЕНКО',
+    rank: MilitaryRank.LIEUTENANT_COLONEL,
+    position: 'начальник 2 відділу 7 ДВЦ',
+    organization: Organization.DERZH_NDI,
+  },
+  {
+    email: emailFrom('Вікторія ШИКЕР'),
+    name: 'Вікторія ШИКЕР',
+    rank: MilitaryRank.MAJOR,
+    position: 'головний спеціаліст 1 відділу 1 управління Департаменту ПТР',
+    organization: Organization.ADM_DSSZZI,
+  },
+  {
+    email: emailFrom('Андрій БРОНЕВИЦЬКИЙ'),
+    name: 'Андрій БРОНЕВИЦЬКИЙ',
+    rank: MilitaryRank.CAPTAIN,
+    position: 'начальник науково-дослідної лабораторії 7 ДВЦ',
+    organization: Organization.DERZH_NDI,
+  },
+  {
+    email: emailFrom('Максим ПАЗЮК'),
+    name: 'Максим ПАЗЮК',
+    rank: MilitaryRank.SENIOR_LIEUTENANT,
+    position: 'конструктор 1 відділу 7 ДВЦ',
+    organization: Organization.DERZH_NDI,
+  },
+
+  // РГ №5 (Основоположні стандарти)
+  {
+    email: emailFrom('Роман ЦИРЕНЬ'),
+    name: 'Роман ЦИРЕНЬ',
+    rank: MilitaryRank.COLONEL,
+    position: 'начальник 8 наукового центру галузевої стандартизації',
+    organization: Organization.DERZH_NDI,
+  },
+  {
+    email: emailFrom('Тетяна МАСЛЕННИКОВА'),
+    name: 'Тетяна МАСЛЕННИКОВА',
+    rank: MilitaryRank.CAPTAIN,
+    position: 'заступник начальника центру — начальник 1 наукового відділу 8 центру',
+    organization: Organization.DERZH_NDI,
+  },
+  {
+    email: emailFrom('Олексій ЮДІН'),
+    name: 'Олексій ЮДІН',
+    rank: MilitaryRank.COLONEL,
+    position: 'головний науковий співробітник 3 наукового відділу 8 центру',
+    organization: Organization.DERZH_NDI,
+  },
+  {
+    email: emailFrom('Оксана ПШЕНИЧНА'),
+    name: 'Оксана ПШЕНИЧНА',
+    rank: MilitaryRank.CAPTAIN,
+    position: 'т.в.о. начальника відділу науково-технічної експертизи',
+    organization: Organization.DERZH_NDI,
+  },
+];
+
+const WORKING_GROUPS: WGSeed[] = [
+  {
+    code: 'РГ №1',
+    name: 'Криптографічний захист інформації',
+    description: 'Розроблення проєктів стандартів з криптографічного захисту інформації',
+    color: '#1A56DB',
+    leader: emailFrom('Дмитро БОНДАРЕНКО'),
+    deputy: emailFrom('Олександр ДИРДА'),
+    secretary: emailFrom('Олексій ПОНОМАРЬОВ'),
+    members: [
+      emailFrom('Олексій БЕЗСМЕРТНИЙ'),
+      emailFrom('Михайло ТЕРЛЕЦЬКИЙ'),
+      emailFrom('Наталія ЛИСЕНКО'),
+      emailFrom('Федір ІВАНОВ'),
+      emailFrom('Микола СНІЖИНСЬКИЙ'),
+      emailFrom('Валерій ЖУКОВИЧ'),
+      emailFrom('Олена ШМЕТАН'),
+      emailFrom('Назар ЗАЇКА'),
+      emailFrom('Євген СТАРОДУБ'),
+      emailFrom('Ярослав СТЕФАНИШИН'),
+      emailFrom('Ігор МАРТИНЮК'),
+    ],
+  },
+  {
+    code: 'РГ №2',
+    name: 'Технічний захист інформації',
+    description: 'Розроблення проєктів стандартів з технічного захисту інформації',
+    color: '#6D28D9',
+    leader: emailFrom('Сергій ЛИСЕНКО'),
+    deputy: emailFrom('Олександр ТКАЧЕНКО'),
+    secretary: emailFrom('Олексій ПОНОМАРЬОВ'),
+    members: [
+      emailFrom('Олексій ГАВРИЛЕНКО'),
+      emailFrom('Михайло РИБКА'),
+      emailFrom('Роман САГАЙДАК'),
+      emailFrom('Ігор НАВРОЦЬКИЙ'),
+      emailFrom('Михайло ТЕРЛЕЦЬКИЙ'),
+      emailFrom('Руслан БОБРО'),
+      emailFrom('Анатолій ГОЛІШЕВСЬКИЙ'),
+      emailFrom('Валерій ЖУКОВИЧ'),
+      emailFrom('Олександр ДРОБКО'),
+      emailFrom('Максим КОЖИН'),
+      emailFrom('Юрій РОЗСОШАНСЬКИЙ'),
+    ],
+  },
+  {
+    code: 'РГ №3',
+    name: 'Кіберзахист',
+    description: 'Розроблення проєктів стандартів з кіберзахисту',
+    color: '#059669',
+    leader: emailFrom('Максим КОМАРОВ'),
+    deputy: emailFrom('Олексій ВЕРХОВЕЦЬ'),
+    secretary: emailFrom('Кирило ГУЛЯЄВ'),
+    members: [
+      emailFrom('Віталій ГОЛЬНЄВ'),
+      emailFrom('Олег РУЩАК'),
+      emailFrom('Ігор ПИСАНКО'),
+      emailFrom('Дмитро ЖАРУК'),
+      emailFrom('Тетяна ГРИЩИШИНА'),
+    ],
+  },
+  {
+    code: 'РГ №4',
+    name: 'Протидія технічним розвідкам',
+    description: 'Розроблення проєктів стандартів з протидії технічним розвідкам',
+    color: '#D97706',
+    leader: emailFrom('Максим ІЩУК'),
+    deputy: emailFrom('Сергій ГНАТЮК'),
+    secretary: emailFrom('Кирило ГУЛЯЄВ'),
+    members: [
+      emailFrom('Ірина КИРИЛЛОВА'),
+      emailFrom('Юрій ЖУК'),
+      emailFrom('Максим МАКСИМЕНКО'),
+      emailFrom('Вікторія ШИКЕР'),
+      emailFrom('Андрій БРОНЕВИЦЬКИЙ'),
+      emailFrom('Максим ПАЗЮК'),
+    ],
+  },
+  {
+    code: 'РГ №5',
+    name: 'Основоположні стандарти',
+    description: 'Розроблення основоположних стандартів',
+    color: '#DC2626',
+    leader: emailFrom('Роман ЦИРЕНЬ'),
+    deputy: emailFrom('Тетяна МАСЛЕННИКОВА'),
+    secretary: emailFrom('Олексій ПОНОМАРЬОВ'),
+    members: [emailFrom('Олексій ЮДІН'), emailFrom('Оксана ПШЕНИЧНА'), emailFrom('Кирило ГУЛЯЄВ')],
+  },
+];
+
 async function main() {
-  console.log('🌱 Seeding database...');
+  console.log('🌱 Seeding database (per Наказ №32 від 23.03.2026 + зміни)…');
 
-  // ── Admin user ──────────────────────────────────────────────────────
-  const adminHash = await bcrypt.hash('Admin123!', 12);
-  const admin = await prisma.user.upsert({
-    where: { email: 'admin@test.ua' },
-    update: {},
-    create: {
-      email: 'admin@test.ua',
-      name: 'Адміністратор',
-      passwordHash: adminHash,
-      globalRole: GlobalRole.ADMIN,
-    },
+  /* ── Users ─────────────────────────────────────────────────────────── */
+  const userPassword = await bcrypt.hash('User123!', HASH_ROUNDS);
+  const adminPassword = await bcrypt.hash('Admin123!', HASH_ROUNDS);
+
+  const usersById: Record<string, string> = {}; // email → user.id
+
+  for (const u of USERS) {
+    const isAdmin = u.globalRole === GlobalRole.ADMIN;
+    const upserted = await prisma.user.upsert({
+      where: { email: u.email },
+      update: {
+        name: u.name,
+        rank: u.rank,
+        position: u.position,
+        organization: u.organization,
+        globalRole: u.globalRole ?? GlobalRole.USER,
+      },
+      create: {
+        email: u.email,
+        name: u.name,
+        passwordHash: isAdmin ? adminPassword : userPassword,
+        rank: u.rank,
+        position: u.position,
+        organization: u.organization,
+        globalRole: u.globalRole ?? GlobalRole.USER,
+      },
+      select: { id: true, email: true },
+    });
+    usersById[upserted.email] = upserted.id;
+  }
+  console.log(`✅ ${Object.keys(usersById).length} users upserted`);
+
+  /* ── Wipe stale memberships and standards ──────────────────────────── */
+  // To replace the previous РГ #4/8/12 seed cleanly: remove all members and
+  // any pending standards from groups that aren't in this list.
+  const seedCodes = WORKING_GROUPS.map((w) => w.code);
+  const staleGroups = await prisma.workingGroup.findMany({
+    where: { code: { notIn: seedCodes } },
+    select: { id: true, code: true },
   });
-  console.log('✅ Admin user:', admin.email);
+  if (staleGroups.length) {
+    console.log('🧹 Removing stale WGs:', staleGroups.map((g) => g.code).join(', '));
+    const ids = staleGroups.map((g) => g.id);
+    await prisma.workingGroupMember.deleteMany({ where: { workingGroupId: { in: ids } } });
+    await prisma.standard.deleteMany({ where: { workingGroupId: { in: ids } } });
+    await prisma.meeting.deleteMany({ where: { workingGroupId: { in: ids } } });
+    await prisma.workingGroup.deleteMany({ where: { id: { in: ids } } });
+  }
 
-  // ── Extra users ─────────────────────────────────────────────────────
-  const userHash = await bcrypt.hash('User123!', 12);
+  /* ── WGs + memberships ─────────────────────────────────────────────── */
+  for (const wg of WORKING_GROUPS) {
+    const upserted = await prisma.workingGroup.upsert({
+      where: { code: wg.code },
+      update: {
+        name: wg.name,
+        description: wg.description,
+        color: wg.color,
+        isArchived: false,
+      },
+      create: {
+        code: wg.code,
+        name: wg.name,
+        description: wg.description,
+        color: wg.color,
+      },
+    });
 
-  const olena = await prisma.user.upsert({
-    where: { email: 'olena.kovalenko@test.ua' },
-    update: {},
-    create: {
-      email: 'olena.kovalenko@test.ua',
-      name: 'Олена Коваленко',
-      passwordHash: userHash,
-    },
-  });
+    // Wipe existing memberships to make seed authoritative
+    await prisma.workingGroupMember.deleteMany({ where: { workingGroupId: upserted.id } });
 
-  const mykola = await prisma.user.upsert({
-    where: { email: 'mykola.petrenko@test.ua' },
-    update: {},
-    create: {
-      email: 'mykola.petrenko@test.ua',
-      name: 'Микола Петренко',
-      passwordHash: userHash,
-    },
-  });
+    const seenUserIds = new Set<string>();
+    const addMember = async (email: string, role: WorkingGroupRole) => {
+      const uid = usersById[email];
+      if (!uid) {
+        console.warn(`⚠️ Missing user ${email} for ${wg.code}`);
+        return;
+      }
+      if (seenUserIds.has(uid)) return; // can't have same person twice in one WG
+      seenUserIds.add(uid);
+      await prisma.workingGroupMember.create({
+        data: { workingGroupId: upserted.id, userId: uid, role },
+      });
+    };
 
-  const iryna = await prisma.user.upsert({
-    where: { email: 'iryna.savchenko@test.ua' },
-    update: {},
-    create: {
-      email: 'iryna.savchenko@test.ua',
-      name: 'Ірина Савченко',
-      passwordHash: userHash,
-    },
-  });
+    await addMember(wg.leader, WorkingGroupRole.LEADER);
+    if (wg.deputy) await addMember(wg.deputy, WorkingGroupRole.DEPUTY);
+    await addMember(wg.secretary, WorkingGroupRole.SECRETARY);
+    for (const m of wg.members) await addMember(m, WorkingGroupRole.MEMBER);
 
-  const dmytro = await prisma.user.upsert({
-    where: { email: 'dmytro.bondarenko@test.ua' },
-    update: {},
-    create: {
-      email: 'dmytro.bondarenko@test.ua',
-      name: 'Дмитро Бондаренко',
-      passwordHash: userHash,
-    },
-  });
+    console.log(`✅ ${wg.code}: ${seenUserIds.size} members`);
+  }
 
-  const natalia = await prisma.user.upsert({
-    where: { email: 'natalia.moroz@test.ua' },
-    update: {},
-    create: {
-      email: 'natalia.moroz@test.ua',
-      name: 'Наталія Мороз',
-      passwordHash: userHash,
-    },
-  });
-
-  const vasyl = await prisma.user.upsert({
-    where: { email: 'vasyl.shevchenko@test.ua' },
-    update: {},
-    create: {
-      email: 'vasyl.shevchenko@test.ua',
-      name: 'Василь Шевченко',
-      passwordHash: userHash,
-    },
-  });
-
-  console.log('✅ Users created');
-
-  // ── Working Groups ───────────────────────────────────────────────────
-  const wg8 = await prisma.workingGroup.upsert({
-    where: { code: 'РГ №8' },
-    update: {},
-    create: {
-      code: 'РГ №8',
-      name: 'Управління якістю та стандартизація',
-      description: 'Робоча група з розробки стандартів управління якістю',
-      color: '#1A56DB',
-    },
-  });
-
-  const wg4 = await prisma.workingGroup.upsert({
-    where: { code: 'РГ №4' },
-    update: {},
-    create: {
-      code: 'РГ №4',
-      name: 'Інформаційні технології та безпека',
-      description: 'Розробка стандартів у сфері ІТ та кібербезпеки',
-      color: '#6D28D9',
-    },
-  });
-
-  const wg12 = await prisma.workingGroup.upsert({
-    where: { code: 'РГ №12' },
-    update: {},
-    create: {
-      code: 'РГ №12',
-      name: 'Будівництво та архітектура',
-      description: 'Стандарти у сфері будівництва та проектування',
-      color: '#059669',
-    },
-  });
-
-  console.log('✅ Working groups created');
-
-  // ── Members for РГ №8 ────────────────────────────────────────────────
-  await prisma.workingGroupMember.upsert({
-    where: { workingGroupId_userId: { workingGroupId: wg8.id, userId: olena.id } },
-    update: {},
-    create: { workingGroupId: wg8.id, userId: olena.id, role: WorkingGroupRole.LEADER },
-  });
-  await prisma.workingGroupMember.upsert({
-    where: { workingGroupId_userId: { workingGroupId: wg8.id, userId: mykola.id } },
-    update: {},
-    create: { workingGroupId: wg8.id, userId: mykola.id, role: WorkingGroupRole.SECRETARY },
-  });
-  await prisma.workingGroupMember.upsert({
-    where: { workingGroupId_userId: { workingGroupId: wg8.id, userId: iryna.id } },
-    update: {},
-    create: { workingGroupId: wg8.id, userId: iryna.id, role: WorkingGroupRole.MEMBER },
-  });
-
-  // ── Members for РГ №4 ────────────────────────────────────────────────
-  await prisma.workingGroupMember.upsert({
-    where: { workingGroupId_userId: { workingGroupId: wg4.id, userId: dmytro.id } },
-    update: {},
-    create: { workingGroupId: wg4.id, userId: dmytro.id, role: WorkingGroupRole.LEADER },
-  });
-  await prisma.workingGroupMember.upsert({
-    where: { workingGroupId_userId: { workingGroupId: wg4.id, userId: natalia.id } },
-    update: {},
-    create: { workingGroupId: wg4.id, userId: natalia.id, role: WorkingGroupRole.DEPUTY },
-  });
-
-  // ── Members for РГ №12 ───────────────────────────────────────────────
-  await prisma.workingGroupMember.upsert({
-    where: { workingGroupId_userId: { workingGroupId: wg12.id, userId: vasyl.id } },
-    update: {},
-    create: { workingGroupId: wg12.id, userId: vasyl.id, role: WorkingGroupRole.LEADER },
-  });
-  await prisma.workingGroupMember.upsert({
-    where: { workingGroupId_userId: { workingGroupId: wg12.id, userId: iryna.id } },
-    update: {},
-    create: { workingGroupId: wg12.id, userId: iryna.id, role: WorkingGroupRole.MEMBER },
-  });
-
-  console.log('✅ Members assigned');
-
-  // ── Standards for РГ №8 ──────────────────────────────────────────────
-  await prisma.standard.upsert({
-    where: { workingGroupId_code: { workingGroupId: wg8.id, code: 'ДСТУ 7.1' } },
-    update: {},
-    create: {
-      workingGroupId: wg8.id,
-      code: 'ДСТУ 7.1',
-      title: 'Вимоги до документації систем управління якістю',
-      description: 'Стандарт встановлює вимоги до документації систем управління якістю підприємств',
-      status: StandardStatus.DRAFT,
-      isoAnalog: 'ISO 9001:2015',
-      category: 'Управління якістю',
-      responsibleId: olena.id,
-      progress: 35,
-    },
-  });
-
-  await prisma.standard.upsert({
-    where: { workingGroupId_code: { workingGroupId: wg8.id, code: 'ДСТУ 4.5' } },
-    update: {},
-    create: {
-      workingGroupId: wg8.id,
-      code: 'ДСТУ 4.5',
-      title: 'Методи аудиту систем управління якістю',
-      status: StandardStatus.IN_REVIEW,
-      isoAnalog: 'ISO 19011:2018',
-      category: 'Управління якістю',
-      responsibleId: olena.id,
-      progress: 70,
-    },
-  });
-
-  // ── Standards for РГ №4 ──────────────────────────────────────────────
-  await prisma.standard.upsert({
-    where: { workingGroupId_code: { workingGroupId: wg4.id, code: 'ДСТУ 3.2' } },
-    update: {},
-    create: {
-      workingGroupId: wg4.id,
-      code: 'ДСТУ 3.2',
-      title: 'Вимоги до інформаційної безпеки критичної інфраструктури',
-      status: StandardStatus.DRAFT,
-      isoAnalog: 'ISO/IEC 27001:2022',
-      category: 'Інформаційна безпека',
-      responsibleId: dmytro.id,
-      progress: 20,
-    },
-  });
-
-  await prisma.standard.upsert({
-    where: { workingGroupId_code: { workingGroupId: wg4.id, code: 'ДСТУ 5.1' } },
-    update: {},
-    create: {
-      workingGroupId: wg4.id,
-      code: 'ДСТУ 5.1',
-      title: 'Класифікація та кодування програмного забезпечення',
-      status: StandardStatus.DRAFT,
-      category: 'Програмне забезпечення',
-      responsibleId: natalia.id,
-      progress: 10,
-    },
-  });
-
-  // ── Standards for РГ №12 ─────────────────────────────────────────────
-  await prisma.standard.upsert({
-    where: { workingGroupId_code: { workingGroupId: wg12.id, code: 'ДСТУ Б 2.3' } },
-    update: {},
-    create: {
-      workingGroupId: wg12.id,
-      code: 'ДСТУ Б 2.3',
-      title: 'Конструкції будинків і споруд. Загальні вимоги',
-      status: StandardStatus.DRAFT,
-      category: 'Будівельні конструкції',
-      responsibleId: vasyl.id,
-      progress: 15,
-    },
-  });
-
-  await prisma.standard.upsert({
-    where: { workingGroupId_code: { workingGroupId: wg12.id, code: 'ДСТУ Б В.2.7' } },
-    update: {},
-    create: {
-      workingGroupId: wg12.id,
-      code: 'ДСТУ Б В.2.7',
-      title: 'Будівельні матеріали. Класифікація та методи випробувань',
-      status: StandardStatus.IN_REVIEW,
-      category: 'Будівельні матеріали',
-      responsibleId: vasyl.id,
-      progress: 55,
-    },
-  });
-
-  console.log('✅ Standards created');
-  console.log('');
   console.log('🎉 Seed complete!');
   console.log('');
-  console.log('Test credentials:');
-  console.log('  admin@test.ua         / Admin123!  (ADMIN)');
-  console.log('  olena.kovalenko@test.ua / User123! (LEADER РГ №8)');
-  console.log('  mykola.petrenko@test.ua / User123! (SECRETARY РГ №8)');
-  console.log('  dmytro.bondarenko@test.ua / User123! (LEADER РГ №4)');
+  console.log('Logins:');
+  console.log('  admin@test.ua / Admin123!  (ADMIN)');
+  console.log('  <prenom>.<nom>@dssszzi.ua / User123!  (all WG members)');
+  console.log('  e.g. kyrylo.guliaiev@dssszzi.ua, dmytro.bondarenko@dssszzi.ua');
 }
 
 main()

@@ -22,12 +22,17 @@ export const workingGroupRouter = createTRPCRouter({
   list: protectedProcedure
     .input(z.object({ includeArchived: z.boolean().optional() }).optional())
     .query(async ({ ctx, input }) => {
+      const memberships = ctx.session.user.memberships ?? [];
       const isAdmin = ctx.session.user.globalRole === 'ADMIN';
-      const memberGroupIds = ctx.session.user.memberships?.map((m) => m.workingGroupId) ?? [];
+      const isDirector = ctx.session.user.globalRole === 'DIRECTOR';
+      // Secretaries see all WGs across the system (per наказ)
+      const isAnySecretary = memberships.some((m) => m.role === 'SECRETARY');
+      const seesAll = isAdmin || isDirector || isAnySecretary;
+      const memberGroupIds = memberships.map((m) => m.workingGroupId);
 
       return ctx.db.workingGroup.findMany({
         where: {
-          ...(isAdmin ? {} : { id: { in: memberGroupIds } }),
+          ...(seesAll ? {} : { id: { in: memberGroupIds } }),
           ...(input?.includeArchived ? {} : { isArchived: false }),
         },
         include: {
@@ -57,8 +62,13 @@ export const workingGroupRouter = createTRPCRouter({
       if (!group) throw new TRPCError({ code: 'NOT_FOUND' });
 
       const isAdmin = ctx.session.user.globalRole === 'ADMIN';
+      const isDirector = ctx.session.user.globalRole === 'DIRECTOR';
       const isMember = group.members.some((m) => m.userId === ctx.session.user.id);
-      if (!isAdmin && !isMember) throw new TRPCError({ code: 'FORBIDDEN' });
+      const memberships = ctx.session.user.memberships ?? [];
+      const isAnySecretary = memberships.some((m) => m.role === 'SECRETARY');
+      if (!isAdmin && !isDirector && !isMember && !isAnySecretary) {
+        throw new TRPCError({ code: 'FORBIDDEN' });
+      }
 
       return group;
     }),

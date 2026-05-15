@@ -97,28 +97,54 @@ enum NotificationType {
   STANDARD_STATUS_CHANGED
 }
 
+enum MilitaryRank {
+  CIVILIAN
+  LIEUTENANT          // лейтенант
+  SENIOR_LIEUTENANT   // старший лейтенант
+  CAPTAIN             // капітан
+  MAJOR               // майор
+  LIEUTENANT_COLONEL  // підполковник
+  COLONEL             // полковник
+  BRIGADIER_GENERAL   // бригадний генерал
+  MAJOR_GENERAL       // генерал-майор
+  LIEUTENANT_GENERAL  // генерал-лейтенант
+  GENERAL             // генерал
+}
+
+enum Organization {
+  DERZH_NDI           // ДержНДІ технологій кібербезпеки
+  ADM_DSSZZI          // Адміністрація Держспецзв'язку
+  OTHER
+}
+
 // ─────────────────────────────────────────
 // USERS & AUTH
 // ─────────────────────────────────────────
 
 model User {
-  id           String     @id @default(cuid())
-  email        String     @unique
+  id           String        @id @default(cuid())
+  email        String        @unique
   name         String
   passwordHash String
-  globalRole   GlobalRole @default(USER)
+  globalRole   GlobalRole    @default(USER)
   avatarUrl    String?
-  isActive     Boolean    @default(true)
-  createdAt    DateTime   @default(now())
-  updatedAt    DateTime   @updatedAt
+  isActive     Boolean       @default(true)
+  rank         MilitaryRank  @default(CIVILIAN)
+  position     String?       // free-text: посада
+  organization Organization  @default(OTHER)
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
 
   // Relations
   memberships     WorkingGroupMember[]
   documents       Document[]
   comments        Comment[]
   votes           Vote[]
-  tasksAssigned   Task[]         @relation("TaskAssignee")
-  tasksCreated    Task[]         @relation("TaskCreator")
+  tasksAssigned     Task[]         @relation("TaskAssignee")
+  tasksCreated      Task[]         @relation("TaskCreator")
+  tasksCompleted    Task[]         @relation("TaskCompleter")
+  agendaSpoke       AgendaItem[]   @relation("AgendaSpeaker")
+  agendaResponsible AgendaItem[]   @relation("AgendaResponsible")
   meetingsCreated Meeting[]
   attendances     Attendance[]
   notifications   Notification[]
@@ -370,6 +396,8 @@ model Meeting {
   id             String        @id @default(cuid())
   workingGroupId String
   createdById    String
+  chairmanId     String?
+  protocolNumber Int? // sequence per WG per year, e.g. 1 → "1/4/2026"
   title          String
   format         MeetingFormat @default(ONLINE)
   location       String? // URL or room name
@@ -397,7 +425,17 @@ model AgendaItem {
   duration  Int? // minutes
   note      String?
 
-  meeting Meeting @relation(fields: [meetingId], references: [id], onDelete: Cascade)
+  // Protocol fields
+  speakerId       String?
+  heardText       String?  @db.Text // СЛУХАЛИ
+  discussionText  String?  @db.Text // ВИСТУПИЛИ
+  decisionText    String?  @db.Text // ВИРІШИЛИ
+  deadline        DateTime?
+  responsibleId   String?
+
+  meeting     Meeting @relation(fields: [meetingId], references: [id], onDelete: Cascade)
+  speaker     User?   @relation("AgendaSpeaker", fields: [speakerId], references: [id])
+  responsible User?   @relation("AgendaResponsible", fields: [responsibleId], references: [id])
 
   @@map("agenda_items")
 }
@@ -422,22 +460,24 @@ model Attendance {
 // ─────────────────────────────────────────
 
 model Task {
-  id          String       @id @default(cuid())
-  standardId  String
-  createdById String
-  assigneeId  String?
-  title       String
-  description String?      @db.Text
-  priority    TaskPriority @default(MEDIUM)
-  status      TaskStatus   @default(OPEN)
-  dueDate     DateTime?
-  completedAt DateTime?
-  createdAt   DateTime     @default(now())
-  updatedAt   DateTime     @updatedAt
+  id            String       @id @default(cuid())
+  standardId    String
+  createdById   String
+  assigneeId    String?
+  completedById String?
+  title         String
+  description   String?      @db.Text
+  priority      TaskPriority @default(MEDIUM)
+  status        TaskStatus   @default(OPEN)
+  dueDate       DateTime?
+  completedAt   DateTime?
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
 
-  standard  Standard @relation(fields: [standardId], references: [id], onDelete: Cascade)
-  createdBy User     @relation("TaskCreator", fields: [createdById], references: [id])
-  assignee  User?    @relation("TaskAssignee", fields: [assigneeId], references: [id])
+  standard    Standard @relation(fields: [standardId], references: [id], onDelete: Cascade)
+  createdBy   User     @relation("TaskCreator", fields: [createdById], references: [id])
+  assignee    User?    @relation("TaskAssignee", fields: [assigneeId], references: [id])
+  completedBy User?    @relation("TaskCompleter", fields: [completedById], references: [id])
 
   @@map("tasks")
 }

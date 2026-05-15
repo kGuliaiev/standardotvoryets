@@ -1,13 +1,14 @@
 import { z } from 'zod';
 import { createTRPCRouter, protectedProcedure } from '@/server/trpc';
+import { seesAllWorkingGroups } from '@/server/permissions';
 
 export const searchRouter = createTRPCRouter({
   global: protectedProcedure
     .input(z.object({ q: z.string().min(2).max(120) }))
     .query(async ({ ctx, input }) => {
-      const isAdmin = ctx.session.user.globalRole === 'ADMIN';
+      const seesAll = seesAllWorkingGroups(ctx.session.user);
       const memberGroupIds = ctx.session.user.memberships?.map((m) => m.workingGroupId) ?? [];
-      const wgFilter = isAdmin ? {} : { workingGroupId: { in: memberGroupIds } };
+      const wgFilter = seesAll ? {} : { workingGroupId: { in: memberGroupIds } };
 
       const q = input.q.trim();
 
@@ -49,7 +50,7 @@ export const searchRouter = createTRPCRouter({
         }),
         ctx.db.task.findMany({
           where: {
-            ...(isAdmin ? {} : { standard: { workingGroupId: { in: memberGroupIds } } }),
+            ...(seesAll ? {} : { standard: { workingGroupId: { in: memberGroupIds } } }),
             title: { contains: q, mode: 'insensitive' },
           },
           select: {
@@ -65,7 +66,7 @@ export const searchRouter = createTRPCRouter({
         }),
         ctx.db.workingGroup.findMany({
           where: {
-            ...(isAdmin ? {} : { id: { in: memberGroupIds } }),
+            ...(seesAll ? {} : { id: { in: memberGroupIds } }),
             isArchived: false,
             OR: [
               { code: { contains: q, mode: 'insensitive' } },
