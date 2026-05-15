@@ -10,14 +10,36 @@ export function getUserRoleInGroup(
   workingGroupId: string,
 ): WorkingGroupRole | null {
   if (user.globalRole === 'ADMIN') return 'LEADER'; // ADMIN gets leader-level in all groups
-  return user.memberships.find((m) => m.workingGroupId === workingGroupId)?.role ?? null;
+  const membership = user.memberships.find((m) => m.workingGroupId === workingGroupId);
+  if (!membership) return null;
+  // DIRECTOR sees everything in WGs they belong to (treated as LEADER for read, actual role for writes)
+  return membership.role;
+}
+
+/** Returns true if user can see the working group at all */
+export function canAccessGroup(user: UserContext, workingGroupId: string): boolean {
+  if (user.globalRole === 'ADMIN') return true;
+  return user.memberships.some((m) => m.workingGroupId === workingGroupId);
 }
 
 export function can(user: UserContext, action: string, workingGroupId: string): boolean {
+  if (user.globalRole === 'ADMIN') return true;
   const role = getUserRoleInGroup(user, workingGroupId);
   if (!role) return false;
-  return (PERMISSIONS[action]?.includes(role) ?? false) || user.globalRole === 'ADMIN';
+  // DIRECTOR has full read access but follows normal role-based write permissions
+  if (user.globalRole === 'DIRECTOR' && READ_ACTIONS.includes(action)) return true;
+  return PERMISSIONS[action]?.includes(role) ?? false;
 }
+
+const READ_ACTIONS = [
+  'standard:view',
+  'document:view',
+  'comment:view',
+  'vote:view',
+  'meeting:view',
+  'task:view',
+  'wg:view',
+];
 
 const LEADERS = ['LEADER', 'DEPUTY'] as const;
 const STAFF = ['LEADER', 'DEPUTY', 'SECRETARY'] as const;

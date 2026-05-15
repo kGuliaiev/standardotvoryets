@@ -13,6 +13,7 @@ datasource db {
 
 enum GlobalRole {
   ADMIN
+  DIRECTOR  // Керівник центру — повний доступ до РГ, членом яких є
   USER
 }
 

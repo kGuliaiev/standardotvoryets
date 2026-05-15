@@ -13,6 +13,8 @@ import {
   Settings,
   LogOut,
   ChevronDown,
+  Users,
+  FolderKanban,
 } from 'lucide-react';
 import { cn, getInitials } from '@/lib/utils';
 import { useState } from 'react';
@@ -23,6 +25,7 @@ interface SidebarProps {
 
 const NAV_ITEMS = [
   { href: '/dashboard', label: 'Дашборд', icon: LayoutDashboard },
+  { href: '/working-groups', label: 'Робочі групи', icon: FolderKanban },
   { href: '/standards', label: 'Стандарти', icon: BookOpen },
   { href: '/meetings', label: 'Засідання', icon: Calendar },
   { href: '/tasks', label: 'Завдання', icon: CheckSquare },
@@ -105,14 +108,28 @@ export function Sidebar({ session }: SidebarProps) {
           </div>
         )}
 
-        {/* Admin link */}
-        {session.user.globalRole === 'ADMIN' && (
-          <div className="mt-2 pt-2 border-t border-white/10">
+        {/* Admin / Director links */}
+        {(session.user.globalRole === 'ADMIN' || session.user.globalRole === 'DIRECTOR') && (
+          <div className="mt-2 pt-2 border-t border-white/10 space-y-0.5">
+            {session.user.globalRole === 'ADMIN' && (
+              <Link
+                href="/admin/users"
+                className={cn(
+                  'flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm font-medium transition-colors',
+                  pathname.startsWith('/admin/users')
+                    ? 'bg-white/15 text-white'
+                    : 'text-white/60 hover:bg-white/10 hover:text-white/90',
+                )}
+              >
+                <Users size={16} className="shrink-0" />
+                Користувачі
+              </Link>
+            )}
             <Link
               href="/admin"
               className={cn(
                 'flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm font-medium transition-colors',
-                pathname.startsWith('/admin')
+                pathname === '/admin'
                   ? 'bg-white/15 text-white'
                   : 'text-white/60 hover:bg-white/10 hover:text-white/90',
               )}

@@ -47,12 +47,20 @@ export const userRouter = createTRPCRouter({
       });
     }),
 
-  // ── list (ADMIN only) ────────────────────────────────────────────────
+  // ── list (ADMIN / DIRECTOR) ──────────────────────────────────────────
   list: protectedProcedure.query(async ({ ctx }) => {
-    if (ctx.session.user.globalRole !== 'ADMIN') {
+    const { globalRole, memberships } = ctx.session.user;
+    const isAdmin = globalRole === 'ADMIN';
+    const isDirector = globalRole === 'DIRECTOR';
+    if (!isAdmin && !isDirector) {
       throw new TRPCError({ code: 'FORBIDDEN' });
     }
+    // DIRECTOR only sees users in their WGs
+    const memberGroupIds = memberships?.map((m) => m.workingGroupId) ?? [];
     return ctx.db.user.findMany({
+      where: isAdmin ? undefined : {
+        memberships: { some: { workingGroupId: { in: memberGroupIds } } },
+      },
       select: {
         id: true,
         email: true,
@@ -85,7 +93,7 @@ export const userRouter = createTRPCRouter({
 
       if (
         !can(
-          { globalRole: user.globalRole as 'ADMIN' | 'USER', memberships: user.memberships ?? [] },
+          { globalRole: user.globalRole as import('@prisma/client').GlobalRole, memberships: (user.memberships ?? []) as Array<{ workingGroupId: string; role: import('@prisma/client').WorkingGroupRole }> },
           'wg:invite',
           input.workingGroupId,
         )
@@ -203,7 +211,7 @@ export const userRouter = createTRPCRouter({
     .input(
       z.object({
         userId: z.string().cuid(),
-        globalRole: z.enum(['ADMIN', 'USER']),
+        globalRole: z.enum(['ADMIN', 'DIRECTOR', 'USER']),
       }),
     )
     .mutation(async ({ ctx, input }) => {
