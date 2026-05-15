@@ -4,8 +4,10 @@ import { useState, useEffect } from 'react';
 import { trpc } from '@/lib/trpc/client';
 import { useSession } from 'next-auth/react';
 import Link from 'next/link';
+import { Pencil } from 'lucide-react';
 import { StatusBadge, type StandardStatus } from '@/components/ui/StatusBadge';
 import { Avatar } from '@/components/ui/Avatar';
+import { Modal } from '@/components/ui/Modal';
 import { formatDate, formatDateTime, formatBytes } from '@/lib/utils';
 import { can } from '@/lib/rbac';
 import type { GlobalRole, WorkingGroupRole } from '@prisma/client';
@@ -51,6 +53,26 @@ export function StandardDetail({ id }: { id: string }) {
   const castVote = trpc.vote.cast.useMutation({ onSuccess: () => void refetch() });
   const closeVoting = trpc.vote.closeVoting.useMutation({ onSuccess: () => void refetch() });
 
+  const [editOpen, setEditOpen] = useState(false);
+  const [editForm, setEditForm] = useState({
+    title: '',
+    description: '',
+    isoAnalog: '',
+    category: '',
+    deadline: '',
+    responsibleId: '',
+    progress: 0,
+  });
+  const [editError, setEditError] = useState<string | null>(null);
+
+  const updateMutation = trpc.standard.update.useMutation({
+    onSuccess: () => {
+      void refetch();
+      setEditOpen(false);
+    },
+    onError: (e) => setEditError(e.message),
+  });
+
   if (isLoading) return <div className="py-16 text-center text-slate-400">Завантаження…</div>;
   if (!standard)
     return <div className="py-16 text-center text-slate-400">Стандарт не знайдено</div>;
@@ -69,6 +91,7 @@ export function StandardDetail({ id }: { id: string }) {
 
   const wgId = standard.workingGroupId;
   const canChangeStatus = userCtx ? can(userCtx, 'standard:changeStatus', wgId) : false;
+  const canEdit = userCtx ? can(userCtx, 'standard:editMeta', wgId) : false;
   const canOpenVoting = userCtx ? can(userCtx, 'vote:open', wgId) : false;
   const canCastVote = userCtx ? can(userCtx, 'vote:cast', wgId) : false;
   const canUpload = userCtx ? can(userCtx, 'document:upload', wgId) : false;
@@ -125,9 +148,32 @@ export function StandardDetail({ id }: { id: string }) {
           </div>
 
           {/* Actions */}
-          {canChangeStatus && (
-            <div className="flex gap-2 flex-wrap">
-              {STATUS_TRANSITIONS[standard.status].map((next) => (
+          <div className="flex gap-2 flex-wrap">
+            {canEdit && (
+              <button
+                onClick={() => {
+                  setEditForm({
+                    title: standard.title,
+                    description: standard.description ?? '',
+                    isoAnalog: standard.isoAnalog ?? '',
+                    category: standard.category ?? '',
+                    deadline: standard.deadline
+                      ? new Date(standard.deadline).toISOString().slice(0, 10)
+                      : '',
+                    responsibleId: standard.responsibleId ?? '',
+                    progress: standard.progress,
+                  });
+                  setEditError(null);
+                  setEditOpen(true);
+                }}
+                className="px-3 py-2 text-xs font-semibold rounded-[10px] border-[1.5px] border-hairline hover:border-brand hover:text-brand text-mid transition-colors inline-flex items-center gap-1.5"
+              >
+                <Pencil className="w-3.5 h-3.5" />
+                Редагувати
+              </button>
+            )}
+            {canChangeStatus &&
+              STATUS_TRANSITIONS[standard.status].map((next) => (
                 <button
                   key={next}
                   onClick={() => changeStatus.mutate({ id, status: next })}
@@ -137,16 +183,15 @@ export function StandardDetail({ id }: { id: string }) {
                   → {STATUS_LABELS[next]}
                 </button>
               ))}
-              {standard.status === 'IN_REVIEW' && canOpenVoting && (
-                <Link
-                  href={`/standards/${id}/open-voting`}
-                  className="px-3 py-2 text-xs font-medium rounded-lg bg-amber-500 text-white hover:bg-amber-600 transition-colors"
-                >
-                  Відкрити голосування
-                </Link>
-              )}
-            </div>
-          )}
+            {canChangeStatus && standard.status === 'IN_REVIEW' && canOpenVoting && (
+              <Link
+                href={`/standards/${id}/open-voting`}
+                className="px-3 py-2 text-xs font-medium rounded-lg bg-amber-500 text-white hover:bg-amber-600 transition-colors"
+              >
+                Відкрити голосування
+              </Link>
+            )}
+          </div>
         </div>
 
         {/* Progress bar */}
@@ -558,6 +603,129 @@ export function StandardDetail({ id }: { id: string }) {
           )}
         </div>
       )}
+
+      <Modal
+        open={editOpen}
+        onClose={() => setEditOpen(false)}
+        title="Редагувати стандарт"
+        subtitle={standard.code}
+        size="lg"
+      >
+        <div className="space-y-4">
+          <div>
+            <label className="field-label">Назва *</label>
+            <input
+              className="input"
+              value={editForm.title}
+              onChange={(e) => setEditForm((f) => ({ ...f, title: e.target.value }))}
+            />
+          </div>
+          <div>
+            <label className="field-label">Опис</label>
+            <textarea
+              rows={4}
+              className="textarea resize-none"
+              value={editForm.description}
+              onChange={(e) => setEditForm((f) => ({ ...f, description: e.target.value }))}
+            />
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="field-label">ISO-аналог</label>
+              <input
+                className="input"
+                value={editForm.isoAnalog}
+                onChange={(e) => setEditForm((f) => ({ ...f, isoAnalog: e.target.value }))}
+              />
+            </div>
+            <div>
+              <label className="field-label">Категорія</label>
+              <input
+                className="input"
+                value={editForm.category}
+                onChange={(e) => setEditForm((f) => ({ ...f, category: e.target.value }))}
+              />
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="field-label">Дедлайн</label>
+              <input
+                type="date"
+                className="input"
+                value={editForm.deadline}
+                onChange={(e) => setEditForm((f) => ({ ...f, deadline: e.target.value }))}
+              />
+            </div>
+            <div>
+              <label className="field-label">Відповідальний</label>
+              <select
+                className="select"
+                value={editForm.responsibleId}
+                onChange={(e) => setEditForm((f) => ({ ...f, responsibleId: e.target.value }))}
+              >
+                <option value="">— не вказано —</option>
+                {standard.workingGroup.members.map((m) => (
+                  <option key={m.userId} value={m.userId}>
+                    {m.user.name} ({m.role})
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+          <div>
+            <label className="field-label">Прогрес: {editForm.progress}%</label>
+            <input
+              type="range"
+              min={0}
+              max={100}
+              step={5}
+              value={editForm.progress}
+              onChange={(e) => setEditForm((f) => ({ ...f, progress: Number(e.target.value) }))}
+              className="w-full"
+            />
+          </div>
+          {editError && (
+            <p className="text-sm text-red-600 bg-red-50 rounded-[10px] px-3 py-2">{editError}</p>
+          )}
+          <div className="flex gap-3 pt-2 border-t border-slate-100">
+            <button
+              type="button"
+              onClick={() => setEditOpen(false)}
+              className="flex-1 btn-secondary"
+            >
+              Скасувати
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                if (!editForm.title.trim()) {
+                  setEditError('Введіть назву');
+                  return;
+                }
+                const trim = (v: string): string | undefined => {
+                  const t = v.trim();
+                  return t === '' ? undefined : t;
+                };
+                updateMutation.mutate({
+                  id,
+                  title: editForm.title.trim(),
+                  description: trim(editForm.description),
+                  isoAnalog: trim(editForm.isoAnalog),
+                  category: trim(editForm.category),
+                  deadline: editForm.deadline ? new Date(editForm.deadline) : null,
+                  responsibleId: editForm.responsibleId === '' ? null : editForm.responsibleId,
+                  progress: editForm.progress,
+                });
+              }}
+              disabled={updateMutation.isPending}
+              className="flex-1 btn-primary"
+            >
+              {updateMutation.isPending ? 'Збереження…' : 'Зберегти'}
+            </button>
+          </div>
+        </div>
+      </Modal>
     </div>
   );
 }

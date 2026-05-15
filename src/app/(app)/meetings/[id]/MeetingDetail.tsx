@@ -4,7 +4,9 @@ import { useState } from 'react';
 import { trpc } from '@/lib/trpc/client';
 import Link from 'next/link';
 import { useSession } from 'next-auth/react';
+import { Pencil } from 'lucide-react';
 import { Avatar } from '@/components/ui/Avatar';
+import { Modal } from '@/components/ui/Modal';
 import { formatDate } from '@/lib/utils';
 import { can } from '@/lib/rbac';
 import { useEscape } from '@/lib/useEscape';
@@ -37,6 +39,16 @@ export function MeetingDetail({ id }: Props) {
   const { data: session } = useSession();
   const [showMinutes, setShowMinutes] = useState(false);
   const [minutesText, setMinutesText] = useState('');
+  const [editOpen, setEditOpen] = useState(false);
+  const [editForm, setEditForm] = useState({
+    title: '',
+    format: 'ONLINE' as 'ONLINE' | 'OFFLINE' | 'HYBRID',
+    location: '',
+    startAt: '',
+    durationMins: 60,
+    agendaText: '',
+  });
+  const [editError, setEditError] = useState<string | null>(null);
 
   const utils = trpc.useUtils();
   const { data: meeting, isLoading } = trpc.meeting.byId.useQuery({ id });
@@ -52,6 +64,14 @@ export function MeetingDetail({ id }: Props) {
   });
   const changeStatusMutation = trpc.meeting.changeStatus.useMutation({
     onSuccess: () => void utils.meeting.byId.invalidate({ id }),
+  });
+
+  const updateMutation = trpc.meeting.update.useMutation({
+    onSuccess: () => {
+      void utils.meeting.byId.invalidate({ id });
+      setEditOpen(false);
+    },
+    onError: (e) => setEditError(e.message),
   });
 
   useEscape(showMinutes, () => setShowMinutes(false));
@@ -183,6 +203,24 @@ export function MeetingDetail({ id }: Props) {
             <div className="bg-white rounded-xl border border-slate-200 p-5">
               <h3 className="text-sm font-semibold text-slate-700 mb-3">Управління статусом</h3>
               <div className="flex gap-2 flex-wrap">
+                <button
+                  onClick={() => {
+                    setEditForm({
+                      title: meeting.title,
+                      format: meeting.format,
+                      location: meeting.location ?? '',
+                      startAt: new Date(meeting.startAt).toISOString().slice(0, 16),
+                      durationMins: meeting.durationMins,
+                      agendaText: meeting.agendaText ?? '',
+                    });
+                    setEditError(null);
+                    setEditOpen(true);
+                  }}
+                  className="text-xs px-3 py-1.5 rounded-lg border-[1.5px] border-hairline hover:border-brand hover:text-brand text-mid transition-colors font-semibold inline-flex items-center gap-1.5"
+                >
+                  <Pencil className="w-3.5 h-3.5" />
+                  Редагувати
+                </button>
                 {meeting.status === 'PLANNED' && (
                   <button
                     onClick={() =>
@@ -305,6 +343,126 @@ export function MeetingDetail({ id }: Props) {
           </div>
         </div>
       )}
+
+      <Modal
+        open={editOpen}
+        onClose={() => setEditOpen(false)}
+        title="Редагувати засідання"
+        size="lg"
+      >
+        <div className="space-y-4">
+          <div>
+            <label className="field-label">Тема *</label>
+            <input
+              className="input"
+              value={editForm.title}
+              onChange={(e) => setEditForm((f) => ({ ...f, title: e.target.value }))}
+            />
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="field-label">Дата та час *</label>
+              <input
+                type="datetime-local"
+                className="input"
+                value={editForm.startAt}
+                onChange={(e) => setEditForm((f) => ({ ...f, startAt: e.target.value }))}
+              />
+            </div>
+            <div>
+              <label className="field-label">Тривалість (хв)</label>
+              <input
+                type="number"
+                min={15}
+                max={480}
+                className="input"
+                value={editForm.durationMins}
+                onChange={(e) =>
+                  setEditForm((f) => ({ ...f, durationMins: Number(e.target.value) }))
+                }
+              />
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="field-label">Формат</label>
+              <select
+                className="select"
+                value={editForm.format}
+                onChange={(e) =>
+                  setEditForm((f) => ({
+                    ...f,
+                    format: e.target.value as 'ONLINE' | 'OFFLINE' | 'HYBRID',
+                  }))
+                }
+              >
+                <option value="ONLINE">Онлайн</option>
+                <option value="OFFLINE">Офлайн</option>
+                <option value="HYBRID">Гібрид</option>
+              </select>
+            </div>
+            <div>
+              <label className="field-label">Локація / Посилання</label>
+              <input
+                className="input"
+                value={editForm.location}
+                onChange={(e) => setEditForm((f) => ({ ...f, location: e.target.value }))}
+              />
+            </div>
+          </div>
+          <div>
+            <label className="field-label">Порядок денний</label>
+            <textarea
+              rows={5}
+              className="textarea resize-none"
+              value={editForm.agendaText}
+              onChange={(e) => setEditForm((f) => ({ ...f, agendaText: e.target.value }))}
+            />
+          </div>
+          {editError && (
+            <p className="text-sm text-red-600 bg-red-50 rounded-[10px] px-3 py-2">{editError}</p>
+          )}
+          <div className="flex gap-3 pt-2 border-t border-slate-100">
+            <button
+              type="button"
+              onClick={() => setEditOpen(false)}
+              className="flex-1 btn-secondary"
+            >
+              Скасувати
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                if (!editForm.title.trim()) {
+                  setEditError('Введіть тему');
+                  return;
+                }
+                if (!editForm.startAt) {
+                  setEditError('Оберіть дату та час');
+                  return;
+                }
+                const trim = (v: string): string | undefined => {
+                  const t = v.trim();
+                  return t === '' ? undefined : t;
+                };
+                updateMutation.mutate({
+                  id,
+                  title: editForm.title.trim(),
+                  format: editForm.format,
+                  location: trim(editForm.location),
+                  startAt: new Date(editForm.startAt),
+                  durationMins: editForm.durationMins,
+                  agendaText: trim(editForm.agendaText),
+                });
+              }}
+              disabled={updateMutation.isPending}
+              className="flex-1 btn-primary"
+            >
+              {updateMutation.isPending ? 'Збереження…' : 'Зберегти'}
+            </button>
+          </div>
+        </div>
+      </Modal>
     </div>
   );
 }
