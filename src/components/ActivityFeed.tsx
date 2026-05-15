@@ -1,10 +1,14 @@
 'use client';
 
 import { trpc } from '@/lib/trpc/client';
+import { useSession } from 'next-auth/react';
 import { Avatar } from '@/components/ui/Avatar';
-import { Pencil, Plus, Trash2, ArrowRight, Archive, Undo2 } from 'lucide-react';
+import { Pencil, Plus, Trash2, ArrowRight, Archive, Undo2, Loader2 } from 'lucide-react';
 
 type Entity = 'Standard' | 'Meeting' | 'Task' | 'WorkingGroup' | 'User' | 'Document' | 'Vote';
+
+const REVERSIBLE_ACTIONS = new Set(['UPDATE', 'STATUS_CHANGE', 'ARCHIVE', 'RESTORE']);
+const REVERSIBLE_ENTITIES = new Set(['Standard', 'Meeting', 'Task', 'WorkingGroup', 'User']);
 
 const ACTION_META: Record<string, { label: string; icon: typeof Pencil; cls: string }> = {
   CREATE: { label: 'Створено', icon: Plus, cls: 'bg-[#ECFDF5] text-[#065F46]' },
@@ -67,10 +71,36 @@ export function ActivityFeed({
   entityId: string;
   title?: string;
 }) {
+  const { data: session } = useSession();
+  const utils = trpc.useUtils();
   const { data: entries, isLoading } = trpc.activityLog.list.useQuery({
     entity,
     entityId,
     limit: 30,
+  });
+
+  const restoreMutation = trpc.activityLog.restore.useMutation({
+    onSuccess: () => {
+      void utils.activityLog.list.invalidate({ entity, entityId });
+      // Invalidate the relevant entity query so list/detail pages refresh
+      if (entity === 'Standard') {
+        void utils.standard.byId.invalidate({ id: entityId });
+        void utils.standard.list.invalidate();
+      } else if (entity === 'Meeting') {
+        void utils.meeting.byId.invalidate({ id: entityId });
+        void utils.meeting.list.invalidate();
+      } else if (entity === 'Task') {
+        void utils.task.list.invalidate();
+      } else if (entity === 'WorkingGroup') {
+        void utils.workingGroup.byId.invalidate({ id: entityId });
+        void utils.workingGroup.list.invalidate();
+      } else if (entity === 'User') {
+        void utils.user.list.invalidate();
+      }
+      void utils.dashboard.kpis.invalidate();
+      void utils.dashboard.navCounts.invalidate();
+    },
+    onError: (e) => alert('Не вдалося скасувати: ' + e.message),
   });
 
   return (
@@ -95,6 +125,13 @@ export function ActivityFeed({
             };
             const Icon = meta.icon;
             const diff = e.diff as Record<string, { before: unknown; after: unknown }> | null;
+            const canUndo =
+              REVERSIBLE_ACTIONS.has(e.action) &&
+              REVERSIBLE_ENTITIES.has(e.entity) &&
+              e.before !== null &&
+              (session?.user.id === e.userId || session?.user.globalRole === 'ADMIN');
+            const isRestoring =
+              restoreMutation.isPending && restoreMutation.variables?.logId === e.id;
             return (
               <li key={e.id} className="px-5 py-4">
                 <div className="flex items-start gap-3">
@@ -117,6 +154,25 @@ export function ActivityFeed({
                           minute: '2-digit',
                         })}
                       </span>
+                      {canUndo && (
+                        <button
+                          onClick={() => {
+                            if (confirm('Скасувати цю зміну? Стан буде повернуто.')) {
+                              restoreMutation.mutate({ logId: e.id });
+                            }
+                          }}
+                          disabled={restoreMutation.isPending}
+                          className="text-[10px] font-bold inline-flex items-center gap-1 text-mid hover:text-brand border border-hairline rounded-full px-2 py-0.5 hover:border-brand disabled:opacity-50"
+                          title="Скасувати зміну"
+                        >
+                          {isRestoring ? (
+                            <Loader2 className="w-3 h-3 animate-spin" />
+                          ) : (
+                            <Undo2 className="w-3 h-3" />
+                          )}
+                          Скасувати
+                        </button>
+                      )}
                     </div>
                     {e.note && <p className="text-xs text-mid mt-1.5">{e.note}</p>}
                     {diff && Object.keys(diff).length > 0 && (
