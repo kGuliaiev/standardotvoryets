@@ -18,8 +18,14 @@ export const userRouter = createTRPCRouter({
         id: true,
         email: true,
         name: true,
+        phone: true,
+        rank: true,
+        position: true,
+        organization: true,
         globalRole: true,
         avatarUrl: true,
+        notifyEmail: true,
+        notifyInApp: true,
         createdAt: true,
         memberships: {
           select: {
@@ -40,14 +46,36 @@ export const userRouter = createTRPCRouter({
     .input(
       z.object({
         name: z.string().min(2).max(100).optional(),
+        email: z.string().email().optional(),
+        phone: z.string().max(40).optional().nullable(),
         avatarUrl: z.string().url().optional().nullable(),
+        notifyEmail: z.boolean().optional(),
+        notifyInApp: z.boolean().optional(),
       }),
     )
     .mutation(async ({ ctx, input }) => {
+      // If email is changing, ensure it's not already taken
+      if (input.email) {
+        const taken = await ctx.db.user.findFirst({
+          where: { email: input.email, NOT: { id: ctx.session.user.id } },
+          select: { id: true },
+        });
+        if (taken) {
+          throw new TRPCError({ code: 'CONFLICT', message: 'Цей email вже використовується' });
+        }
+      }
       return ctx.db.user.update({
         where: { id: ctx.session.user.id },
         data: input,
-        select: { id: true, name: true, avatarUrl: true },
+        select: {
+          id: true,
+          name: true,
+          email: true,
+          phone: true,
+          avatarUrl: true,
+          notifyEmail: true,
+          notifyInApp: true,
+        },
       });
     }),
 

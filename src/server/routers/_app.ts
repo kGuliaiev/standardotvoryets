@@ -11,6 +11,7 @@ import { dashboardRouter } from './dashboard';
 import { activityLogRouter } from './activityLog';
 import { commentRouter } from './comment';
 import { searchRouter } from './search';
+import { adminRouter } from './admin';
 
 /**
  * This is the primary router for the server.
@@ -29,6 +30,7 @@ export const appRouter = createTRPCRouter({
   activityLog: activityLogRouter,
   comment: commentRouter,
   search: searchRouter,
+  admin: adminRouter,
 });
 
 export type AppRouter = typeof appRouter;

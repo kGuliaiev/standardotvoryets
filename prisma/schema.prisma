@@ -132,6 +132,10 @@ model User {
   rank         MilitaryRank  @default(CIVILIAN)
   position     String?       // free-text: посада
   organization Organization  @default(OTHER)
+  phone        String?
+  // Per-user notification toggles (overrides system defaults if set)
+  notifyEmail  Boolean       @default(true)
+  notifyInApp  Boolean       @default(true)
   createdAt    DateTime      @default(now())
   updatedAt    DateTime      @updatedAt
 
@@ -502,4 +506,40 @@ model Notification {
 
   @@index([userId, read])
   @@map("notifications")
+}
+
+// ─────────────────────────────────────────
+// SYSTEM SETTINGS (singleton row, id = 1)
+// ─────────────────────────────────────────
+
+model SystemSettings {
+  id                        Int      @id @default(1)
+
+  // ── Meetings: when to remind ──
+  meetingRemindLead1Hours   Int      @default(24)   // primary reminder (e.g. day before)
+  meetingRemindLead2Hours   Int?     @default(1)    // secondary reminder (e.g. hour before)
+  meetingInviteOnCreate     Boolean  @default(true) // notify on meeting creation
+  meetingChangeNotify       Boolean  @default(true) // notify on date/agenda change
+
+  // ── Tasks: when to remind ──
+  taskAssignNotify          Boolean  @default(true) // notify assignee on assignment
+  taskDeadlineLeadHours     Int      @default(24)   // remind N hours before due
+  taskOverdueNotify         Boolean  @default(true) // notify on missed deadline
+  taskCompleteNotify        Boolean  @default(true) // notify creator on completion
+
+  // ── Votes / standards / comments ──
+  voteOpenedNotify          Boolean  @default(true)
+  voteClosingLeadHours      Int      @default(24)   // remind before close
+  voteClosedNotify          Boolean  @default(true)
+  standardStatusNotify      Boolean  @default(true)
+  commentMentionNotify      Boolean  @default(true)
+  documentUploadNotify      Boolean  @default(false)
+
+  // ── Channels (system defaults; user can override per-user) ──
+  channelEmail              Boolean  @default(true)
+  channelInApp              Boolean  @default(true)
+
+  updatedAt                 DateTime @updatedAt
+
+  @@map("system_settings")
 }

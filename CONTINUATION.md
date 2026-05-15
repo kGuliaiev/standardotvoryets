@@ -89,6 +89,12 @@ User asked for "iteratively fix to achieve maximum result". The framework is in 
 
 The current implementation has the tree + grouped lists, but the user attached two screenshots showing exactly how each row should look (priority dot, assignee chip with name fragment, due-date colored chip). Verify against `прототип.html` lines for Tasks screen.
 
+### F. Future backlog (recorded 2026-05-16)
+
+- **Mobile version** — adaptive layout for phones/tablets: hamburger menu instead of fixed 228px sidebar; vertical-stack tables; touch-friendly tap targets (44px); responsive Modal that becomes a bottom-sheet on <768px. Likely a 2-3 week separate effort.
+- **Bug-found-to-task flow** — when QA / users find a bug they should be able to file it inline (button "Повідомити про помилку") that opens a TaskFormModal pre-filled with screenshot + URL + browser info, auto-assigned to admin or a "QA" working group. Saves manual copy-paste between chat and the task tracker.
+- **Notification delivery worker** — currently `notification` rows are created in some routers but nothing actually delivers email reminders on schedule. Need a cron route (`/api/cron/notifications`) reading `SystemSettings`, scanning meetings/tasks/votes within the lead-time window, and emitting in-app + email per `User.notifyEmail/notifyInApp`. Use Railway cron schedule.
+
 ## 5. How to find your way around
 
 - **List pages**: `src/app/(app)/<thing>/page.tsx` is a thin server wrapper; real code is in `<Thing>List.tsx` (client)

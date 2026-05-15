@@ -8,7 +8,8 @@ export type AuditEntity =
   | 'WorkingGroup'
   | 'User'
   | 'Document'
-  | 'Vote';
+  | 'Vote'
+  | 'SystemSettings';
 
 /**
  * Compute a shallow diff between two snapshots. Returns null if no differences.

@@ -120,7 +120,7 @@ export function Sidebar({ session }: SidebarProps) {
               } satisfies NavItem,
             ]
           : []),
-        { href: '/admin', label: 'Налаштування', icon: Settings },
+        { href: '/admin/settings', label: 'Налаштування', icon: Settings },
         {
           href: '/notifications',
           label: 'Сповіщення',
@@ -238,7 +238,10 @@ export function Sidebar({ session }: SidebarProps) {
 
       {/* User block */}
       <div className="p-3 border-t border-hairline">
-        <div className="flex items-center gap-2.5 mb-2">
+        <Link
+          href="/profile"
+          className="flex items-center gap-2.5 mb-2 rounded-[10px] px-1 py-1 hover:bg-pill transition-colors"
+        >
           <div className="w-9 h-9 rounded-full bg-brand text-white flex items-center justify-center text-xs font-bold shrink-0">
             {getInitials(session.user.name ?? 'U')}
           </div>
@@ -246,7 +249,7 @@ export function Sidebar({ session }: SidebarProps) {
             <p className="text-ink text-xs font-semibold truncate">{session.user.name}</p>
             <p className="text-light text-[10px] truncate">{session.user.email}</p>
           </div>
-        </div>
+        </Link>
         <button
           onClick={() => signOut({ callbackUrl: '/login' })}
           className="flex items-center gap-2 w-full px-2 py-1.5 text-mid hover:text-ink text-xs transition-colors rounded-[10px] hover:bg-pill"

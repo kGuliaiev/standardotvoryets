@@ -1,0 +1,398 @@
+'use client';
+
+import { useEffect, useState } from 'react';
+import { useSession } from 'next-auth/react';
+import { useRouter } from 'next/navigation';
+import { trpc } from '@/lib/trpc/client';
+import {
+  Calendar,
+  CheckSquare,
+  MessageSquare,
+  Vote as VoteIcon,
+  FileText,
+  Mail,
+  Bell,
+  Save,
+} from 'lucide-react';
+
+interface SettingsState {
+  meetingRemindLead1Hours: number;
+  meetingRemindLead2Hours: number | null;
+  meetingInviteOnCreate: boolean;
+  meetingChangeNotify: boolean;
+  taskAssignNotify: boolean;
+  taskDeadlineLeadHours: number;
+  taskOverdueNotify: boolean;
+  taskCompleteNotify: boolean;
+  voteOpenedNotify: boolean;
+  voteClosingLeadHours: number;
+  voteClosedNotify: boolean;
+  standardStatusNotify: boolean;
+  commentMentionNotify: boolean;
+  documentUploadNotify: boolean;
+  channelEmail: boolean;
+  channelInApp: boolean;
+}
+
+const HOUR_OPTIONS = [
+  { v: 0, l: 'миттєво' },
+  { v: 1, l: '1 година' },
+  { v: 3, l: '3 години' },
+  { v: 6, l: '6 годин' },
+  { v: 12, l: '12 годин' },
+  { v: 24, l: '24 години' },
+  { v: 48, l: '2 доби' },
+  { v: 72, l: '3 доби' },
+  { v: 168, l: 'тиждень' },
+];
+
+export function SystemSettingsForm() {
+  const { data: session } = useSession();
+  const router = useRouter();
+  const isAdmin = session?.user.globalRole === 'ADMIN';
+
+  useEffect(() => {
+    if (session && !isAdmin) router.replace('/dashboard');
+  }, [session, isAdmin, router]);
+
+  const { data, isLoading } = trpc.admin.getSettings.useQuery(undefined, { enabled: isAdmin });
+  const utils = trpc.useUtils();
+  const update = trpc.admin.updateSettings.useMutation({
+    onSuccess: () => {
+      void utils.admin.getSettings.invalidate();
+      setSavedAt(new Date());
+    },
+  });
+
+  const [form, setForm] = useState<SettingsState | null>(null);
+  const [savedAt, setSavedAt] = useState<Date | null>(null);
+
+  useEffect(() => {
+    if (data && !form) {
+      setForm({
+        meetingRemindLead1Hours: data.meetingRemindLead1Hours,
+        meetingRemindLead2Hours: data.meetingRemindLead2Hours,
+        meetingInviteOnCreate: data.meetingInviteOnCreate,
+        meetingChangeNotify: data.meetingChangeNotify,
+        taskAssignNotify: data.taskAssignNotify,
+        taskDeadlineLeadHours: data.taskDeadlineLeadHours,
+        taskOverdueNotify: data.taskOverdueNotify,
+        taskCompleteNotify: data.taskCompleteNotify,
+        voteOpenedNotify: data.voteOpenedNotify,
+        voteClosingLeadHours: data.voteClosingLeadHours,
+        voteClosedNotify: data.voteClosedNotify,
+        standardStatusNotify: data.standardStatusNotify,
+        commentMentionNotify: data.commentMentionNotify,
+        documentUploadNotify: data.documentUploadNotify,
+        channelEmail: data.channelEmail,
+        channelInApp: data.channelInApp,
+      });
+    }
+  }, [data, form]);
+
+  if (session && !isAdmin) return null;
+
+  function set<K extends keyof SettingsState>(key: K, value: SettingsState[K]) {
+    setForm((prev) => (prev ? { ...prev, [key]: value } : prev));
+  }
+
+  function save() {
+    if (!form) return;
+    update.mutate(form);
+  }
+
+  return (
+    <div className="space-y-5 max-w-4xl">
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-bold text-ink">Налаштування системи</h1>
+          <p className="text-sm text-mid mt-1">
+            Правила сповіщень, канали доставки та лід-час нагадувань
+          </p>
+        </div>
+        <button
+          onClick={save}
+          disabled={!form || update.isPending}
+          className="inline-flex items-center gap-1.5 rounded-lg bg-blue-700 px-4 py-2 text-sm font-medium text-white hover:bg-blue-800 transition-colors disabled:opacity-50"
+        >
+          <Save size={16} />
+          {update.isPending ? 'Збереження…' : 'Зберегти'}
+        </button>
+      </div>
+
+      {savedAt && (
+        <div className="rounded-lg bg-emerald-50 border border-emerald-200 px-4 py-2 text-sm text-emerald-800">
+          Збережено о {savedAt.toLocaleTimeString('uk-UA')}
+        </div>
+      )}
+
+      {isLoading || !form ? (
+        <div className="bg-card rounded-xl border border-hairline p-12 text-center text-light text-sm">
+          Завантаження…
+        </div>
+      ) : (
+        <>
+          {/* Channels */}
+          <Card icon={<Bell size={18} />} title="Канали доставки">
+            <p className="text-xs text-mid mb-3">
+              Глобальні канали для всіх типів подій. Користувач може вимкнути для себе в профілі.
+            </p>
+            <Toggle
+              label="В додатку (дзвіночок у меню)"
+              checked={form.channelInApp}
+              onChange={(v) => set('channelInApp', v)}
+            />
+            <Toggle
+              label={
+                <span className="flex items-center gap-1.5">
+                  <Mail size={14} className="text-mid" /> Email
+                </span>
+              }
+              checked={form.channelEmail}
+              onChange={(v) => set('channelEmail', v)}
+            />
+          </Card>
+
+          {/* Meetings */}
+          <Card icon={<Calendar size={18} />} title="Засідання">
+            <Toggle
+              label="Сповіщати запрошення при створенні засідання"
+              checked={form.meetingInviteOnCreate}
+              onChange={(v) => set('meetingInviteOnCreate', v)}
+            />
+            <Toggle
+              label="Сповіщати при зміні дати або порядку денного"
+              checked={form.meetingChangeNotify}
+              onChange={(v) => set('meetingChangeNotify', v)}
+            />
+            <Field label="Нагадування №1 — за скільки часу до засідання">
+              <select
+                value={form.meetingRemindLead1Hours}
+                onChange={(e) => set('meetingRemindLead1Hours', Number(e.target.value))}
+                className="select"
+              >
+                {HOUR_OPTIONS.map((o) => (
+                  <option key={o.v} value={o.v}>
+                    {o.l}
+                  </option>
+                ))}
+              </select>
+            </Field>
+            <Field label="Нагадування №2 (необов'язкове)">
+              <select
+                value={form.meetingRemindLead2Hours ?? -1}
+                onChange={(e) => {
+                  const n = Number(e.target.value);
+                  set('meetingRemindLead2Hours', n < 0 ? null : n);
+                }}
+                className="select"
+              >
+                <option value={-1}>— не використовувати —</option>
+                {HOUR_OPTIONS.map((o) => (
+                  <option key={o.v} value={o.v}>
+                    {o.l}
+                  </option>
+                ))}
+              </select>
+            </Field>
+          </Card>
+
+          {/* Tasks */}
+          <Card icon={<CheckSquare size={18} />} title="Завдання">
+            <Toggle
+              label="Сповіщати виконавця при призначенні завдання"
+              checked={form.taskAssignNotify}
+              onChange={(v) => set('taskAssignNotify', v)}
+            />
+            <Toggle
+              label="Сповіщати при прострочці дедлайну"
+              checked={form.taskOverdueNotify}
+              onChange={(v) => set('taskOverdueNotify', v)}
+            />
+            <Toggle
+              label="Сповіщати ініціатора про завершення завдання"
+              checked={form.taskCompleteNotify}
+              onChange={(v) => set('taskCompleteNotify', v)}
+            />
+            <Field label="Нагадування за скільки часу до терміну">
+              <select
+                value={form.taskDeadlineLeadHours}
+                onChange={(e) => set('taskDeadlineLeadHours', Number(e.target.value))}
+                className="select"
+              >
+                {HOUR_OPTIONS.map((o) => (
+                  <option key={o.v} value={o.v}>
+                    {o.l}
+                  </option>
+                ))}
+              </select>
+            </Field>
+          </Card>
+
+          {/* Votes */}
+          <Card icon={<VoteIcon size={18} />} title="Голосування">
+            <Toggle
+              label="Сповіщати при відкритті голосування"
+              checked={form.voteOpenedNotify}
+              onChange={(v) => set('voteOpenedNotify', v)}
+            />
+            <Toggle
+              label="Сповіщати при закритті голосування"
+              checked={form.voteClosedNotify}
+              onChange={(v) => set('voteClosedNotify', v)}
+            />
+            <Field label="Нагадування за скільки часу до закриття">
+              <select
+                value={form.voteClosingLeadHours}
+                onChange={(e) => set('voteClosingLeadHours', Number(e.target.value))}
+                className="select"
+              >
+                {HOUR_OPTIONS.map((o) => (
+                  <option key={o.v} value={o.v}>
+                    {o.l}
+                  </option>
+                ))}
+              </select>
+            </Field>
+          </Card>
+
+          {/* Standards & comments & docs */}
+          <Card icon={<FileText size={18} />} title="Стандарти, коментарі, документи">
+            <Toggle
+              label="Сповіщати при зміні статусу стандарту"
+              checked={form.standardStatusNotify}
+              onChange={(v) => set('standardStatusNotify', v)}
+            />
+            <Toggle
+              label={
+                <span className="flex items-center gap-1.5">
+                  <MessageSquare size={14} className="text-mid" /> Згадки в коментарях (@user)
+                </span>
+              }
+              checked={form.commentMentionNotify}
+              onChange={(v) => set('commentMentionNotify', v)}
+            />
+            <Toggle
+              label="Сповіщати при завантаженні документів"
+              checked={form.documentUploadNotify}
+              onChange={(v) => set('documentUploadNotify', v)}
+            />
+          </Card>
+
+          {/* Reference: notification matrix */}
+          <Card icon={<Bell size={18} />} title="Правила сповіщень — коротко">
+            <table className="w-full text-xs">
+              <thead>
+                <tr className="text-left text-mid border-b border-hairline">
+                  <th className="py-2 pr-3 font-medium">Подія</th>
+                  <th className="py-2 pr-3 font-medium">Кому</th>
+                  <th className="py-2 pr-3 font-medium">Канал</th>
+                  <th className="py-2 font-medium">Час</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-hairline">
+                <Row e="Створено засідання" w="всі учасники РГ" c="email + дзвіночок" t="одразу" />
+                <Row
+                  e="Нагадування про засідання"
+                  w="підтверджені учасники"
+                  c="email + дзвіночок"
+                  t={`за ${form.meetingRemindLead1Hours} год${form.meetingRemindLead2Hours != null ? ` та за ${form.meetingRemindLead2Hours} год` : ''}`}
+                />
+                <Row e="Призначено завдання" w="виконавець" c="email + дзвіночок" t="одразу" />
+                <Row
+                  e="Нагадування про дедлайн"
+                  w="виконавець"
+                  c="email + дзвіночок"
+                  t={`за ${form.taskDeadlineLeadHours} год`}
+                />
+                <Row e="Дедлайн прострочений" w="виконавець + ініціатор" c="email" t="одразу" />
+                <Row e="Завершено завдання" w="ініціатор" c="дзвіночок" t="одразу" />
+                <Row e="Відкрито голосування" w="члени РГ" c="email + дзвіночок" t="одразу" />
+                <Row
+                  e="Голосування завершується"
+                  w="хто ще не проголосував"
+                  c="email"
+                  t={`за ${form.voteClosingLeadHours} год`}
+                />
+                <Row e="Закрито голосування" w="члени РГ" c="дзвіночок" t="одразу" />
+                <Row e="Зміна статусу стандарту" w="члени РГ" c="дзвіночок" t="одразу" />
+                <Row e="Згадка @user в коментарі" w="згаданий" c="email + дзвіночок" t="одразу" />
+              </tbody>
+            </table>
+          </Card>
+        </>
+      )}
+    </div>
+  );
+}
+
+function Card({
+  icon,
+  title,
+  children,
+}: {
+  icon: React.ReactNode;
+  title: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <section className="bg-card rounded-xl border border-hairline p-5">
+      <div className="flex items-center gap-2 mb-4">
+        <span className="text-brand">{icon}</span>
+        <h2 className="text-base font-semibold text-ink">{title}</h2>
+      </div>
+      <div className="space-y-3">{children}</div>
+    </section>
+  );
+}
+
+function Toggle({
+  label,
+  checked,
+  onChange,
+}: {
+  label: React.ReactNode;
+  checked: boolean;
+  onChange: (v: boolean) => void;
+}) {
+  return (
+    <label className="flex items-center justify-between gap-3 cursor-pointer">
+      <span className="text-sm text-ink">{label}</span>
+      <button
+        type="button"
+        role="switch"
+        aria-checked={checked}
+        onClick={() => onChange(!checked)}
+        className={`relative inline-flex h-5 w-9 shrink-0 rounded-full transition-colors ${
+          checked ? 'bg-brand' : 'bg-hairline'
+        }`}
+      >
+        <span
+          className={`inline-block h-4 w-4 rounded-full bg-white shadow transform transition-transform mt-0.5 ${
+            checked ? 'translate-x-[18px]' : 'translate-x-0.5'
+          }`}
+        />
+      </button>
+    </label>
+  );
+}
+
+function Field({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <label className="flex items-center justify-between gap-3">
+      <span className="text-sm text-ink">{label}</span>
+      <div className="w-44">{children}</div>
+    </label>
+  );
+}
+
+function Row({ e, w, c, t }: { e: string; w: string; c: string; t: string }) {
+  return (
+    <tr>
+      <td className="py-2 pr-3 text-ink">{e}</td>
+      <td className="py-2 pr-3 text-mid">{w}</td>
+      <td className="py-2 pr-3 text-mid">{c}</td>
+      <td className="py-2 text-mid">{t}</td>
+    </tr>
+  );
+}
