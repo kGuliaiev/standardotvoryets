@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { keepPreviousData } from '@tanstack/react-query';
 import { trpc } from '@/lib/trpc/client';
 import Link from 'next/link';
 import { StatusBadge, type StandardStatus } from '@/components/ui/StatusBadge';
@@ -33,7 +34,7 @@ export function StandardsList() {
       page,
       pageSize: 20,
     },
-    { placeholderData: (prev: unknown) => prev },
+    { placeholderData: keepPreviousData },
   );
 
   function handleSearch(val: string) {
