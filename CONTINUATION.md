@@ -33,6 +33,13 @@ This document is the handoff for a new Claude session to pick up the project mid
 
 ## 3. What's done (recent → older)
 
+- **Email + invite flow**: `src/server/email.ts` sends via Resend if `RESEND_API_KEY` is set (no-op otherwise). `user.invite` now emails an invite link to `/invite/[token]`. New `/invite/[token]` page handles four states (not-found / used / expired / email-mismatch) and a one-click "Прийняти".
+- **Meeting protocol PDF**: `/api/meetings/[id]/protocol` route renders a Cyrillic-safe PDF (NotoSans) with brand header, meta row, agenda, attendee table, minutes text, footer. "📄 PDF" link in MeetingDetail.
+- **Voting auto-close**: `vote.current` query auto-closes any OPEN voting past its deadline on read (no worker required) and transitions standard to ADOPTED/REJECTED.
+- **Global search**: `search.global` tRPC procedure + `<GlobalSearch>` Topbar component with Cmd+K, 300ms debounce, dropdown grouped by entity.
+- **Undo button**: `activityLog.restore` mutation + button on every reversible log entry; whitelists fields per entity for safety.
+- **Audit log expansion**: `logActivity` calls in `task.update/changeStatus`, `workingGroup.update/setArchived`, `user.changeGlobalRole/setActive` (added on top of `standard.update/changeStatus` and `meeting.update/cancel`).
+- **Comments**: full router (list / create / update / delete) + threaded UI on Standard "Обговорення" tab; 2-level nesting; author or LEADER/ADMIN can delete; comment creation logs a Standard activity entry.
 - **S3 storage**: Railway Bucket service `arranged-locker` connected; `S3_ENDPOINT`/`S3_REGION`/`S3_BUCKET`/`S3_ACCESS_KEY`/`S3_SECRET_KEY` wired via reference variables; `DocumentUploadModal` does real presigned PUT to S3
 - **Audit log**: schema + `logActivity` helper + `<ActivityFeed entity="..." entityId="...">`. Wired in `standard.update`, `standard.changeStatus`, `meeting.update`, `meeting.cancel`. Displayed in Standard "Історія" tab and Meeting detail bottom.
 - **Documents tab on WG**: `document.byWorkingGroup` returns standard docs + meeting protocols; rendered in `working-groups/[id]` "Документи" tab.
@@ -63,18 +70,11 @@ Working on this iteratively. The current implementations cover Dashboard, Tasks 
 - Working groups list (`/working-groups`): probably needs minor polish to match card style
 - Login page: prototype has a 400px white card on navy→blue gradient with brand block — verify
 
-### B. Functional gaps
+### B. Functional gaps (remaining)
 
-- **Comments**: prototype has comment threads under standards; `comment` Prisma model exists but **no router, no UI**
-- **Voting auto-close**: prototype shows time-based auto-close; backend `vote.openVoting` writes deadline, but no scheduled worker fires `closeVoting` at deadline
-- **Email worker**: `workers/index.ts` is empty — Resend or SMTP is not wired; invite emails / meeting reminders / notifications don't send
-- **PDF reports**: `@react-pdf/renderer` is in deps; protocol/meeting-minutes PDF export not implemented
-- **Global search**: topbar input is decorative — no search across standards/tasks/meetings
-
-### C. Audit log enhancements
-
-- **Undo button**: per user's request — log entries should allow rolling back an UPDATE. Schema stores `before`/`after`, so we need a `restoreSnapshot` mutation that applies `before` to the entity. Be careful with relational data (StandardStatusHistory etc.).
-- **Activity log not wired** for: task.update, task.changeStatus, workingGroup.update/setArchived, user.changeGlobalRole/setActive, document.confirmUpload/delete, vote.openVoting/cast/closeVoting. The pattern is `logActivity(ctx.db, { ... })` after the mutation succeeds — copy the existing wiring in `standard.ts` lines 192–204 and `meeting.ts` ~145–160.
+- **Audit log for document/vote mutations**: not yet wired in `document.confirmUpload/delete`, `vote.openVoting/cast/closeVoting`. Same pattern as elsewhere.
+- **Meeting reminder emails**: `templateMeetingReminder` exists in `src/server/email.ts` but nothing schedules them. Need a daily cron route `/api/cron/meeting-reminders` that fetches meetings 24h ahead and emails PENDING attendees.
+- **Comments**: 2 levels only — if customer wants deeper nesting, relax the parent.parentId check in `comment.create`.
 
 ### D. Dark theme iteration
 
