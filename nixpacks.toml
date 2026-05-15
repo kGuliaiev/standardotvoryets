@@ -8,4 +8,4 @@ cmds = ["npm install -g pnpm@9 && ln -sf $(npm prefix -g)/bin/pnpm /usr/bin/pnpm
 cmds = ["pnpm prisma generate", "pnpm build"]
 
 [start]
-cmd = "pnpm prisma db push --accept-data-loss && pnpm start"
+cmd = "pnpm prisma db push --accept-data-loss && pnpm prisma:seed && pnpm start"

@@ -5,7 +5,7 @@
     "buildCommand": "pnpm install && pnpm prisma generate && pnpm build"
   },
   "deploy": {
-    "startCommand": "pnpm prisma db push && pnpm start",
+    "startCommand": "pnpm prisma db push && pnpm prisma:seed && pnpm start",
     "healthcheckPath": "/api/health",
     "healthcheckTimeout": 60,
     "restartPolicyType": "ON_FAILURE",
