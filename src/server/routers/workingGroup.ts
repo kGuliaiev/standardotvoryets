@@ -4,7 +4,9 @@ import { createTRPCRouter, protectedProcedure } from '@/server/trpc';
 import { can } from '@/lib/rbac';
 import type { GlobalRole, WorkingGroupRole } from '@prisma/client';
 
-function userCtx(session: { user: { globalRole: string; memberships: { workingGroupId: string; role: string }[] } }) {
+function userCtx(session: {
+  user: { globalRole: string; memberships: { workingGroupId: string; role: string }[] };
+}) {
   return {
     globalRole: session.user.globalRole as GlobalRole,
     memberships: session.user.memberships.map((m) => ({
@@ -16,18 +18,23 @@ function userCtx(session: { user: { globalRole: string; memberships: { workingGr
 
 export const workingGroupRouter = createTRPCRouter({
   // ── list ─────────────────────────────────────────────────────────────
-  list: protectedProcedure.query(async ({ ctx }) => {
-    const isAdmin = ctx.session.user.globalRole === 'ADMIN';
-    const memberGroupIds = ctx.session.user.memberships?.map((m) => m.workingGroupId) ?? [];
+  list: protectedProcedure
+    .input(z.object({ includeArchived: z.boolean().optional() }).optional())
+    .query(async ({ ctx, input }) => {
+      const isAdmin = ctx.session.user.globalRole === 'ADMIN';
+      const memberGroupIds = ctx.session.user.memberships?.map((m) => m.workingGroupId) ?? [];
 
-    return ctx.db.workingGroup.findMany({
-      where: isAdmin ? undefined : { id: { in: memberGroupIds } },
-      include: {
-        _count: { select: { members: true, standards: true } },
-      },
-      orderBy: { code: 'asc' },
-    });
-  }),
+      return ctx.db.workingGroup.findMany({
+        where: {
+          ...(isAdmin ? {} : { id: { in: memberGroupIds } }),
+          ...(input?.includeArchived ? {} : { isArchived: false }),
+        },
+        include: {
+          _count: { select: { members: true, standards: true } },
+        },
+        orderBy: [{ isArchived: 'asc' }, { code: 'asc' }],
+      });
+    }),
 
   // ── byId ─────────────────────────────────────────────────────────────
   byId: protectedProcedure
@@ -62,7 +69,10 @@ export const workingGroupRouter = createTRPCRouter({
         code: z.string().min(2).max(20),
         name: z.string().min(3).max(200),
         description: z.string().optional(),
-        color: z.string().regex(/^#[0-9A-F]{6}$/i).default('#1A56DB'),
+        color: z
+          .string()
+          .regex(/^#[0-9A-F]{6}$/i)
+          .default('#1A56DB'),
       }),
     )
     .mutation(async ({ ctx, input }) => {
@@ -83,7 +93,10 @@ export const workingGroupRouter = createTRPCRouter({
         id: z.string().cuid(),
         name: z.string().min(3).max(200).optional(),
         description: z.string().optional(),
-        color: z.string().regex(/^#[0-9A-F]{6}$/i).optional(),
+        color: z
+          .string()
+          .regex(/^#[0-9A-F]{6}$/i)
+          .optional(),
       }),
     )
     .mutation(async ({ ctx, input }) => {
@@ -110,7 +123,9 @@ export const workingGroupRouter = createTRPCRouter({
         throw new TRPCError({ code: 'FORBIDDEN' });
       }
       return ctx.db.workingGroupMember.upsert({
-        where: { workingGroupId_userId: { workingGroupId: input.workingGroupId, userId: input.userId } },
+        where: {
+          workingGroupId_userId: { workingGroupId: input.workingGroupId, userId: input.userId },
+        },
         create: input,
         update: { role: input.role },
       });
@@ -129,7 +144,9 @@ export const workingGroupRouter = createTRPCRouter({
         throw new TRPCError({ code: 'FORBIDDEN' });
       }
       return ctx.db.workingGroupMember.delete({
-        where: { workingGroupId_userId: { workingGroupId: input.workingGroupId, userId: input.userId } },
+        where: {
+          workingGroupId_userId: { workingGroupId: input.workingGroupId, userId: input.userId },
+        },
       });
     }),
 
@@ -147,8 +164,23 @@ export const workingGroupRouter = createTRPCRouter({
         throw new TRPCError({ code: 'FORBIDDEN' });
       }
       return ctx.db.workingGroupMember.update({
-        where: { workingGroupId_userId: { workingGroupId: input.workingGroupId, userId: input.userId } },
+        where: {
+          workingGroupId_userId: { workingGroupId: input.workingGroupId, userId: input.userId },
+        },
         data: { role: input.role },
+      });
+    }),
+
+  // ── setArchived (ADMIN only) ─────────────────────────────────────────
+  setArchived: protectedProcedure
+    .input(z.object({ id: z.string().cuid(), isArchived: z.boolean() }))
+    .mutation(async ({ ctx, input }) => {
+      if (ctx.session.user.globalRole !== 'ADMIN') {
+        throw new TRPCError({ code: 'FORBIDDEN' });
+      }
+      return ctx.db.workingGroup.update({
+        where: { id: input.id },
+        data: { isArchived: input.isArchived },
       });
     }),
 

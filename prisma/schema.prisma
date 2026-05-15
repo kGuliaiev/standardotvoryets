@@ -108,6 +108,7 @@ model User {
   passwordHash String
   globalRole   GlobalRole @default(USER)
   avatarUrl    String?
+  isActive     Boolean    @default(true)
   createdAt    DateTime   @default(now())
   updatedAt    DateTime   @updatedAt
 
@@ -186,6 +187,7 @@ model WorkingGroup {
   name        String // "Управління якістю"
   description String?
   color       String   @default("#1A56DB") // hex, for UI
+  isArchived  Boolean  @default(false)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 

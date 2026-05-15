@@ -59,9 +59,11 @@ export const userRouter = createTRPCRouter({
     // DIRECTOR only sees users in their WGs
     const memberGroupIds = memberships?.map((m) => m.workingGroupId) ?? [];
     return ctx.db.user.findMany({
-      where: isAdmin ? undefined : {
-        memberships: { some: { workingGroupId: { in: memberGroupIds } } },
-      },
+      where: isAdmin
+        ? undefined
+        : {
+            memberships: { some: { workingGroupId: { in: memberGroupIds } } },
+          },
       select: {
         id: true,
         email: true,
@@ -94,7 +96,13 @@ export const userRouter = createTRPCRouter({
 
       if (
         !can(
-          { globalRole: user.globalRole as GlobalRole, memberships: (user.memberships ?? []) as { workingGroupId: string; role: WorkingGroupRole }[] },
+          {
+            globalRole: user.globalRole as GlobalRole,
+            memberships: (user.memberships ?? []) as {
+              workingGroupId: string;
+              role: WorkingGroupRole;
+            }[],
+          },
           'wg:invite',
           input.workingGroupId,
         )
@@ -223,6 +231,22 @@ export const userRouter = createTRPCRouter({
         where: { id: input.userId },
         data: { globalRole: input.globalRole },
         select: { id: true, globalRole: true },
+      });
+    }),
+
+  // ── setActive (ADMIN only) ───────────────────────────────────────────
+  setActive: protectedProcedure
+    .input(z.object({ userId: z.string().cuid(), isActive: z.boolean() }))
+    .mutation(async ({ ctx, input }) => {
+      if (ctx.session.user.globalRole !== 'ADMIN') {
+        throw new TRPCError({ code: 'FORBIDDEN' });
+      }
+      if (input.userId === ctx.session.user.id) {
+        throw new TRPCError({ code: 'BAD_REQUEST', message: 'Не можна деактивувати себе' });
+      }
+      return ctx.db.user.update({
+        where: { id: input.userId },
+        data: { isActive: input.isActive },
       });
     }),
 });
