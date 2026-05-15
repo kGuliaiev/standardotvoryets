@@ -7,6 +7,7 @@ import { useSession } from 'next-auth/react';
 import { Pencil } from 'lucide-react';
 import { Avatar } from '@/components/ui/Avatar';
 import { Modal } from '@/components/ui/Modal';
+import { ActivityFeed } from '@/components/ActivityFeed';
 import { formatDate } from '@/lib/utils';
 import { can } from '@/lib/rbac';
 import { useEscape } from '@/lib/useEscape';
@@ -53,22 +54,31 @@ export function MeetingDetail({ id }: Props) {
   const utils = trpc.useUtils();
   const { data: meeting, isLoading } = trpc.meeting.byId.useQuery({ id });
 
+  const invalidateMeetings = () => {
+    void utils.meeting.byId.invalidate({ id });
+    void utils.meeting.list.invalidate();
+    void utils.meeting.upcomingForUser.invalidate();
+    void utils.dashboard.kpis.invalidate();
+    void utils.dashboard.navCounts.invalidate();
+    void utils.activityLog.list.invalidate({ entity: 'Meeting', entityId: id });
+  };
+
   const confirmMutation = trpc.meeting.confirmAttendance.useMutation({
-    onSuccess: () => void utils.meeting.byId.invalidate({ id }),
+    onSuccess: invalidateMeetings,
   });
   const uploadMinutesMutation = trpc.meeting.uploadMinutes.useMutation({
     onSuccess: () => {
-      void utils.meeting.byId.invalidate({ id });
+      invalidateMeetings();
       setShowMinutes(false);
     },
   });
   const changeStatusMutation = trpc.meeting.changeStatus.useMutation({
-    onSuccess: () => void utils.meeting.byId.invalidate({ id }),
+    onSuccess: invalidateMeetings,
   });
 
   const updateMutation = trpc.meeting.update.useMutation({
     onSuccess: () => {
-      void utils.meeting.byId.invalidate({ id });
+      invalidateMeetings();
       setEditOpen(false);
     },
     onError: (e) => setEditError(e.message),
@@ -312,6 +322,8 @@ export function MeetingDetail({ id }: Props) {
           </div>
         </div>
       </div>
+
+      <ActivityFeed entity="Meeting" entityId={id} />
 
       {/* Minutes modal */}
       {showMinutes && (

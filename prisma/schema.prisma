@@ -125,8 +125,32 @@ model User {
   sessions        Session[]
   accounts        Account[]
   standards       Standard[]
+  activityLogs    ActivityLog[]
 
   @@map("users")
+}
+
+// ─────────────────────────────────────────
+// ACTIVITY LOG (audit trail)
+// ─────────────────────────────────────────
+
+model ActivityLog {
+  id        String   @id @default(cuid())
+  userId    String
+  action    String   // CREATE | UPDATE | DELETE | STATUS_CHANGE | ARCHIVE | RESTORE
+  entity    String   // Standard | Meeting | Task | WorkingGroup | User | Document
+  entityId  String
+  before    Json?
+  after     Json?
+  diff      Json?
+  note      String?
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([entity, entityId, createdAt])
+  @@index([userId, createdAt])
+  @@map("activity_log")
 }
 
 model Account {

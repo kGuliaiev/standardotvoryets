@@ -2,9 +2,12 @@ import { z } from 'zod';
 import { TRPCError } from '@trpc/server';
 import { createTRPCRouter, protectedProcedure } from '@/server/trpc';
 import { can } from '@/lib/rbac';
+import { logActivity } from '@/server/audit';
 import type { GlobalRole, WorkingGroupRole } from '@prisma/client';
 
-function userCtx(session: { user: { globalRole: string; memberships: { workingGroupId: string; role: string }[] } }) {
+function userCtx(session: {
+  user: { globalRole: string; memberships: { workingGroupId: string; role: string }[] };
+}) {
   return {
     globalRole: session.user.globalRole as GlobalRole,
     memberships: session.user.memberships.map((m) => ({
@@ -190,7 +193,16 @@ export const standardRouter = createTRPCRouter({
       }
 
       const { id, ...data } = input;
-      return ctx.db.standard.update({ where: { id }, data });
+      const updated = await ctx.db.standard.update({ where: { id }, data });
+      await logActivity(ctx.db, {
+        userId: ctx.session.user.id,
+        action: 'UPDATE',
+        entity: 'Standard',
+        entityId: id,
+        before: standard,
+        after: updated,
+      });
+      return updated;
     }),
 
   // ── changeStatus ──────────────────────────────────────────────────────
@@ -224,6 +236,16 @@ export const standardRouter = createTRPCRouter({
           },
         }),
       ]);
+
+      await logActivity(ctx.db, {
+        userId: ctx.session.user.id,
+        action: input.status === 'ARCHIVED' ? 'ARCHIVE' : 'STATUS_CHANGE',
+        entity: 'Standard',
+        entityId: input.id,
+        before: { status: standard.status },
+        after: { status: input.status },
+        note: input.note,
+      });
 
       return updated;
     }),

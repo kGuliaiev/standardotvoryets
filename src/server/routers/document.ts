@@ -5,9 +5,11 @@ import { can } from '@/lib/rbac';
 import { s3, getPresignedUploadUrl, getPresignedDownloadUrl } from '@/server/s3';
 import { DeleteObjectCommand } from '@aws-sdk/client-s3';
 import { env } from '@/lib/env';
-import type { GlobalRole, WorkingGroupRole } from '@prisma/client';
+import type { DocumentType, GlobalRole, WorkingGroupRole } from '@prisma/client';
 
-function userCtx(session: { user: { globalRole: string; memberships: { workingGroupId: string; role: string }[] } }) {
+function userCtx(session: {
+  user: { globalRole: string; memberships: { workingGroupId: string; role: string }[] };
+}) {
   return {
     globalRole: session.user.globalRole as GlobalRole,
     memberships: session.user.memberships.map((m) => ({
@@ -105,6 +107,88 @@ export const documentRouter = createTRPCRouter({
       });
     }),
 
+  // ── byWorkingGroup ───────────────────────────────────────────────────
+  // Returns standard documents + meeting minutes combined for a WG
+  byWorkingGroup: protectedProcedure
+    .input(z.object({ workingGroupId: z.string().cuid() }))
+    .query(async ({ ctx, input }) => {
+      const isAdmin = ctx.session.user.globalRole === 'ADMIN';
+      const isMember = ctx.session.user.memberships?.some(
+        (m) => m.workingGroupId === input.workingGroupId,
+      );
+      if (!isAdmin && !isMember) throw new TRPCError({ code: 'FORBIDDEN' });
+
+      const [docs, meetingsWithMinutes] = await Promise.all([
+        ctx.db.document.findMany({
+          where: { standard: { workingGroupId: input.workingGroupId } },
+          include: {
+            uploadedBy: { select: { id: true, name: true } },
+            standard: { select: { id: true, code: true, title: true } },
+          },
+          orderBy: { createdAt: 'desc' },
+        }),
+        ctx.db.meeting.findMany({
+          where: {
+            workingGroupId: input.workingGroupId,
+            minutesText: { not: null },
+          },
+          select: {
+            id: true,
+            title: true,
+            startAt: true,
+            updatedAt: true,
+            createdBy: { select: { id: true, name: true } },
+          },
+          orderBy: { startAt: 'desc' },
+        }),
+      ]);
+
+      interface DocItem {
+        kind: 'document';
+        id: string;
+        filename: string;
+        version: string | null;
+        type: DocumentType;
+        sizeBytes: number;
+        isCurrent: boolean;
+        uploadedAt: Date;
+        uploadedBy: { id: string; name: string };
+        standard: { id: string; code: string; title: string };
+      }
+      interface ProtocolItem {
+        kind: 'protocol';
+        id: string;
+        meetingTitle: string;
+        meetingDate: Date;
+        updatedAt: Date;
+        uploadedBy: { id: string; name: string };
+      }
+
+      const documents: DocItem[] = docs.map((d) => ({
+        kind: 'document',
+        id: d.id,
+        filename: d.filename,
+        version: d.version,
+        type: d.type,
+        sizeBytes: d.sizeBytes,
+        isCurrent: d.isCurrent,
+        uploadedAt: d.createdAt,
+        uploadedBy: d.uploadedBy,
+        standard: d.standard,
+      }));
+
+      const protocols: ProtocolItem[] = meetingsWithMinutes.map((m) => ({
+        kind: 'protocol',
+        id: m.id,
+        meetingTitle: m.title,
+        meetingDate: m.startAt,
+        updatedAt: m.updatedAt,
+        uploadedBy: m.createdBy,
+      }));
+
+      return { documents, protocols };
+    }),
+
   // ── setAsCurrent ──────────────────────────────────────────────────────
   setAsCurrent: protectedProcedure
     .input(z.object({ documentId: z.string().cuid() }))
@@ -143,9 +227,7 @@ export const documentRouter = createTRPCRouter({
       }
 
       // Delete from S3
-      await s3.send(
-        new DeleteObjectCommand({ Bucket: env.S3_BUCKET, Key: doc.s3Key }),
-      );
+      await s3.send(new DeleteObjectCommand({ Bucket: env.S3_BUCKET, Key: doc.s3Key }));
 
       return ctx.db.document.delete({ where: { id: input.documentId } });
     }),

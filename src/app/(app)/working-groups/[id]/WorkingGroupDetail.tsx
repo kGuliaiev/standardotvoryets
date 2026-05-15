@@ -18,7 +18,22 @@ const TABS = [
   { id: 'members', label: 'Учасники' },
   { id: 'standards', label: 'Стандарти' },
   { id: 'meetings', label: 'Засідання' },
+  { id: 'documents', label: 'Документи' },
 ] as const;
+
+const DOC_TYPE_LABELS: Record<string, { label: string; cls: string }> = {
+  DRAFT_STANDARD: { label: 'Чернетка', cls: 'bg-[#EEF4FF] text-[#1A3A8F]' },
+  MEETING_MINUTES: { label: 'Протокол', cls: 'bg-[#ECFDF5] text-[#065F46]' },
+  AGENDA: { label: 'Порядок денний', cls: 'bg-[#FFF7E6] text-[#92400E]' },
+  ATTACHMENT: { label: 'Додаток', cls: 'bg-[#EDF0F7] text-[#4B5880]' },
+  FINAL: { label: 'Фінальна версія', cls: 'bg-violet-50 text-violet-700' },
+};
+
+function formatBytes(b: number) {
+  if (b < 1024) return `${b} B`;
+  if (b < 1024 * 1024) return `${(b / 1024).toFixed(1)} KB`;
+  return `${(b / (1024 * 1024)).toFixed(1)} MB`;
+}
 
 type TabId = (typeof TABS)[number]['id'];
 
@@ -65,6 +80,10 @@ export function WorkingGroupDetail({ id }: Props) {
   const { data: meetings } = trpc.meeting.list.useQuery(
     { workingGroupId: id },
     { enabled: tab === 'meetings' },
+  );
+  const { data: docsBundle } = trpc.document.byWorkingGroup.useQuery(
+    { workingGroupId: id },
+    { enabled: tab === 'documents' },
   );
 
   const inviteMutation = trpc.user.invite.useMutation({
@@ -460,6 +479,161 @@ export function WorkingGroupDetail({ id }: Props) {
               </tbody>
             </table>
           )}
+        </div>
+      )}
+
+      {tab === 'documents' && (
+        <div className="space-y-5">
+          {/* Documents */}
+          <div className="card overflow-hidden">
+            <div className="card-head">
+              <h3 className="font-bold text-ink">
+                Документи стандартів
+                <span className="ml-2 text-xs text-light font-normal">
+                  ({docsBundle?.documents.length ?? 0})
+                </span>
+              </h3>
+            </div>
+            {!docsBundle ? (
+              <div className="py-10 text-center text-light text-sm">Завантаження…</div>
+            ) : docsBundle.documents.length === 0 ? (
+              <div className="py-10 text-center text-light text-sm">
+                У стандартах цієї групи ще немає завантажених документів
+              </div>
+            ) : (
+              <table className="w-full text-sm">
+                <thead className="bg-[#FAFBFD] border-b border-hairline">
+                  <tr className="text-left text-[10px] text-light uppercase tracking-wide">
+                    <th className="px-5 py-2.5 font-bold">Файл</th>
+                    <th className="px-3 py-2.5 font-bold">Тип</th>
+                    <th className="px-3 py-2.5 font-bold">Стандарт</th>
+                    <th className="px-3 py-2.5 font-bold">Версія</th>
+                    <th className="px-3 py-2.5 font-bold">Розмір</th>
+                    <th className="px-3 py-2.5 font-bold">Завантажив</th>
+                    <th className="px-3 py-2.5 font-bold">Дата / час</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-hairline">
+                  {docsBundle.documents.map((d) => {
+                    const tInfo = DOC_TYPE_LABELS[d.type] ?? {
+                      label: d.type,
+                      cls: 'bg-pill text-mid',
+                    };
+                    const ext = d.filename.split('.').pop()?.toUpperCase().slice(0, 4) ?? '';
+                    return (
+                      <tr key={d.id} className="hover:bg-[#FAFBFD]">
+                        <td className="px-5 py-3">
+                          <div className="flex items-center gap-3">
+                            <div className="w-8 h-8 bg-brand-soft text-brand rounded-[8px] flex items-center justify-center text-[10px] font-bold shrink-0">
+                              {ext}
+                            </div>
+                            <span className="text-ink font-medium truncate max-w-[260px]">
+                              {d.filename}
+                            </span>
+                            {d.isCurrent && (
+                              <span className="text-[10px] font-bold rounded-full px-2 py-0.5 bg-[#ECFDF5] text-[#065F46]">
+                                Актуальний
+                              </span>
+                            )}
+                          </div>
+                        </td>
+                        <td className="px-3 py-3">
+                          <span
+                            className={`text-[10px] font-bold rounded-full px-2 py-0.5 ${tInfo.cls}`}
+                          >
+                            {tInfo.label}
+                          </span>
+                        </td>
+                        <td className="px-3 py-3">
+                          <Link
+                            href={`/standards/${d.standard.id}`}
+                            className="font-mono text-xs text-mid hover:text-brand"
+                          >
+                            {d.standard.code}
+                          </Link>
+                        </td>
+                        <td className="px-3 py-3 text-xs text-mid font-mono">{d.version ?? '—'}</td>
+                        <td className="px-3 py-3 text-xs text-mid">{formatBytes(d.sizeBytes)}</td>
+                        <td className="px-3 py-3 text-xs text-mid">{d.uploadedBy.name}</td>
+                        <td className="px-3 py-3 text-xs text-light font-mono">
+                          {new Date(d.uploadedAt).toLocaleString('uk-UA', {
+                            year: 'numeric',
+                            month: '2-digit',
+                            day: '2-digit',
+                            hour: '2-digit',
+                            minute: '2-digit',
+                          })}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            )}
+          </div>
+
+          {/* Protocols */}
+          <div className="card overflow-hidden">
+            <div className="card-head">
+              <h3 className="font-bold text-ink">
+                Протоколи засідань
+                <span className="ml-2 text-xs text-light font-normal">
+                  ({docsBundle?.protocols.length ?? 0})
+                </span>
+              </h3>
+            </div>
+            {!docsBundle ? (
+              <div className="py-10 text-center text-light text-sm">Завантаження…</div>
+            ) : docsBundle.protocols.length === 0 ? (
+              <div className="py-10 text-center text-light text-sm">
+                Протоколів ще немає. Додавайте їх на сторінці засідання.
+              </div>
+            ) : (
+              <table className="w-full text-sm">
+                <thead className="bg-[#FAFBFD] border-b border-hairline">
+                  <tr className="text-left text-[10px] text-light uppercase tracking-wide">
+                    <th className="px-5 py-2.5 font-bold">Засідання</th>
+                    <th className="px-3 py-2.5 font-bold">Дата засідання</th>
+                    <th className="px-3 py-2.5 font-bold">Записав</th>
+                    <th className="px-3 py-2.5 font-bold">Оновлено</th>
+                    <th className="px-3 py-2.5"></th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-hairline">
+                  {docsBundle.protocols.map((p) => (
+                    <tr key={p.id} className="hover:bg-[#FAFBFD]">
+                      <td className="px-5 py-3 font-medium text-ink">
+                        <Link href={`/meetings/${p.id}`} className="hover:text-brand">
+                          {p.meetingTitle}
+                        </Link>
+                      </td>
+                      <td className="px-3 py-3 text-xs text-mid font-mono">
+                        {new Date(p.meetingDate).toLocaleDateString('uk-UA')}
+                      </td>
+                      <td className="px-3 py-3 text-xs text-mid">{p.uploadedBy.name}</td>
+                      <td className="px-3 py-3 text-xs text-light font-mono">
+                        {new Date(p.updatedAt).toLocaleString('uk-UA', {
+                          year: 'numeric',
+                          month: '2-digit',
+                          day: '2-digit',
+                          hour: '2-digit',
+                          minute: '2-digit',
+                        })}
+                      </td>
+                      <td className="px-3 py-3 text-right">
+                        <Link
+                          href={`/meetings/${p.id}`}
+                          className="text-xs text-brand hover:underline"
+                        >
+                          Відкрити →
+                        </Link>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </div>
         </div>
       )}
 

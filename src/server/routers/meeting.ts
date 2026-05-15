@@ -2,9 +2,12 @@ import { z } from 'zod';
 import { TRPCError } from '@trpc/server';
 import { createTRPCRouter, protectedProcedure } from '@/server/trpc';
 import { can } from '@/lib/rbac';
+import { logActivity } from '@/server/audit';
 import type { GlobalRole, WorkingGroupRole } from '@prisma/client';
 
-function userCtx(session: { user: { globalRole: string; memberships: { workingGroupId: string; role: string }[] } }) {
+function userCtx(session: {
+  user: { globalRole: string; memberships: { workingGroupId: string; role: string }[] };
+}) {
   return {
     globalRole: session.user.globalRole as GlobalRole,
     memberships: session.user.memberships.map((m) => ({
@@ -140,7 +143,16 @@ export const meetingRouter = createTRPCRouter({
       }
 
       const { id, ...data } = input;
-      return ctx.db.meeting.update({ where: { id }, data });
+      const updated = await ctx.db.meeting.update({ where: { id }, data });
+      await logActivity(ctx.db, {
+        userId: ctx.session.user.id,
+        action: 'UPDATE',
+        entity: 'Meeting',
+        entityId: id,
+        before: meeting,
+        after: updated,
+      });
+      return updated;
     }),
 
   // ── cancel ────────────────────────────────────────────────────────────
@@ -153,10 +165,20 @@ export const meetingRouter = createTRPCRouter({
         throw new TRPCError({ code: 'FORBIDDEN' });
       }
 
-      return ctx.db.meeting.update({
+      const cancelled = await ctx.db.meeting.update({
         where: { id: input.id },
         data: { status: 'CANCELLED' },
       });
+      await logActivity(ctx.db, {
+        userId: ctx.session.user.id,
+        action: 'STATUS_CHANGE',
+        entity: 'Meeting',
+        entityId: input.id,
+        before: { status: meeting.status },
+        after: { status: 'CANCELLED' },
+        note: 'Засідання скасовано',
+      });
+      return cancelled;
     }),
 
   // ── confirmAttendance ─────────────────────────────────────────────────

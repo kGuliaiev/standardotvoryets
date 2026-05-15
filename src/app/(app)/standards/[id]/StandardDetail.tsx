@@ -8,6 +8,7 @@ import { Pencil } from 'lucide-react';
 import { StatusBadge, type StandardStatus } from '@/components/ui/StatusBadge';
 import { Avatar } from '@/components/ui/Avatar';
 import { Modal } from '@/components/ui/Modal';
+import { ActivityFeed } from '@/components/ActivityFeed';
 import { formatDate, formatDateTime, formatBytes } from '@/lib/utils';
 import { can } from '@/lib/rbac';
 import type { GlobalRole, WorkingGroupRole } from '@prisma/client';
@@ -49,9 +50,19 @@ export function StandardDetail({ id }: { id: string }) {
   const { data: votingHistory } = trpc.vote.history.useQuery({ standardId: id });
   const { data: tasks } = trpc.task.list.useQuery({ standardId: id });
 
-  const changeStatus = trpc.standard.changeStatus.useMutation({ onSuccess: () => void refetch() });
+  const utils = trpc.useUtils();
+  const invalidateStandardLists = () => {
+    void refetch();
+    void utils.standard.list.invalidate();
+    void utils.dashboard.kpis.invalidate();
+    void utils.dashboard.navCounts.invalidate();
+  };
+
+  const changeStatus = trpc.standard.changeStatus.useMutation({
+    onSuccess: invalidateStandardLists,
+  });
   const castVote = trpc.vote.cast.useMutation({ onSuccess: () => void refetch() });
-  const closeVoting = trpc.vote.closeVoting.useMutation({ onSuccess: () => void refetch() });
+  const closeVoting = trpc.vote.closeVoting.useMutation({ onSuccess: invalidateStandardLists });
 
   const [editOpen, setEditOpen] = useState(false);
   const [editForm, setEditForm] = useState({
@@ -67,7 +78,7 @@ export function StandardDetail({ id }: { id: string }) {
 
   const updateMutation = trpc.standard.update.useMutation({
     onSuccess: () => {
-      void refetch();
+      invalidateStandardLists();
       setEditOpen(false);
     },
     onError: (e) => setEditError(e.message),
@@ -568,39 +579,42 @@ export function StandardDetail({ id }: { id: string }) {
       )}
 
       {activeTab === 'history' && (
-        <div className="bg-white rounded-xl border border-slate-200">
-          <div className="px-5 py-4 border-b border-slate-100">
-            <h3 className="font-semibold text-slate-800">Журнал змін</h3>
-          </div>
-          {standard.statusHistory.length === 0 ? (
-            <div className="py-10 text-center text-slate-400 text-sm">Історії немає</div>
-          ) : (
-            <div className="px-5 py-4 space-y-4">
-              {standard.statusHistory.map((h, i) => (
-                <div key={h.id} className="relative flex gap-4">
-                  {i < standard.statusHistory.length - 1 && (
-                    <div className="absolute left-3 top-6 bottom-0 w-px bg-slate-100" />
-                  )}
-                  <div className="w-6 h-6 rounded-full bg-blue-100 flex items-center justify-center flex-shrink-0 mt-0.5">
-                    <div className="w-2 h-2 rounded-full bg-blue-500" />
-                  </div>
-                  <div className="pb-4">
-                    <div className="flex items-center gap-2 mb-0.5">
-                      {h.fromStatus ? (
-                        <>
-                          <StatusBadge status={h.fromStatus} size="sm" />
-                          <span className="text-slate-400 text-xs">→</span>
-                        </>
-                      ) : null}
-                      <StatusBadge status={h.toStatus} size="sm" />
-                    </div>
-                    {h.note && <p className="text-sm text-slate-600 mt-1">{h.note}</p>}
-                    <p className="text-xs text-slate-400 mt-1">{formatDateTime(h.changedAt)}</p>
-                  </div>
-                </div>
-              ))}
+        <div className="space-y-5">
+          <ActivityFeed entity="Standard" entityId={id} title="Журнал змін (всі дії)" />
+          <div className="bg-white rounded-xl border border-slate-200">
+            <div className="px-5 py-4 border-b border-slate-100">
+              <h3 className="font-semibold text-slate-800">Історія статусів</h3>
             </div>
-          )}
+            {standard.statusHistory.length === 0 ? (
+              <div className="py-10 text-center text-slate-400 text-sm">Історії немає</div>
+            ) : (
+              <div className="px-5 py-4 space-y-4">
+                {standard.statusHistory.map((h, i) => (
+                  <div key={h.id} className="relative flex gap-4">
+                    {i < standard.statusHistory.length - 1 && (
+                      <div className="absolute left-3 top-6 bottom-0 w-px bg-slate-100" />
+                    )}
+                    <div className="w-6 h-6 rounded-full bg-blue-100 flex items-center justify-center flex-shrink-0 mt-0.5">
+                      <div className="w-2 h-2 rounded-full bg-blue-500" />
+                    </div>
+                    <div className="pb-4">
+                      <div className="flex items-center gap-2 mb-0.5">
+                        {h.fromStatus ? (
+                          <>
+                            <StatusBadge status={h.fromStatus} size="sm" />
+                            <span className="text-slate-400 text-xs">→</span>
+                          </>
+                        ) : null}
+                        <StatusBadge status={h.toStatus} size="sm" />
+                      </div>
+                      {h.note && <p className="text-sm text-slate-600 mt-1">{h.note}</p>}
+                      <p className="text-xs text-slate-400 mt-1">{formatDateTime(h.changedAt)}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
         </div>
       )}
 

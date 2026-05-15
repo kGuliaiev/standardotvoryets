@@ -8,6 +8,7 @@ import { meetingRouter } from './meeting';
 import { taskRouter } from './task';
 import { notificationRouter } from './notification';
 import { dashboardRouter } from './dashboard';
+import { activityLogRouter } from './activityLog';
 
 /**
  * This is the primary router for the server.
@@ -23,6 +24,7 @@ export const appRouter = createTRPCRouter({
   task: taskRouter,
   notification: notificationRouter,
   dashboard: dashboardRouter,
+  activityLog: activityLogRouter,
 });
 
 export type AppRouter = typeof appRouter;
