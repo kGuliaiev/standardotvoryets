@@ -4,7 +4,9 @@ import { createTRPCRouter, protectedProcedure } from '@/server/trpc';
 import { can } from '@/lib/rbac';
 import type { GlobalRole, WorkingGroupRole } from '@prisma/client';
 
-function userCtx(session: { user: { globalRole: string; memberships: { workingGroupId: string; role: string }[] } }) {
+function userCtx(session: {
+  user: { globalRole: string; memberships: { workingGroupId: string; role: string }[] };
+}) {
   return {
     globalRole: session.user.globalRole as GlobalRole,
     memberships: session.user.memberships.map((m) => ({
@@ -195,10 +197,42 @@ export const voteRouter = createTRPCRouter({
   current: protectedProcedure
     .input(z.object({ standardId: z.string().cuid() }))
     .query(async ({ ctx, input }) => {
-      return ctx.db.voting.findFirst({
+      const open = await ctx.db.voting.findFirst({
         where: { standardId: input.standardId, status: 'OPEN' },
-        include: { votes: true },
+        include: { votes: true, standard: { select: { id: true, workingGroupId: true } } },
       });
+
+      // Lazy auto-close: if deadline has passed, close + transition standard status
+      if (open?.deadline && new Date(open.deadline) <= new Date()) {
+        const forVotes = open.votes.filter((v) => v.choice === 'FOR').length;
+        const againstVotes = open.votes.filter((v) => v.choice === 'AGAINST').length;
+        const total = forVotes + againstVotes;
+        const adopted = total > 0 ? forVotes / total > 0.5 : false;
+        const newStatus = adopted ? 'ADOPTED' : 'REJECTED';
+
+        await ctx.db.$transaction([
+          ctx.db.voting.update({
+            where: { id: open.id },
+            data: { status: 'CLOSED', closedAt: new Date() },
+          }),
+          ctx.db.standard.update({
+            where: { id: open.standard.id },
+            data: { status: newStatus },
+          }),
+          ctx.db.standardStatusHistory.create({
+            data: {
+              standardId: open.standard.id,
+              fromStatus: 'VOTING',
+              toStatus: newStatus,
+              changedById: ctx.session.user.id,
+              note: `Автоматичне завершення за дедлайном. За: ${forVotes}, Проти: ${againstVotes}`,
+            },
+          }),
+        ]);
+        return null;
+      }
+
+      return open;
     }),
 
   // ── history ───────────────────────────────────────────────────────────

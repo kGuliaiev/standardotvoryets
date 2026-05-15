@@ -180,19 +180,30 @@ export function MeetingDetail({ id }: Props) {
           {/* Minutes */}
           {(meeting.minutesText != null || canManage) && (
             <div className="bg-card rounded-xl border border-hairline p-5">
-              <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center justify-between mb-3 gap-2 flex-wrap">
                 <h3 className="text-sm font-semibold text-ink">Протокол</h3>
-                {canManage && meeting.status !== 'CANCELLED' && (
-                  <button
-                    onClick={() => {
-                      setMinutesText(meeting.minutesText ?? '');
-                      setShowMinutes(true);
-                    }}
-                    className="text-xs text-blue-600 hover:text-blue-800 transition-colors"
+                <div className="inline-flex items-center gap-3">
+                  <a
+                    href={`/api/meetings/${id}/protocol`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-xs text-mid hover:text-brand inline-flex items-center gap-1"
+                    title="Завантажити PDF"
                   >
-                    {meeting.minutesText ? 'Редагувати' : '+ Додати протокол'}
-                  </button>
-                )}
+                    📄 PDF
+                  </a>
+                  {canManage && meeting.status !== 'CANCELLED' && (
+                    <button
+                      onClick={() => {
+                        setMinutesText(meeting.minutesText ?? '');
+                        setShowMinutes(true);
+                      }}
+                      className="text-xs text-brand hover:underline transition-colors"
+                    >
+                      {meeting.minutesText ? 'Редагувати' : '+ Додати протокол'}
+                    </button>
+                  )}
+                </div>
               </div>
               {meeting.minutesText ? (
                 <pre className="text-sm text-mid leading-relaxed whitespace-pre-wrap font-sans">
