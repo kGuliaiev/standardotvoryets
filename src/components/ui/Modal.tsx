@@ -63,18 +63,18 @@ export function Modal({
     >
       <div
         ref={panelRef}
-        className={`bg-white rounded-[18px] shadow-[0_20px_60px_rgba(0,0,0,0.18)] w-full ${SIZE_CLASSES[size]} max-h-[92vh] overflow-y-auto`}
+        className={`bg-card rounded-[18px] shadow-modal w-full ${SIZE_CLASSES[size]} max-h-[92vh] overflow-y-auto`}
       >
         {title && (
           <div className="flex items-start justify-between gap-4 px-7 pt-7 pb-4">
             <div>
               {title && <h3 className="text-[18px] font-extrabold text-navy">{title}</h3>}
-              {subtitle && <p className="text-[13px] text-slate-500 mt-1">{subtitle}</p>}
+              {subtitle && <p className="text-[13px] text-mid mt-1">{subtitle}</p>}
             </div>
             <button
               type="button"
               onClick={onClose}
-              className="text-slate-400 hover:text-slate-700 text-xl leading-none p-1"
+              className="text-light hover:text-ink text-xl leading-none p-1"
               aria-label="Закрити"
             >
               <X className="w-5 h-5" />
@@ -83,7 +83,7 @@ export function Modal({
         )}
         <div className="px-7 pb-5">{children}</div>
         {footer && (
-          <div className="px-7 py-4 border-t border-slate-100 flex items-center justify-end gap-2.5">
+          <div className="px-7 py-4 border-t border-hairline flex items-center justify-end gap-2.5">
             {footer}
           </div>
         )}

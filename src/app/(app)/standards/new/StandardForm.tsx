@@ -100,22 +100,22 @@ export function StandardForm({ preselectedWgId }: { preselectedWgId?: string }) 
   }
 
   if (groupsLoading || !session) {
-    return <div className="py-16 text-center text-slate-400">Завантаження…</div>;
+    return <div className="py-16 text-center text-light">Завантаження…</div>;
   }
 
   if (allowedGroups.length === 0) {
     return (
       <div className="space-y-5">
-        <nav className="flex items-center gap-2 text-sm text-slate-500">
+        <nav className="flex items-center gap-2 text-sm text-mid">
           <Link href="/standards" className="hover:text-blue-600">
             Стандарти
           </Link>
           <span>/</span>
-          <span className="text-slate-700">Новий</span>
+          <span className="text-ink">Новий</span>
         </nav>
-        <div className="bg-white rounded-xl border border-slate-200 p-8 text-center">
-          <p className="text-slate-600 mb-2">У вас немає прав створювати стандарти.</p>
-          <p className="text-sm text-slate-400">
+        <div className="bg-card rounded-xl border border-hairline p-8 text-center">
+          <p className="text-mid mb-2">У вас немає прав створювати стандарти.</p>
+          <p className="text-sm text-light">
             Створювати стандарти можуть керівники та заступники робочих груп, а також адміністратор.
           </p>
         </div>
@@ -126,28 +126,28 @@ export function StandardForm({ preselectedWgId }: { preselectedWgId?: string }) 
   return (
     <div className="space-y-5 max-w-3xl">
       {/* Breadcrumb */}
-      <nav className="flex items-center gap-2 text-sm text-slate-500">
+      <nav className="flex items-center gap-2 text-sm text-mid">
         <Link href="/standards" className="hover:text-blue-600">
           Стандарти
         </Link>
         <span>/</span>
-        <span className="text-slate-700">Новий стандарт</span>
+        <span className="text-ink">Новий стандарт</span>
       </nav>
 
-      <h1 className="text-2xl font-bold text-slate-900">Новий стандарт</h1>
+      <h1 className="text-2xl font-bold text-ink">Новий стандарт</h1>
 
       <form
         onSubmit={handleSubmit(onSubmit)}
-        className="bg-white rounded-xl border border-slate-200 p-6 space-y-5"
+        className="bg-card rounded-xl border border-hairline p-6 space-y-5"
       >
         {/* WG select */}
         <div>
-          <label className="block text-sm font-medium text-slate-700 mb-1">
+          <label className="block text-sm font-medium text-ink mb-1">
             Робоча група <span className="text-red-500">*</span>
           </label>
           <select
             {...register('workingGroupId')}
-            className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="w-full px-3 py-2 text-sm border border-hairline rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
           >
             <option value="">— оберіть групу —</option>
             {allowedGroups.map((g) => (
@@ -164,26 +164,26 @@ export function StandardForm({ preselectedWgId }: { preselectedWgId?: string }) 
         {/* Code + Title */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">
+            <label className="block text-sm font-medium text-ink mb-1">
               Код <span className="text-red-500">*</span>
             </label>
             <input
               type="text"
               placeholder="ДСТУ 7.1"
               {...register('code')}
-              className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono"
+              className="w-full px-3 py-2 text-sm border border-hairline rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono"
             />
             {errors.code && <p className="text-xs text-red-600 mt-1">{errors.code.message}</p>}
           </div>
           <div className="md:col-span-2">
-            <label className="block text-sm font-medium text-slate-700 mb-1">
+            <label className="block text-sm font-medium text-ink mb-1">
               Назва <span className="text-red-500">*</span>
             </label>
             <input
               type="text"
               placeholder="Вимоги до документації…"
               {...register('title')}
-              className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="w-full px-3 py-2 text-sm border border-hairline rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
             {errors.title && <p className="text-xs text-red-600 mt-1">{errors.title.message}</p>}
           </div>
@@ -191,12 +191,12 @@ export function StandardForm({ preselectedWgId }: { preselectedWgId?: string }) 
 
         {/* Description */}
         <div>
-          <label className="block text-sm font-medium text-slate-700 mb-1">Опис</label>
+          <label className="block text-sm font-medium text-ink mb-1">Опис</label>
           <textarea
             rows={4}
             placeholder="Короткий опис стандарту…"
             {...register('description')}
-            className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
+            className="w-full px-3 py-2 text-sm border border-hairline rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
           />
           {errors.description && (
             <p className="text-xs text-red-600 mt-1">{errors.description.message}</p>
@@ -206,21 +206,21 @@ export function StandardForm({ preselectedWgId }: { preselectedWgId?: string }) 
         {/* ISO + Category */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">ISO-аналог</label>
+            <label className="block text-sm font-medium text-ink mb-1">ISO-аналог</label>
             <input
               type="text"
               placeholder="ISO 9001:2015"
               {...register('isoAnalog')}
-              className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="w-full px-3 py-2 text-sm border border-hairline rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
           </div>
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">Категорія</label>
+            <label className="block text-sm font-medium text-ink mb-1">Категорія</label>
             <input
               type="text"
               placeholder="Управління якістю"
               {...register('category')}
-              className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="w-full px-3 py-2 text-sm border border-hairline rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
           </div>
         </div>
@@ -228,19 +228,19 @@ export function StandardForm({ preselectedWgId }: { preselectedWgId?: string }) 
         {/* Deadline + Responsible */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">Дедлайн</label>
+            <label className="block text-sm font-medium text-ink mb-1">Дедлайн</label>
             <input
               type="date"
               {...register('deadline')}
-              className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="w-full px-3 py-2 text-sm border border-hairline rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
           </div>
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">Відповідальний</label>
+            <label className="block text-sm font-medium text-ink mb-1">Відповідальний</label>
             <select
               {...register('responsibleId')}
               disabled={!selectedWgId || !wgDetail}
-              className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-slate-50 disabled:text-slate-400"
+              className="w-full px-3 py-2 text-sm border border-hairline rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-page disabled:text-light"
             >
               <option value="">— не вказано —</option>
               {wgDetail?.members.map((m) => (
@@ -250,7 +250,7 @@ export function StandardForm({ preselectedWgId }: { preselectedWgId?: string }) 
               ))}
             </select>
             {!selectedWgId && (
-              <p className="text-xs text-slate-400 mt-1">Спочатку оберіть робочу групу</p>
+              <p className="text-xs text-light mt-1">Спочатку оберіть робочу групу</p>
             )}
           </div>
         </div>
@@ -259,10 +259,10 @@ export function StandardForm({ preselectedWgId }: { preselectedWgId?: string }) 
           <p className="text-sm text-red-600 bg-red-50 rounded-lg px-3 py-2">{submitError}</p>
         )}
 
-        <div className="flex gap-3 pt-2 border-t border-slate-100">
+        <div className="flex gap-3 pt-2 border-t border-hairline">
           <Link
             href="/standards"
-            className="flex-1 py-2 text-sm text-center border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors"
+            className="flex-1 py-2 text-sm text-center border border-hairline rounded-lg hover:bg-page transition-colors"
           >
             Скасувати
           </Link>

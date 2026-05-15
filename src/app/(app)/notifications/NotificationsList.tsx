@@ -45,7 +45,7 @@ export function NotificationsList() {
           <div className="py-12 text-center text-light text-sm">Завантаження…</div>
         ) : !notifications || notifications.length === 0 ? (
           <div className="py-16 text-center text-light text-sm">
-            <Bell className="w-10 h-10 mx-auto mb-3 text-slate-300" />
+            <Bell className="w-10 h-10 mx-auto mb-3 text-light" />
             Сповіщень немає
           </div>
         ) : (

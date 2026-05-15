@@ -90,22 +90,22 @@ export function MeetingForm({ preselectedWgId }: { preselectedWgId?: string }) {
   }
 
   if (groupsLoading || !session) {
-    return <div className="py-16 text-center text-slate-400">Завантаження…</div>;
+    return <div className="py-16 text-center text-light">Завантаження…</div>;
   }
 
   if (allowedGroups.length === 0) {
     return (
       <div className="space-y-5">
-        <nav className="flex items-center gap-2 text-sm text-slate-500">
+        <nav className="flex items-center gap-2 text-sm text-mid">
           <Link href="/meetings" className="hover:text-brand">
             Засідання
           </Link>
           <span>/</span>
-          <span className="text-slate-700">Нове</span>
+          <span className="text-ink">Нове</span>
         </nav>
-        <div className="bg-white rounded-[14px] border border-slate-200 p-8 text-center">
-          <p className="text-slate-600 mb-2">У вас немає прав створювати засідання.</p>
-          <p className="text-sm text-slate-400">
+        <div className="bg-card rounded-[14px] border border-hairline p-8 text-center">
+          <p className="text-mid mb-2">У вас немає прав створювати засідання.</p>
+          <p className="text-sm text-light">
             Створювати засідання можуть керівники, заступники та секретарі робочих груп.
           </p>
         </div>
@@ -116,28 +116,28 @@ export function MeetingForm({ preselectedWgId }: { preselectedWgId?: string }) {
   return (
     <div className="space-y-5 max-w-3xl">
       {/* Breadcrumb */}
-      <nav className="flex items-center gap-2 text-sm text-slate-500">
+      <nav className="flex items-center gap-2 text-sm text-mid">
         <Link href="/meetings" className="hover:text-brand">
           Засідання
         </Link>
         <span>/</span>
-        <span className="text-slate-700">Нове засідання</span>
+        <span className="text-ink">Нове засідання</span>
       </nav>
 
       <h1 className="text-[19px] font-extrabold text-navy">Нове засідання</h1>
 
       <form
         onSubmit={handleSubmit(onSubmit)}
-        className="bg-white rounded-[14px] border border-slate-200 p-6 space-y-5"
+        className="bg-card rounded-[14px] border border-hairline p-6 space-y-5"
       >
         {/* WG select */}
         <div>
-          <label className="block text-[11px] font-semibold uppercase tracking-wide text-slate-500 mb-1.5">
+          <label className="block text-[11px] font-semibold uppercase tracking-wide text-mid mb-1.5">
             Робоча група *
           </label>
           <select
             {...register('workingGroupId')}
-            className="w-full px-3 py-2 text-sm border-[1.5px] border-slate-200 rounded-[10px] focus:outline-none focus:border-brand"
+            className="w-full px-3 py-2 text-sm border-[1.5px] border-hairline rounded-[10px] focus:outline-none focus:border-brand"
           >
             <option value="">— оберіть групу —</option>
             {allowedGroups.map((g) => (
@@ -153,14 +153,14 @@ export function MeetingForm({ preselectedWgId }: { preselectedWgId?: string }) {
 
         {/* Title */}
         <div>
-          <label className="block text-[11px] font-semibold uppercase tracking-wide text-slate-500 mb-1.5">
+          <label className="block text-[11px] font-semibold uppercase tracking-wide text-mid mb-1.5">
             Тема засідання *
           </label>
           <input
             type="text"
             placeholder="Засідання з розгляду стандартів…"
             {...register('title')}
-            className="w-full px-3 py-2 text-sm border-[1.5px] border-slate-200 rounded-[10px] focus:outline-none focus:border-brand"
+            className="w-full px-3 py-2 text-sm border-[1.5px] border-hairline rounded-[10px] focus:outline-none focus:border-brand"
           />
           {errors.title && <p className="text-xs text-red-600 mt-1">{errors.title.message}</p>}
         </div>
@@ -168,20 +168,20 @@ export function MeetingForm({ preselectedWgId }: { preselectedWgId?: string }) {
         {/* Date + Duration */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>
-            <label className="block text-[11px] font-semibold uppercase tracking-wide text-slate-500 mb-1.5">
+            <label className="block text-[11px] font-semibold uppercase tracking-wide text-mid mb-1.5">
               Дата та час *
             </label>
             <input
               type="datetime-local"
               {...register('startAt')}
-              className="w-full px-3 py-2 text-sm border-[1.5px] border-slate-200 rounded-[10px] focus:outline-none focus:border-brand"
+              className="w-full px-3 py-2 text-sm border-[1.5px] border-hairline rounded-[10px] focus:outline-none focus:border-brand"
             />
             {errors.startAt && (
               <p className="text-xs text-red-600 mt-1">{errors.startAt.message}</p>
             )}
           </div>
           <div>
-            <label className="block text-[11px] font-semibold uppercase tracking-wide text-slate-500 mb-1.5">
+            <label className="block text-[11px] font-semibold uppercase tracking-wide text-mid mb-1.5">
               Тривалість (хв)
             </label>
             <input
@@ -189,7 +189,7 @@ export function MeetingForm({ preselectedWgId }: { preselectedWgId?: string }) {
               min={15}
               max={480}
               {...register('durationMins')}
-              className="w-full px-3 py-2 text-sm border-[1.5px] border-slate-200 rounded-[10px] focus:outline-none focus:border-brand"
+              className="w-full px-3 py-2 text-sm border-[1.5px] border-hairline rounded-[10px] focus:outline-none focus:border-brand"
             />
           </div>
         </div>
@@ -197,12 +197,12 @@ export function MeetingForm({ preselectedWgId }: { preselectedWgId?: string }) {
         {/* Format + Location */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>
-            <label className="block text-[11px] font-semibold uppercase tracking-wide text-slate-500 mb-1.5">
+            <label className="block text-[11px] font-semibold uppercase tracking-wide text-mid mb-1.5">
               Формат
             </label>
             <select
               {...register('format')}
-              className="w-full px-3 py-2 text-sm border-[1.5px] border-slate-200 rounded-[10px] focus:outline-none focus:border-brand"
+              className="w-full px-3 py-2 text-sm border-[1.5px] border-hairline rounded-[10px] focus:outline-none focus:border-brand"
             >
               <option value="ONLINE">Онлайн</option>
               <option value="OFFLINE">Офлайн</option>
@@ -210,28 +210,28 @@ export function MeetingForm({ preselectedWgId }: { preselectedWgId?: string }) {
             </select>
           </div>
           <div>
-            <label className="block text-[11px] font-semibold uppercase tracking-wide text-slate-500 mb-1.5">
+            <label className="block text-[11px] font-semibold uppercase tracking-wide text-mid mb-1.5">
               Локація / Посилання
             </label>
             <input
               type="text"
               placeholder="https://meet… або адреса"
               {...register('location')}
-              className="w-full px-3 py-2 text-sm border-[1.5px] border-slate-200 rounded-[10px] focus:outline-none focus:border-brand"
+              className="w-full px-3 py-2 text-sm border-[1.5px] border-hairline rounded-[10px] focus:outline-none focus:border-brand"
             />
           </div>
         </div>
 
         {/* Agenda */}
         <div>
-          <label className="block text-[11px] font-semibold uppercase tracking-wide text-slate-500 mb-1.5">
+          <label className="block text-[11px] font-semibold uppercase tracking-wide text-mid mb-1.5">
             Порядок денний
           </label>
           <textarea
             rows={5}
             placeholder="1. Розгляд проекту ДСТУ 7.1…&#10;2. Обговорення зауважень…&#10;3. Голосування…"
             {...register('agendaText')}
-            className="w-full px-3 py-2 text-sm border-[1.5px] border-slate-200 rounded-[10px] focus:outline-none focus:border-brand resize-none"
+            className="w-full px-3 py-2 text-sm border-[1.5px] border-hairline rounded-[10px] focus:outline-none focus:border-brand resize-none"
           />
         </div>
 
@@ -239,10 +239,10 @@ export function MeetingForm({ preselectedWgId }: { preselectedWgId?: string }) {
           <p className="text-sm text-red-600 bg-red-50 rounded-[10px] px-3 py-2">{submitError}</p>
         )}
 
-        <div className="flex gap-3 pt-2 border-t border-slate-100">
+        <div className="flex gap-3 pt-2 border-t border-hairline">
           <Link
             href="/meetings"
-            className="flex-1 py-2 text-sm text-center border-[1.5px] border-slate-200 rounded-[10px] hover:bg-slate-50 transition-colors font-semibold text-slate-700"
+            className="flex-1 py-2 text-sm text-center border-[1.5px] border-hairline rounded-[10px] hover:bg-page transition-colors font-semibold text-ink"
           >
             Скасувати
           </Link>

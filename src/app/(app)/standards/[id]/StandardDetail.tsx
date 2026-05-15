@@ -84,9 +84,8 @@ export function StandardDetail({ id }: { id: string }) {
     onError: (e) => setEditError(e.message),
   });
 
-  if (isLoading) return <div className="py-16 text-center text-slate-400">Завантаження…</div>;
-  if (!standard)
-    return <div className="py-16 text-center text-slate-400">Стандарт не знайдено</div>;
+  if (isLoading) return <div className="py-16 text-center text-light">Завантаження…</div>;
+  if (!standard) return <div className="py-16 text-center text-light">Стандарт не знайдено</div>;
 
   const userCtx = session?.user
     ? {
@@ -119,16 +118,16 @@ export function StandardDetail({ id }: { id: string }) {
   return (
     <div className="space-y-6">
       {/* Breadcrumb */}
-      <nav className="flex items-center gap-2 text-sm text-slate-500">
+      <nav className="flex items-center gap-2 text-sm text-mid">
         <Link href="/standards" className="hover:text-blue-600">
           Стандарти
         </Link>
         <span>/</span>
-        <span className="font-mono text-slate-400">{standard.code}</span>
+        <span className="font-mono text-light">{standard.code}</span>
       </nav>
 
       {/* Header card */}
-      <div className="bg-white rounded-xl border border-slate-200 p-6">
+      <div className="bg-card rounded-xl border border-hairline p-6">
         <div className="flex items-start justify-between gap-4 flex-wrap">
           <div className="min-w-0">
             <div className="flex items-center gap-3 mb-2">
@@ -136,22 +135,20 @@ export function StandardDetail({ id }: { id: string }) {
                 className="inline-block w-3 h-3 rounded-full flex-shrink-0"
                 style={{ backgroundColor: standard.workingGroup.color }}
               />
-              <span className="text-sm font-medium text-slate-500">
-                {standard.workingGroup.code}
-              </span>
-              <span className="text-slate-300">·</span>
-              <span className="font-mono text-sm text-slate-400">{standard.code}</span>
+              <span className="text-sm font-medium text-mid">{standard.workingGroup.code}</span>
+              <span className="text-light">·</span>
+              <span className="font-mono text-sm text-light">{standard.code}</span>
             </div>
-            <h1 className="text-xl font-bold text-slate-900 mb-3">{standard.title}</h1>
+            <h1 className="text-xl font-bold text-ink mb-3">{standard.title}</h1>
             <div className="flex items-center gap-3 flex-wrap">
               <StatusBadge status={standard.status} />
               {standard.isoAnalog && (
-                <span className="text-xs text-slate-500 bg-slate-100 px-2 py-1 rounded-md">
+                <span className="text-xs text-mid bg-pill px-2 py-1 rounded-md">
                   ISO: {standard.isoAnalog}
                 </span>
               )}
               {standard.category && (
-                <span className="text-xs text-slate-500 bg-slate-100 px-2 py-1 rounded-md">
+                <span className="text-xs text-mid bg-pill px-2 py-1 rounded-md">
                   {standard.category}
                 </span>
               )}
@@ -189,7 +186,7 @@ export function StandardDetail({ id }: { id: string }) {
                   key={next}
                   onClick={() => changeStatus.mutate({ id, status: next })}
                   disabled={changeStatus.isPending}
-                  className="px-3 py-2 text-xs font-medium rounded-lg border border-slate-200 hover:bg-slate-50 text-slate-700 transition-colors disabled:opacity-50"
+                  className="px-3 py-2 text-xs font-medium rounded-lg border border-hairline hover:bg-page text-ink transition-colors disabled:opacity-50"
                 >
                   → {STATUS_LABELS[next]}
                 </button>
@@ -206,12 +203,12 @@ export function StandardDetail({ id }: { id: string }) {
         </div>
 
         {/* Progress bar */}
-        <div className="mt-5 pt-4 border-t border-slate-100">
+        <div className="mt-5 pt-4 border-t border-hairline">
           <div className="flex items-center justify-between mb-1.5">
-            <span className="text-xs text-slate-500">Прогрес</span>
-            <span className="text-xs font-medium text-slate-700">{standard.progress}%</span>
+            <span className="text-xs text-mid">Прогрес</span>
+            <span className="text-xs font-medium text-ink">{standard.progress}%</span>
           </div>
-          <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
+          <div className="h-2 bg-pill rounded-full overflow-hidden">
             <div
               className="h-full bg-blue-500 rounded-full transition-all"
               style={{ width: `${standard.progress}%` }}
@@ -223,38 +220,36 @@ export function StandardDetail({ id }: { id: string }) {
         <div className="mt-4 flex gap-6 flex-wrap text-sm">
           {standard.responsible && (
             <div className="flex items-center gap-2">
-              <span className="text-slate-400 text-xs">Відповідальний:</span>
+              <span className="text-light text-xs">Відповідальний:</span>
               <Avatar
                 name={standard.responsible.name}
                 avatarUrl={standard.responsible.avatarUrl}
                 size="xs"
               />
-              <span className="text-slate-700 text-xs">{standard.responsible.name}</span>
+              <span className="text-ink text-xs">{standard.responsible.name}</span>
             </div>
           )}
           {standard.deadline && (
             <div className="text-xs">
-              <span className="text-slate-400">Дедлайн: </span>
+              <span className="text-light">Дедлайн: </span>
               <span
                 className={
                   new Date(standard.deadline) < new Date() &&
                   !['ADOPTED', 'ARCHIVED'].includes(standard.status)
                     ? 'text-red-600 font-medium'
-                    : 'text-slate-700'
+                    : 'text-ink'
                 }
               >
                 {formatDate(standard.deadline)}
               </span>
             </div>
           )}
-          <div className="text-xs text-slate-400">
-            Оновлено: {formatDateTime(standard.updatedAt)}
-          </div>
+          <div className="text-xs text-light">Оновлено: {formatDateTime(standard.updatedAt)}</div>
         </div>
       </div>
 
       {/* Tabs */}
-      <div className="border-b border-slate-200">
+      <div className="border-b border-hairline">
         <nav className="flex gap-0 -mb-px">
           {TABS.map((tab) => (
             <button
@@ -263,12 +258,12 @@ export function StandardDetail({ id }: { id: string }) {
               className={`px-5 py-3 text-sm font-medium border-b-2 transition-colors ${
                 activeTab === tab.id
                   ? 'border-blue-600 text-blue-700'
-                  : 'border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300'
+                  : 'border-transparent text-mid hover:text-ink hover:border-slate-300'
               }`}
             >
               {tab.label}
               {tab.id === 'documents' && standard.documents.length > 0 && (
-                <span className="ml-1.5 text-xs bg-slate-100 text-slate-500 rounded-full px-1.5 py-0.5">
+                <span className="ml-1.5 text-xs bg-pill text-mid rounded-full px-1.5 py-0.5">
                   {standard.documents.length}
                 </span>
               )}
@@ -287,22 +282,22 @@ export function StandardDetail({ id }: { id: string }) {
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           <div className="lg:col-span-2 space-y-4">
             {standard.description && (
-              <div className="bg-white rounded-xl border border-slate-200 p-5">
-                <h3 className="font-semibold text-slate-800 mb-3">Опис</h3>
-                <p className="text-sm text-slate-600 leading-relaxed whitespace-pre-line">
+              <div className="bg-card rounded-xl border border-hairline p-5">
+                <h3 className="font-semibold text-ink mb-3">Опис</h3>
+                <p className="text-sm text-mid leading-relaxed whitespace-pre-line">
                   {standard.description}
                 </p>
               </div>
             )}
-            <div className="bg-white rounded-xl border border-slate-200 p-5">
-              <h3 className="font-semibold text-slate-800 mb-3">Учасники РГ</h3>
+            <div className="bg-card rounded-xl border border-hairline p-5">
+              <h3 className="font-semibold text-ink mb-3">Учасники РГ</h3>
               <div className="space-y-2">
                 {standard.workingGroup.members.map((m) => (
                   <div key={m.userId} className="flex items-center gap-3">
                     <Avatar name={m.user.name} avatarUrl={m.user.avatarUrl} size="sm" />
                     <div>
-                      <p className="text-sm font-medium text-slate-800">{m.user.name}</p>
-                      <p className="text-xs text-slate-400">{m.role}</p>
+                      <p className="text-sm font-medium text-ink">{m.user.name}</p>
+                      <p className="text-xs text-light">{m.role}</p>
                     </div>
                   </div>
                 ))}
@@ -310,23 +305,23 @@ export function StandardDetail({ id }: { id: string }) {
             </div>
           </div>
           <div className="space-y-4">
-            <div className="bg-white rounded-xl border border-slate-200 p-5">
-              <h3 className="font-semibold text-slate-800 mb-3">Статистика</h3>
+            <div className="bg-card rounded-xl border border-hairline p-5">
+              <h3 className="font-semibold text-ink mb-3">Статистика</h3>
               <dl className="space-y-2 text-sm">
                 <div className="flex justify-between">
-                  <dt className="text-slate-500">Документів</dt>
+                  <dt className="text-mid">Документів</dt>
                   <dd className="font-medium">{standard.documents?.length ?? 0}</dd>
                 </div>
                 <div className="flex justify-between">
-                  <dt className="text-slate-500">Коментарів</dt>
+                  <dt className="text-mid">Коментарів</dt>
                   <dd className="font-medium">{standard.comments?.length ?? 0}</dd>
                 </div>
                 <div className="flex justify-between">
-                  <dt className="text-slate-500">Завдань</dt>
+                  <dt className="text-mid">Завдань</dt>
                   <dd className="font-medium">{standard.tasks?.length ?? 0}</dd>
                 </div>
                 <div className="flex justify-between">
-                  <dt className="text-slate-500">Голосувань</dt>
+                  <dt className="text-mid">Голосувань</dt>
                   <dd className="font-medium">{standard.votes?.length ?? 0}</dd>
                 </div>
               </dl>
@@ -336,9 +331,9 @@ export function StandardDetail({ id }: { id: string }) {
       )}
 
       {activeTab === 'documents' && (
-        <div className="bg-white rounded-xl border border-slate-200">
-          <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between">
-            <h3 className="font-semibold text-slate-800">Документи</h3>
+        <div className="bg-card rounded-xl border border-hairline">
+          <div className="px-5 py-4 border-b border-hairline flex items-center justify-between">
+            <h3 className="font-semibold text-ink">Документи</h3>
             {canUpload && (
               <Link
                 href={`/standards/${id}/upload`}
@@ -349,9 +344,9 @@ export function StandardDetail({ id }: { id: string }) {
             )}
           </div>
           {standard.documents.length === 0 ? (
-            <div className="py-12 text-center text-slate-400 text-sm">Документів немає</div>
+            <div className="py-12 text-center text-light text-sm">Документів немає</div>
           ) : (
-            <div className="divide-y divide-slate-50">
+            <div className="divide-y divide-hairline">
               {standard.documents.map((doc) => (
                 <div key={doc.id} className="flex items-center gap-4 px-5 py-3.5">
                   <div className="w-8 h-8 bg-blue-50 rounded-lg flex items-center justify-center flex-shrink-0">
@@ -360,8 +355,8 @@ export function StandardDetail({ id }: { id: string }) {
                     </span>
                   </div>
                   <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium text-slate-800 truncate">{doc.filename}</p>
-                    <p className="text-xs text-slate-400">
+                    <p className="text-sm font-medium text-ink truncate">{doc.filename}</p>
+                    <p className="text-xs text-light">
                       {doc.type} · v{doc.version} · {formatBytes(doc.sizeBytes)} ·{' '}
                       {doc.uploadedBy.name}
                     </p>
@@ -383,7 +378,7 @@ export function StandardDetail({ id }: { id: string }) {
         <div className="space-y-4">
           {/* Current voting */}
           {currentVoting && (
-            <div className="bg-white rounded-xl border border-amber-200 p-5">
+            <div className="bg-card rounded-xl border border-amber-200 p-5">
               <div className="flex items-start justify-between mb-4">
                 <div>
                   <div className="flex items-center gap-2 mb-1">
@@ -392,9 +387,9 @@ export function StandardDetail({ id }: { id: string }) {
                       Активне голосування
                     </span>
                   </div>
-                  <h3 className="font-semibold text-slate-800">{currentVoting.title}</h3>
+                  <h3 className="font-semibold text-ink">{currentVoting.title}</h3>
                   {currentVoting.deadline && (
-                    <p className="text-xs text-slate-500 mt-1">
+                    <p className="text-xs text-mid mt-1">
                       Дедлайн: {formatDateTime(currentVoting.deadline)}
                     </p>
                   )}
@@ -403,7 +398,7 @@ export function StandardDetail({ id }: { id: string }) {
                   <button
                     onClick={() => closeVoting.mutate({ votingId: currentVoting.id })}
                     disabled={closeVoting.isPending}
-                    className="text-xs px-3 py-1.5 border border-slate-200 rounded-lg text-slate-600 hover:bg-slate-50 disabled:opacity-50"
+                    className="text-xs px-3 py-1.5 border border-hairline rounded-lg text-mid hover:bg-page disabled:opacity-50"
                   >
                     Закрити голосування
                   </button>
@@ -412,7 +407,7 @@ export function StandardDetail({ id }: { id: string }) {
 
               {/* Results bar */}
               <div className="mb-4">
-                <div className="flex gap-1 h-3 rounded-full overflow-hidden bg-slate-100">
+                <div className="flex gap-1 h-3 rounded-full overflow-hidden bg-pill">
                   {totalVotes > 0 && (
                     <>
                       <div
@@ -433,8 +428,8 @@ export function StandardDetail({ id }: { id: string }) {
                 <div className="flex gap-4 mt-2 text-xs">
                   <span className="text-green-700">✓ За: {forVotes}</span>
                   <span className="text-red-700">✗ Проти: {againstVotes}</span>
-                  <span className="text-slate-500">○ Утрим.: {abstainVotes}</span>
-                  <span className="text-slate-400 ml-auto">Всього: {totalVotes}</span>
+                  <span className="text-mid">○ Утрим.: {abstainVotes}</span>
+                  <span className="text-light ml-auto">Всього: {totalVotes}</span>
                 </div>
               </div>
 
@@ -453,7 +448,7 @@ export function StandardDetail({ id }: { id: string }) {
                             : choice === 'AGAINST'
                               ? 'bg-red-600 text-white border-red-600'
                               : 'bg-slate-600 text-white border-slate-600'
-                          : 'border-slate-200 text-slate-600 hover:bg-slate-50'
+                          : 'border-hairline text-mid hover:bg-page'
                       } disabled:opacity-50`}
                     >
                       {choice === 'FOR'
@@ -470,11 +465,11 @@ export function StandardDetail({ id }: { id: string }) {
 
           {/* Voting history */}
           {votingHistory && votingHistory.filter((v) => v.status === 'CLOSED').length > 0 && (
-            <div className="bg-white rounded-xl border border-slate-200">
-              <div className="px-5 py-4 border-b border-slate-100">
-                <h3 className="font-semibold text-slate-800">Архів голосувань</h3>
+            <div className="bg-card rounded-xl border border-hairline">
+              <div className="px-5 py-4 border-b border-hairline">
+                <h3 className="font-semibold text-ink">Архів голосувань</h3>
               </div>
-              <div className="divide-y divide-slate-50">
+              <div className="divide-y divide-hairline">
                 {votingHistory
                   .filter((v) => v.status === 'CLOSED')
                   .map((v) => {
@@ -490,9 +485,9 @@ export function StandardDetail({ id }: { id: string }) {
                           >
                             {passed ? 'Прийнято' : 'Відхилено'}
                           </span>
-                          <span className="text-sm font-medium text-slate-800">{v.title}</span>
+                          <span className="text-sm font-medium text-ink">{v.title}</span>
                         </div>
-                        <p className="text-xs text-slate-400">
+                        <p className="text-xs text-light">
                           За: {f} / Проти: {a} / Утрим:{' '}
                           {v.votes.filter((x) => x.choice === 'ABSTAIN').length} ·{' '}
                           {v.closedAt ? formatDate(v.closedAt) : ''}
@@ -505,7 +500,7 @@ export function StandardDetail({ id }: { id: string }) {
           )}
 
           {!currentVoting && (!votingHistory || votingHistory.length === 0) && (
-            <div className="bg-white rounded-xl border border-slate-200 py-12 text-center text-slate-400 text-sm">
+            <div className="bg-card rounded-xl border border-hairline py-12 text-center text-light text-sm">
               Голосувань не проводилось
             </div>
           )}
@@ -514,11 +509,9 @@ export function StandardDetail({ id }: { id: string }) {
 
       {activeTab === 'tasks' && (
         <div className="space-y-4">
-          <div className="bg-white rounded-xl border border-slate-200">
-            <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between">
-              <h3 className="font-semibold text-slate-800">
-                Відкриті завдання ({openTasks.length})
-              </h3>
+          <div className="bg-card rounded-xl border border-hairline">
+            <div className="px-5 py-4 border-b border-hairline flex items-center justify-between">
+              <h3 className="font-semibold text-ink">Відкриті завдання ({openTasks.length})</h3>
               <Link
                 href={`/standards/${id}/tasks/new`}
                 className="text-xs text-blue-700 hover:underline"
@@ -527,9 +520,9 @@ export function StandardDetail({ id }: { id: string }) {
               </Link>
             </div>
             {openTasks.length === 0 ? (
-              <div className="py-10 text-center text-slate-400 text-sm">Завдань немає</div>
+              <div className="py-10 text-center text-light text-sm">Завдань немає</div>
             ) : (
-              <div className="divide-y divide-slate-50">
+              <div className="divide-y divide-hairline">
                 {openTasks.map((task) => (
                   <div key={task.id} className="flex items-center gap-4 px-5 py-3.5">
                     <div
@@ -542,8 +535,8 @@ export function StandardDetail({ id }: { id: string }) {
                       }`}
                     />
                     <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium text-slate-800">{task.title}</p>
-                      <p className="text-xs text-slate-400">
+                      <p className="text-sm font-medium text-ink">{task.title}</p>
+                      <p className="text-xs text-light">
                         {task.status === 'IN_PROGRESS' ? 'В роботі' : 'Відкрито'}
                         {task.dueDate && ` · до ${formatDate(task.dueDate)}`}
                       </p>
@@ -561,15 +554,15 @@ export function StandardDetail({ id }: { id: string }) {
             )}
           </div>
           {doneTasks.length > 0 && (
-            <div className="bg-white rounded-xl border border-slate-200">
-              <div className="px-5 py-4 border-b border-slate-100">
-                <h3 className="font-semibold text-slate-800">Виконані ({doneTasks.length})</h3>
+            <div className="bg-card rounded-xl border border-hairline">
+              <div className="px-5 py-4 border-b border-hairline">
+                <h3 className="font-semibold text-ink">Виконані ({doneTasks.length})</h3>
               </div>
-              <div className="divide-y divide-slate-50">
+              <div className="divide-y divide-hairline">
                 {doneTasks.map((task) => (
                   <div key={task.id} className="flex items-center gap-4 px-5 py-3 opacity-60">
                     <span className="text-green-600 text-xs">✓</span>
-                    <p className="text-sm text-slate-600 line-through">{task.title}</p>
+                    <p className="text-sm text-mid line-through">{task.title}</p>
                   </div>
                 ))}
               </div>
@@ -581,18 +574,18 @@ export function StandardDetail({ id }: { id: string }) {
       {activeTab === 'history' && (
         <div className="space-y-5">
           <ActivityFeed entity="Standard" entityId={id} title="Журнал змін (всі дії)" />
-          <div className="bg-white rounded-xl border border-slate-200">
-            <div className="px-5 py-4 border-b border-slate-100">
-              <h3 className="font-semibold text-slate-800">Історія статусів</h3>
+          <div className="bg-card rounded-xl border border-hairline">
+            <div className="px-5 py-4 border-b border-hairline">
+              <h3 className="font-semibold text-ink">Історія статусів</h3>
             </div>
             {standard.statusHistory.length === 0 ? (
-              <div className="py-10 text-center text-slate-400 text-sm">Історії немає</div>
+              <div className="py-10 text-center text-light text-sm">Історії немає</div>
             ) : (
               <div className="px-5 py-4 space-y-4">
                 {standard.statusHistory.map((h, i) => (
                   <div key={h.id} className="relative flex gap-4">
                     {i < standard.statusHistory.length - 1 && (
-                      <div className="absolute left-3 top-6 bottom-0 w-px bg-slate-100" />
+                      <div className="absolute left-3 top-6 bottom-0 w-px bg-pill" />
                     )}
                     <div className="w-6 h-6 rounded-full bg-blue-100 flex items-center justify-center flex-shrink-0 mt-0.5">
                       <div className="w-2 h-2 rounded-full bg-blue-500" />
@@ -602,13 +595,13 @@ export function StandardDetail({ id }: { id: string }) {
                         {h.fromStatus ? (
                           <>
                             <StatusBadge status={h.fromStatus} size="sm" />
-                            <span className="text-slate-400 text-xs">→</span>
+                            <span className="text-light text-xs">→</span>
                           </>
                         ) : null}
                         <StatusBadge status={h.toStatus} size="sm" />
                       </div>
-                      {h.note && <p className="text-sm text-slate-600 mt-1">{h.note}</p>}
-                      <p className="text-xs text-slate-400 mt-1">{formatDateTime(h.changedAt)}</p>
+                      {h.note && <p className="text-sm text-mid mt-1">{h.note}</p>}
+                      <p className="text-xs text-light mt-1">{formatDateTime(h.changedAt)}</p>
                     </div>
                   </div>
                 ))}
@@ -702,7 +695,7 @@ export function StandardDetail({ id }: { id: string }) {
           {editError && (
             <p className="text-sm text-red-600 bg-red-50 rounded-[10px] px-3 py-2">{editError}</p>
           )}
-          <div className="flex gap-3 pt-2 border-t border-slate-100">
+          <div className="flex gap-3 pt-2 border-t border-hairline">
             <button
               type="button"
               onClick={() => setEditOpen(false)}

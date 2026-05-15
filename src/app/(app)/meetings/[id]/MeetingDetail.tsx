@@ -23,11 +23,11 @@ const STATUS_LABELS: Record<string, { label: string; cls: string }> = {
   PLANNED: { label: 'Заплановано', cls: 'bg-blue-50 text-blue-700' },
   IN_PROGRESS: { label: 'Проводиться', cls: 'bg-amber-50 text-amber-700' },
   COMPLETED: { label: 'Завершено', cls: 'bg-green-50 text-green-700' },
-  CANCELLED: { label: 'Скасовано', cls: 'bg-slate-100 text-slate-500' },
+  CANCELLED: { label: 'Скасовано', cls: 'bg-pill text-mid' },
 };
 
 const ATTENDANCE_LABELS: Record<string, { label: string; cls: string }> = {
-  PENDING: { label: 'Очікується', cls: 'text-slate-400' },
+  PENDING: { label: 'Очікується', cls: 'text-light' },
   CONFIRMED: { label: 'Підтверджено', cls: 'text-green-600' },
   DECLINED: { label: 'Відмовлено', cls: 'text-red-500' },
 };
@@ -86,10 +86,9 @@ export function MeetingDetail({ id }: Props) {
 
   useEscape(showMinutes, () => setShowMinutes(false));
 
-  if (isLoading)
-    return <div className="py-16 text-center text-slate-400 text-sm">Завантаження…</div>;
+  if (isLoading) return <div className="py-16 text-center text-light text-sm">Завантаження…</div>;
   if (!meeting)
-    return <div className="py-16 text-center text-slate-400 text-sm">Засідання не знайдено</div>;
+    return <div className="py-16 text-center text-light text-sm">Засідання не знайдено</div>;
 
   const userCtx = session
     ? {
@@ -113,8 +112,8 @@ export function MeetingDetail({ id }: Props) {
       {/* Breadcrumb + header */}
       <div className="flex items-start justify-between">
         <div className="space-y-1">
-          <div className="flex items-center gap-2 text-sm text-slate-400">
-            <Link href="/meetings" className="hover:text-slate-600 transition-colors">
+          <div className="flex items-center gap-2 text-sm text-light">
+            <Link href="/meetings" className="hover:text-mid transition-colors">
               ← Засідання
             </Link>
             <span>/</span>
@@ -123,15 +122,12 @@ export function MeetingDetail({ id }: Props) {
                 className="w-2.5 h-2.5 rounded-full"
                 style={{ backgroundColor: meeting.workingGroup.color }}
               />
-              <Link
-                href={`/working-groups/${wgId}`}
-                className="hover:text-slate-600 transition-colors"
-              >
+              <Link href={`/working-groups/${wgId}`} className="hover:text-mid transition-colors">
                 {meeting.workingGroup.code}
               </Link>
             </span>
           </div>
-          <h1 className="text-xl font-bold text-slate-900">{meeting.title}</h1>
+          <h1 className="text-xl font-bold text-ink">{meeting.title}</h1>
         </div>
         <span className={`text-xs px-3 py-1.5 rounded-full font-medium ${statusInfo.cls}`}>
           {statusInfo.label}
@@ -142,40 +138,40 @@ export function MeetingDetail({ id }: Props) {
         {/* Left: main info */}
         <div className="lg:col-span-2 space-y-5">
           {/* Info card */}
-          <div className="bg-white rounded-xl border border-slate-200 p-5">
+          <div className="bg-card rounded-xl border border-hairline p-5">
             <div className="grid grid-cols-2 gap-4 text-sm">
               <div>
-                <p className="text-xs text-slate-400 mb-1">Дата та час</p>
-                <p className="font-medium text-slate-800">{formatDate(meeting.startAt)}</p>
+                <p className="text-xs text-light mb-1">Дата та час</p>
+                <p className="font-medium text-ink">{formatDate(meeting.startAt)}</p>
               </div>
               <div>
-                <p className="text-xs text-slate-400 mb-1">Тривалість</p>
-                <p className="font-medium text-slate-800">{meeting.durationMins} хв</p>
+                <p className="text-xs text-light mb-1">Тривалість</p>
+                <p className="font-medium text-ink">{meeting.durationMins} хв</p>
               </div>
               <div>
-                <p className="text-xs text-slate-400 mb-1">Формат</p>
-                <p className="font-medium text-slate-800">
+                <p className="text-xs text-light mb-1">Формат</p>
+                <p className="font-medium text-ink">
                   {FORMAT_LABELS[meeting.format] ?? meeting.format}
                 </p>
               </div>
               {meeting.location && (
                 <div>
-                  <p className="text-xs text-slate-400 mb-1">Місце / Посилання</p>
-                  <p className="font-medium text-slate-800 break-all">{meeting.location}</p>
+                  <p className="text-xs text-light mb-1">Місце / Посилання</p>
+                  <p className="font-medium text-ink break-all">{meeting.location}</p>
                 </div>
               )}
               <div>
-                <p className="text-xs text-slate-400 mb-1">Організатор</p>
-                <p className="font-medium text-slate-800">{meeting.createdBy.name}</p>
+                <p className="text-xs text-light mb-1">Організатор</p>
+                <p className="font-medium text-ink">{meeting.createdBy.name}</p>
               </div>
             </div>
           </div>
 
           {/* Agenda */}
           {meeting.agendaText && (
-            <div className="bg-white rounded-xl border border-slate-200 p-5">
-              <h3 className="text-sm font-semibold text-slate-700 mb-3">Порядок денний</h3>
-              <pre className="text-sm text-slate-600 leading-relaxed whitespace-pre-wrap font-sans">
+            <div className="bg-card rounded-xl border border-hairline p-5">
+              <h3 className="text-sm font-semibold text-ink mb-3">Порядок денний</h3>
+              <pre className="text-sm text-mid leading-relaxed whitespace-pre-wrap font-sans">
                 {meeting.agendaText}
               </pre>
             </div>
@@ -183,9 +179,9 @@ export function MeetingDetail({ id }: Props) {
 
           {/* Minutes */}
           {(meeting.minutesText != null || canManage) && (
-            <div className="bg-white rounded-xl border border-slate-200 p-5">
+            <div className="bg-card rounded-xl border border-hairline p-5">
               <div className="flex items-center justify-between mb-3">
-                <h3 className="text-sm font-semibold text-slate-700">Протокол</h3>
+                <h3 className="text-sm font-semibold text-ink">Протокол</h3>
                 {canManage && meeting.status !== 'CANCELLED' && (
                   <button
                     onClick={() => {
@@ -199,19 +195,19 @@ export function MeetingDetail({ id }: Props) {
                 )}
               </div>
               {meeting.minutesText ? (
-                <pre className="text-sm text-slate-600 leading-relaxed whitespace-pre-wrap font-sans">
+                <pre className="text-sm text-mid leading-relaxed whitespace-pre-wrap font-sans">
                   {meeting.minutesText}
                 </pre>
               ) : (
-                <p className="text-sm text-slate-400">Протокол ще не додано</p>
+                <p className="text-sm text-light">Протокол ще не додано</p>
               )}
             </div>
           )}
 
           {/* Status controls */}
           {canManage && meeting.status !== 'CANCELLED' && (
-            <div className="bg-white rounded-xl border border-slate-200 p-5">
-              <h3 className="text-sm font-semibold text-slate-700 mb-3">Управління статусом</h3>
+            <div className="bg-card rounded-xl border border-hairline p-5">
+              <h3 className="text-sm font-semibold text-ink mb-3">Управління статусом</h3>
               <div className="flex gap-2 flex-wrap">
                 <button
                   onClick={() => {
@@ -271,15 +267,15 @@ export function MeetingDetail({ id }: Props) {
         <div className="space-y-5">
           {/* My attendance */}
           {myAttendance && meeting.status === 'PLANNED' && (
-            <div className="bg-white rounded-xl border border-slate-200 p-5">
-              <h3 className="text-sm font-semibold text-slate-700 mb-3">Ваша участь</h3>
+            <div className="bg-card rounded-xl border border-hairline p-5">
+              <h3 className="text-sm font-semibold text-ink mb-3">Ваша участь</h3>
               <div className="flex gap-2">
                 <button
                   onClick={() => confirmMutation.mutate({ meetingId: id, status: 'CONFIRMED' })}
                   className={`flex-1 py-2 text-xs font-medium rounded-lg transition-colors ${
                     myAttendance.status === 'CONFIRMED'
                       ? 'bg-green-600 text-white'
-                      : 'border border-slate-200 text-slate-600 hover:bg-green-50 hover:border-green-300 hover:text-green-700'
+                      : 'border border-hairline text-mid hover:bg-green-50 hover:border-green-300 hover:text-green-700'
                   }`}
                 >
                   ✓ Буду
@@ -289,7 +285,7 @@ export function MeetingDetail({ id }: Props) {
                   className={`flex-1 py-2 text-xs font-medium rounded-lg transition-colors ${
                     myAttendance.status === 'DECLINED'
                       ? 'bg-red-500 text-white'
-                      : 'border border-slate-200 text-slate-600 hover:bg-red-50 hover:border-red-300 hover:text-red-600'
+                      : 'border border-hairline text-mid hover:bg-red-50 hover:border-red-300 hover:text-red-600'
                   }`}
                 >
                   ✗ Не буду
@@ -299,20 +295,20 @@ export function MeetingDetail({ id }: Props) {
           )}
 
           {/* Attendees list */}
-          <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
-            <div className="px-5 py-3.5 border-b border-slate-100">
-              <h3 className="text-sm font-semibold text-slate-700">
+          <div className="bg-card rounded-xl border border-hairline overflow-hidden">
+            <div className="px-5 py-3.5 border-b border-hairline">
+              <h3 className="text-sm font-semibold text-ink">
                 Учасники ({meeting.attendances.length})
               </h3>
             </div>
-            <div className="divide-y divide-slate-100">
+            <div className="divide-y divide-hairline">
               {meeting.attendances.map((a) => {
                 const att = ATTENDANCE_LABELS[a.status] ?? { label: a.status, cls: '' };
                 return (
                   <div key={a.user.id} className="flex items-center justify-between px-5 py-2.5">
                     <div className="flex items-center gap-2">
                       <Avatar name={a.user.name} size="xs" />
-                      <span className="text-sm text-slate-700">{a.user.name}</span>
+                      <span className="text-sm text-ink">{a.user.name}</span>
                     </div>
                     <span className={`text-xs ${att.cls}`}>{att.label}</span>
                   </div>
@@ -328,19 +324,19 @@ export function MeetingDetail({ id }: Props) {
       {/* Minutes modal */}
       {showMinutes && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
-          <div className="bg-white rounded-xl shadow-xl w-full max-w-2xl mx-4 p-6">
-            <h2 className="text-lg font-semibold text-slate-800 mb-4">Протокол засідання</h2>
+          <div className="bg-card rounded-xl shadow-xl w-full max-w-2xl mx-4 p-6">
+            <h2 className="text-lg font-semibold text-ink mb-4">Протокол засідання</h2>
             <textarea
               rows={12}
               placeholder="Текст протоколу…"
               value={minutesText}
               onChange={(e) => setMinutesText(e.target.value)}
-              className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
+              className="w-full px-3 py-2 text-sm border border-hairline rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
             />
             <div className="flex gap-3 mt-4">
               <button
                 onClick={() => setShowMinutes(false)}
-                className="flex-1 py-2 text-sm border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors"
+                className="flex-1 py-2 text-sm border border-hairline rounded-lg hover:bg-page transition-colors"
               >
                 Скасувати
               </button>
@@ -434,7 +430,7 @@ export function MeetingDetail({ id }: Props) {
           {editError && (
             <p className="text-sm text-red-600 bg-red-50 rounded-[10px] px-3 py-2">{editError}</p>
           )}
-          <div className="flex gap-3 pt-2 border-t border-slate-100">
+          <div className="flex gap-3 pt-2 border-t border-hairline">
             <button
               type="button"
               onClick={() => setEditOpen(false)}

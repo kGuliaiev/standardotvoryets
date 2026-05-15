@@ -250,7 +250,7 @@ export function MeetingsList() {
               key={v}
               onClick={() => setView(v)}
               className={`px-3 py-1 text-xs font-semibold rounded-[8px] transition-colors ${
-                view === v ? 'bg-white text-ink shadow-sm' : 'text-mid hover:text-ink'
+                view === v ? 'bg-card text-ink shadow-sm' : 'text-mid hover:text-ink'
               }`}
             >
               {label}
