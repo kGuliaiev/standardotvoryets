@@ -4,6 +4,8 @@ import type { GlobalRole, WorkingGroupRole } from '@prisma/client';
 import { createTRPCRouter, protectedProcedure } from '@/server/trpc';
 import { can } from '@/lib/rbac';
 import { logActivity } from '@/server/audit';
+import { sendEmail, templateInvite } from '@/server/email';
+import { env } from '@/lib/env';
 import bcrypt from 'bcryptjs';
 import { addDays } from 'date-fns';
 
@@ -138,10 +140,47 @@ export const userRouter = createTRPCRouter({
         },
       });
 
-      // TODO: Enqueue email job in TASK-006
-      // await emailQueue.add('INVITE_EMAIL', { token: token.token, email: input.email });
+      // Send invite email (no-op if RESEND_API_KEY unset)
+      const wg = await ctx.db.workingGroup.findUniqueOrThrow({
+        where: { id: input.workingGroupId },
+        select: { name: true },
+      });
+      const inviter = await ctx.db.user.findUniqueOrThrow({
+        where: { id: ctx.session.user.id },
+        select: { name: true },
+      });
+      const inviteUrl = `${env.NEXT_PUBLIC_APP_URL}/invite/${token.token}`;
+      const emailResult = await sendEmail({
+        to: input.email,
+        subject: `Запрошення до робочої групи "${wg.name}"`,
+        html: templateInvite({
+          inviteUrl,
+          workingGroupName: wg.name,
+          inviterName: inviter.name,
+        }),
+      });
 
-      return { token: token.token };
+      return { token: token.token, inviteUrl, emailSent: emailResult.sent };
+    }),
+
+  // ── getInvite (public read — for /invite/[token] page) ───────────────
+  getInvite: protectedProcedure
+    .input(z.object({ token: z.string() }))
+    .query(async ({ ctx, input }) => {
+      const t = await ctx.db.inviteToken.findUnique({
+        where: { token: input.token },
+        include: {
+          workingGroup: { select: { id: true, code: true, name: true, color: true } },
+        },
+      });
+      if (!t) return null;
+      return {
+        email: t.email,
+        role: t.role,
+        workingGroup: t.workingGroup,
+        expiresAt: t.expiresAt,
+        used: !!t.usedAt,
+      };
     }),
 
   // ── acceptInvite ─────────────────────────────────────────────────────
