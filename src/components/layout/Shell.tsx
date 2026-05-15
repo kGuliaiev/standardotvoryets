@@ -9,7 +9,7 @@ interface ShellProps {
 
 export function Shell({ children, session }: ShellProps) {
   return (
-    <div className="flex h-screen bg-slate-50 overflow-hidden">
+    <div className="flex h-screen bg-page overflow-hidden">
       {/* Sidebar */}
       <Sidebar session={session} />
 

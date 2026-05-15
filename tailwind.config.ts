@@ -10,29 +10,19 @@ const config: Config = {
   theme: {
     extend: {
       colors: {
-        navy: {
-          DEFAULT: '#0F2B6B',
-          50: '#EBF0FA',
-          100: '#C3D0F0',
-          600: '#1A3A8F',
-          700: '#0F2B6B',
-          900: '#091A44',
-        },
+        // Token-driven (auto-switch via CSS vars defined in globals.css)
+        page: 'var(--c-page)',
+        card: 'var(--c-card)',
+        hairline: 'var(--c-hairline)',
+        pill: 'var(--c-pill)',
+        ink: 'var(--c-ink)',
+        mid: 'var(--c-mid)',
+        light: 'var(--c-light)',
+        navy: 'var(--c-navy)',
         brand: {
-          DEFAULT: '#1A56DB',
-          soft: '#EEF4FF',
-          50: '#EEF4FF',
-          100: '#DBEAFE',
-          500: '#3B82F6',
-          600: '#1A56DB',
-          700: '#1D4ED8',
+          DEFAULT: 'var(--c-brand)',
+          soft: 'var(--c-brand-soft)',
         },
-        ink: '#1A2540',
-        mid: '#4B5880',
-        light: '#8A96B0',
-        pill: '#EDF0F7',
-        page: '#F5F7FA',
-        hairline: '#E5EAF2',
       },
       fontFamily: {
         sans: ['Inter', 'system-ui', 'sans-serif'],

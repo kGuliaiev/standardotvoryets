@@ -1,10 +1,11 @@
 'use client';
 
 import { type Session } from 'next-auth';
-import { Bell, Search } from 'lucide-react';
+import { Bell, Search, Sun, Moon } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { trpc } from '@/lib/trpc/client';
+import { useTheme } from '@/components/providers/ThemeProvider';
 
 interface TopbarProps {
   session: Session;
@@ -22,6 +23,7 @@ const PAGE_TITLES: Record<string, string> = {
 
 export function Topbar({ session: _session }: TopbarProps) {
   const pathname = usePathname();
+  const { theme, toggle } = useTheme();
   const { data: unreadCount } = trpc.notification.unreadCount.useQuery(undefined, {
     refetchInterval: 60_000,
   });
@@ -35,7 +37,7 @@ export function Topbar({ session: _session }: TopbarProps) {
   const hasUnread = (unreadCount ?? 0) > 0;
 
   return (
-    <header className="h-[54px] bg-white border-b border-hairline flex items-center gap-4 px-6 shrink-0">
+    <header className="h-[54px] bg-card border-b border-hairline flex items-center gap-4 px-6 shrink-0">
       {/* Page title */}
       <h1 className="text-[15px] font-bold text-navy min-w-0 truncate">{title}</h1>
 
@@ -50,6 +52,15 @@ export function Topbar({ session: _session }: TopbarProps) {
           className="pl-9 pr-4 py-1.5 bg-page border border-hairline rounded-[10px] text-sm text-ink placeholder:text-light focus:outline-none focus:border-brand transition-all w-60"
         />
       </div>
+
+      {/* Theme toggle */}
+      <button
+        onClick={toggle}
+        className="w-[34px] h-[34px] flex items-center justify-center text-mid hover:text-ink hover:bg-pill rounded-[10px] transition-colors"
+        title={theme === 'dark' ? 'Світла тема' : 'Темна тема'}
+      >
+        {theme === 'dark' ? <Sun size={18} /> : <Moon size={18} />}
+      </button>
 
       {/* Notifications bell */}
       <Link

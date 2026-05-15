@@ -6,6 +6,54 @@
 
 :root {
   --font-sans: 'Inter', system-ui, sans-serif;
+
+  /* Surface tokens (light) */
+  --c-page: #f5f7fa;
+  --c-card: #ffffff;
+  --c-hairline: #e5eaf2;
+  --c-pill: #edf0f7;
+  --c-pill-strong: #e5eaf2;
+  --c-ink: #1a2540;
+  --c-mid: #4b5880;
+  --c-light: #8a96b0;
+  --c-brand: #1a56db;
+  --c-brand-soft: #eef4ff;
+  --c-navy: #0f2b6b;
+
+  /* Status soft (light) */
+  --c-status-blue-bg: #eef4ff;
+  --c-status-blue-fg: #1a3a8f;
+  --c-status-amber-bg: #fff7e6;
+  --c-status-amber-fg: #92400e;
+  --c-status-green-bg: #ecfdf5;
+  --c-status-green-fg: #065f46;
+  --c-status-rose-bg: #fef2f2;
+  --c-status-rose-fg: #991b1b;
+}
+
+.dark {
+  /* Surface tokens (dark) */
+  --c-page: #0f172a;
+  --c-card: #1e293b;
+  --c-hairline: #334155;
+  --c-pill: #334155;
+  --c-pill-strong: #475569;
+  --c-ink: #e2e8f0;
+  --c-mid: #94a3b8;
+  --c-light: #64748b;
+  --c-brand: #60a5fa;
+  --c-brand-soft: rgba(96, 165, 250, 0.12);
+  --c-navy: #cbd5e1;
+
+  /* Status (dark — keep readable with translucent bg) */
+  --c-status-blue-bg: rgba(59, 130, 246, 0.18);
+  --c-status-blue-fg: #93c5fd;
+  --c-status-amber-bg: rgba(245, 158, 11, 0.18);
+  --c-status-amber-fg: #fcd34d;
+  --c-status-green-bg: rgba(16, 185, 129, 0.18);
+  --c-status-green-fg: #6ee7b7;
+  --c-status-rose-bg: rgba(239, 68, 68, 0.2);
+  --c-status-rose-fg: #fca5a5;
 }
 
 @layer base {
@@ -16,65 +64,113 @@
   html {
     font-family: var(--font-sans);
     -webkit-font-smoothing: antialiased;
+    color-scheme: light;
+  }
+  html.dark {
+    color-scheme: dark;
   }
 
   body {
-    @apply bg-page text-ink text-[14px];
+    background: var(--c-page);
+    color: var(--c-ink);
+    font-size: 14px;
   }
 }
 
 @layer components {
   /* Card surface */
   .card {
-    @apply bg-white rounded-[14px] border border-hairline;
+    background: var(--c-card);
+    border: 1px solid var(--c-hairline);
+    border-radius: 14px;
   }
 
   /* Buttons */
   .btn-primary {
-    @apply inline-flex items-center justify-center gap-1.5 bg-brand text-white rounded-[10px]
-           px-4 py-2 text-sm font-bold hover:bg-navy transition-colors
-           disabled:opacity-50 disabled:cursor-not-allowed;
+    @apply inline-flex items-center justify-center gap-1.5 rounded-[10px] px-4 py-2 text-sm font-bold
+           disabled:opacity-50 disabled:cursor-not-allowed transition-colors;
+    background: var(--c-brand);
+    color: #fff;
+  }
+  .btn-primary:hover:not(:disabled) {
+    background: var(--c-navy);
+  }
+  .dark .btn-primary:hover:not(:disabled) {
+    filter: brightness(0.92);
   }
 
   .btn-secondary {
-    @apply inline-flex items-center justify-center gap-1.5 bg-white text-ink rounded-[10px]
-           px-4 py-2 text-sm font-semibold border-[1.5px] border-hairline
-           hover:border-brand hover:text-brand transition-colors
-           disabled:opacity-50 disabled:cursor-not-allowed;
+    @apply inline-flex items-center justify-center gap-1.5 rounded-[10px] px-4 py-2 text-sm font-semibold border-[1.5px]
+           disabled:opacity-50 disabled:cursor-not-allowed transition-colors;
+    background: var(--c-card);
+    color: var(--c-ink);
+    border-color: var(--c-hairline);
+  }
+  .btn-secondary:hover:not(:disabled) {
+    border-color: var(--c-brand);
+    color: var(--c-brand);
   }
 
   .btn-ghost {
-    @apply inline-flex items-center justify-center gap-1.5 bg-white text-mid rounded-[10px]
-           px-3 py-1.5 text-xs font-semibold border-[1.5px] border-hairline
-           hover:border-mid transition-colors;
+    @apply inline-flex items-center justify-center gap-1.5 rounded-[10px] px-3 py-1.5 text-xs font-semibold border-[1.5px]
+           transition-colors;
+    background: var(--c-card);
+    color: var(--c-mid);
+    border-color: var(--c-hairline);
+  }
+  .btn-ghost:hover {
+    border-color: var(--c-mid);
   }
 
   .btn-add {
-    @apply inline-flex items-center gap-1 bg-brand text-white rounded-full px-4 py-1.5
-           text-xs font-bold hover:bg-navy transition-colors;
+    @apply inline-flex items-center gap-1 rounded-full px-4 py-1.5 text-xs font-bold transition-colors;
+    background: var(--c-brand);
+    color: #fff;
+  }
+  .btn-add:hover {
+    background: var(--c-navy);
   }
 
   .btn-danger-ghost {
-    @apply inline-flex items-center gap-1.5 text-red-600 rounded-[10px] px-3 py-1.5
-           text-xs font-semibold border-[1.5px] border-red-100 bg-red-50
-           hover:bg-red-100 transition-colors;
+    @apply inline-flex items-center gap-1.5 rounded-[10px] px-3 py-1.5 text-xs font-semibold border-[1.5px]
+           transition-colors;
+    color: #dc2626;
+    background: rgba(220, 38, 38, 0.08);
+    border-color: rgba(220, 38, 38, 0.25);
+  }
+  .btn-danger-ghost:hover {
+    background: rgba(220, 38, 38, 0.16);
   }
 
   /* Form controls */
   .input,
   .select,
   .textarea {
-    @apply w-full px-3 py-2 text-sm border-[1.5px] border-hairline rounded-[10px]
-           focus:outline-none focus:border-brand bg-white;
+    @apply w-full px-3 py-2 text-sm rounded-[10px] border-[1.5px];
+    background: var(--c-card);
+    color: var(--c-ink);
+    border-color: var(--c-hairline);
+  }
+  .input:focus,
+  .select:focus,
+  .textarea:focus {
+    outline: none;
+    border-color: var(--c-brand);
+  }
+  .input::placeholder,
+  .textarea::placeholder {
+    color: var(--c-light);
   }
 
   .field-label {
-    @apply block text-[11px] font-semibold uppercase tracking-wide text-light mb-1.5;
+    @apply block text-[11px] font-semibold uppercase tracking-wide mb-1.5;
+    color: var(--c-light);
   }
 
   /* Cards header */
   .card-head {
-    @apply flex items-center justify-between px-5 py-3.5 border-b border-hairline;
+    @apply flex items-center justify-between px-5 py-3.5;
+    border-bottom: 1px solid var(--c-hairline);
   }
 
   /* Tabs underline */
@@ -82,35 +178,62 @@
     @apply px-4 py-2.5 text-sm font-semibold border-b-2 transition-colors;
   }
   .tab-active {
-    @apply border-brand text-brand;
+    color: var(--c-brand);
+    border-color: var(--c-brand);
   }
   .tab-inactive {
-    @apply border-transparent text-mid hover:text-ink hover:border-hairline;
+    color: var(--c-mid);
+    border-color: transparent;
+  }
+  .tab-inactive:hover {
+    color: var(--c-ink);
+    border-color: var(--c-hairline);
   }
 
-  /* Page entrance animation */
+  /* Page entrance */
   .pg-enter {
     animation: pop-up 0.2s ease;
+  }
+
+  /* Subtle row striping helper */
+  .row-stripe {
+    background: var(--c-page);
+  }
+
+  /* Generic colored pill helper */
+  .pill-blue {
+    background: var(--c-status-blue-bg);
+    color: var(--c-status-blue-fg);
+  }
+  .pill-amber {
+    background: var(--c-status-amber-bg);
+    color: var(--c-status-amber-fg);
+  }
+  .pill-green {
+    background: var(--c-status-green-bg);
+    color: var(--c-status-green-fg);
+  }
+  .pill-rose {
+    background: var(--c-status-rose-bg);
+    color: var(--c-status-rose-fg);
   }
 }
 
 @layer utilities {
+  /* Token utility classes (so bg-card / text-ink etc. work as Tailwind tokens via config) */
   .scrollbar-thin {
     scrollbar-width: thin;
-    scrollbar-color: #e2e8f0 transparent;
+    scrollbar-color: var(--c-hairline) transparent;
   }
-
   .scrollbar-thin::-webkit-scrollbar {
     width: 4px;
     height: 4px;
   }
-
   .scrollbar-thin::-webkit-scrollbar-track {
     background: transparent;
   }
-
   .scrollbar-thin::-webkit-scrollbar-thumb {
-    background-color: #e2e8f0;
+    background-color: var(--c-hairline);
     border-radius: 2px;
   }
 }

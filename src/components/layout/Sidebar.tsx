@@ -144,7 +144,7 @@ export function Sidebar({ session }: SidebarProps) {
   }
 
   return (
-    <aside className="w-[228px] bg-white border-r border-hairline flex flex-col shrink-0 overflow-hidden">
+    <aside className="w-[228px] bg-card border-r border-hairline flex flex-col shrink-0 overflow-hidden">
       {/* Brand */}
       <div className="flex items-center gap-2.5 px-4 py-4 border-b border-hairline">
         <div className="w-8 h-8 bg-navy rounded-[10px] flex items-center justify-center shrink-0">
