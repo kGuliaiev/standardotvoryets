@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { trpc } from '@/lib/trpc/client';
 import { useSession } from 'next-auth/react';
@@ -242,15 +242,15 @@ export function StandardDetail({ id }: { id: string }) {
               <dl className="space-y-2 text-sm">
                 <div className="flex justify-between">
                   <dt className="text-slate-500">Документів</dt>
-                  <dd className="font-medium">{standard._count?.documents ?? 0}</dd>
+                  <dd className="font-medium">{standard.documents?.length ?? 0}</dd>
                 </div>
                 <div className="flex justify-between">
                   <dt className="text-slate-500">Коментарів</dt>
-                  <dd className="font-medium">{standard._count?.comments ?? 0}</dd>
+                  <dd className="font-medium">{standard.comments?.length ?? 0}</dd>
                 </div>
                 <div className="flex justify-between">
                   <dt className="text-slate-500">Завдань</dt>
-                  <dd className="font-medium">{standard._count?.tasks ?? 0}</dd>
+                  <dd className="font-medium">{standard.tasks?.length ?? 0}</dd>
                 </div>
                 <div className="flex justify-between">
                   <dt className="text-slate-500">Голосувань</dt>
@@ -509,8 +509,15 @@ function DownloadButton({ documentId }: { documentId: string }) {
   const [enabled, setEnabled] = useState(false);
   const { data, isLoading } = trpc.document.getDownloadUrl.useQuery(
     { documentId },
-    { enabled, onSuccess: (d) => { window.open(d.url, '_blank'); setEnabled(false); } },
+    { enabled },
   );
+
+  useEffect(() => {
+    if (data?.url) {
+      window.open(data.url, '_blank');
+      setEnabled(false);
+    }
+  }, [data]);
 
   return (
     <button

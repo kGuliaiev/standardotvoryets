@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { createTRPCRouter, protectedProcedure } from '@/server/trpc';
-import type { NotificationType } from '@prisma/client';
+import type { NotificationType, PrismaClient } from '@prisma/client';
 
 export const notificationRouter = createTRPCRouter({
   // ── list ─────────────────────────────────────────────────────────────
@@ -50,7 +50,7 @@ export const notificationRouter = createTRPCRouter({
 
 // ── Helper: create a notification (used by other routers) ─────────────────────
 export async function createNotification(
-  db: Parameters<Parameters<typeof notificationRouter['_def']['procedures']['markRead']['_def']['resolve']>[0]>[0]['ctx']['db'],
+  db: PrismaClient,
   {
     userId,
     type,

@@ -33,7 +33,7 @@ export function StandardsList() {
       page,
       pageSize: 20,
     },
-    { keepPreviousData: true },
+    { placeholderData: (prev: unknown) => prev },
   );
 
   function handleSearch(val: string) {
