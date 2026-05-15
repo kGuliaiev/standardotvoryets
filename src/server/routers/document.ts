@@ -56,6 +56,48 @@ export const documentRouter = createTRPCRouter({
       return { uploadUrl, s3Key };
     }),
 
+  // ── registerMetadata (no S3 — just creates a document record placeholder) ──
+  registerMetadata: protectedProcedure
+    .input(
+      z.object({
+        standardId: z.string().cuid(),
+        filename: z.string().min(1).max(255),
+        sizeBytes: z.number().int().min(0).default(0),
+        version: z.string().min(1).max(20),
+        type: z.enum(['DRAFT_STANDARD', 'MEETING_MINUTES', 'AGENDA', 'ATTACHMENT', 'FINAL']),
+        note: z.string().optional(),
+        isCurrent: z.boolean().default(false),
+      }),
+    )
+    .mutation(async ({ ctx, input }) => {
+      const standard = await ctx.db.standard.findUniqueOrThrow({
+        where: { id: input.standardId },
+        select: { workingGroupId: true },
+      });
+      if (!can(userCtx(ctx.session), 'document:upload', standard.workingGroupId)) {
+        throw new TRPCError({ code: 'FORBIDDEN' });
+      }
+      if (input.isCurrent) {
+        await ctx.db.document.updateMany({
+          where: { standardId: input.standardId, isCurrent: true },
+          data: { isCurrent: false },
+        });
+      }
+      return ctx.db.document.create({
+        data: {
+          standardId: input.standardId,
+          uploadedById: ctx.session.user.id,
+          type: input.type,
+          filename: input.filename,
+          s3Key: `pending/${input.standardId}/${Date.now()}-${input.filename}`,
+          sizeBytes: input.sizeBytes,
+          version: input.version,
+          note: input.note,
+          isCurrent: input.isCurrent,
+        },
+      });
+    }),
+
   // ── confirmUpload ─────────────────────────────────────────────────────
   confirmUpload: protectedProcedure
     .input(

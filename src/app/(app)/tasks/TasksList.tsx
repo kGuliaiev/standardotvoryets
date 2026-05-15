@@ -1,21 +1,13 @@
 'use client';
 
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { trpc } from '@/lib/trpc/client';
 import Link from 'next/link';
-import { Check, Pencil, Trash2 } from 'lucide-react';
+import { ChevronRight, ChevronDown, Plus, Pencil, Trash2, AlertTriangle } from 'lucide-react';
 import { useSession } from 'next-auth/react';
 import { Avatar } from '@/components/ui/Avatar';
-import { Modal } from '@/components/ui/Modal';
-import { formatDate } from '@/lib/utils';
-import { useEscape } from '@/lib/useEscape';
-
-const STATUS_LABELS: Record<string, { label: string; cls: string }> = {
-  OPEN: { label: 'Відкрите', cls: 'bg-[#EEF4FF] text-[#1A3A8F]' },
-  IN_PROGRESS: { label: 'В роботі', cls: 'bg-[#FFF7E6] text-[#92400E]' },
-  DONE: { label: 'Виконано', cls: 'bg-[#ECFDF5] text-[#065F46]' },
-  CANCELLED: { label: 'Скасовано', cls: 'bg-pill text-mid' },
-};
+import { TaskFormModal } from '@/components/TaskFormModal';
+import { getInitials } from '@/lib/utils';
 
 const PRIORITY_DOT: Record<string, string> = {
   HIGH: 'bg-red-500',
@@ -23,331 +15,541 @@ const PRIORITY_DOT: Record<string, string> = {
   LOW: 'bg-emerald-400',
 };
 
-const PRIORITY_LABELS: Record<string, string> = {
-  HIGH: 'Високий',
-  MEDIUM: 'Середній',
-  LOW: 'Низький',
-};
+const MONTHS_UA_SHORT = [
+  'січ',
+  'лют',
+  'бер',
+  'кві',
+  'тра',
+  'чер',
+  'лип',
+  'сер',
+  'вер',
+  'жов',
+  'лис',
+  'гру',
+];
+
+type FilterMode = 'all' | 'open' | 'done' | 'mine';
+
+interface TaskRow {
+  id: string;
+  title: string;
+  status: 'OPEN' | 'IN_PROGRESS' | 'DONE' | 'CANCELLED';
+  priority: 'HIGH' | 'MEDIUM' | 'LOW';
+  dueDate: Date | string | null;
+  description: string | null;
+  assigneeId: string | null;
+  assignee: { id: string; name: string; avatarUrl: string | null } | null;
+  standardId: string;
+  standard: { id: string; code: string; title: string; workingGroupId: string };
+  createdById: string;
+}
+
+function dueChip(due: Date | null, isDone: boolean) {
+  if (!due) return null;
+  const dueDay = new Date(due.getFullYear(), due.getMonth(), due.getDate());
+  const now = new Date();
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  if (isDone) {
+    return (
+      <span className="text-[10px] font-bold rounded-full px-2 py-0.5 bg-pill text-light">
+        Виконано
+      </span>
+    );
+  }
+  if (dueDay < today) {
+    return (
+      <span className="text-[10px] font-bold rounded-full px-2 py-0.5 pill-rose inline-flex items-center gap-1">
+        <AlertTriangle className="w-3 h-3" /> Прострочено
+      </span>
+    );
+  }
+  if (dueDay.getTime() === today.getTime()) {
+    return (
+      <span className="text-[10px] font-bold rounded-full px-2 py-0.5 pill-rose">Сьогодні</span>
+    );
+  }
+  const diffDays = Math.round((dueDay.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+  if (diffDays <= 3) {
+    return (
+      <span className="text-[10px] font-bold rounded-full px-2 py-0.5 pill-amber">
+        {due.getDate()} {MONTHS_UA_SHORT[due.getMonth()]}
+      </span>
+    );
+  }
+  return (
+    <span className="text-[10px] font-bold rounded-full px-2 py-0.5 pill-green">
+      {due.getDate()} {MONTHS_UA_SHORT[due.getMonth()]}
+    </span>
+  );
+}
 
 export function TasksList() {
   const { data: session } = useSession();
-  const [wgFilter, setWgFilter] = useState('');
-  const [statusFilter, setStatusFilter] = useState<'ALL' | 'OPEN' | 'IN_PROGRESS' | 'DONE'>('ALL');
-  const [editing, setEditing] = useState<{
-    id: string;
-    title: string;
-    description: string;
-    priority: 'HIGH' | 'MEDIUM' | 'LOW';
-    dueDate: string;
-  } | null>(null);
-  const [editError, setEditError] = useState<string | null>(null);
+  const userId = session?.user?.id;
+
+  const [filter, setFilter] = useState<FilterMode>('all');
+  const [search, setSearch] = useState('');
+  const [selectedScope, setSelectedScope] = useState<
+    { kind: 'all' } | { kind: 'wg'; id: string } | { kind: 'std'; id: string; wgId: string }
+  >({ kind: 'all' });
+  const [expanded, setExpanded] = useState<Record<string, boolean>>({});
+  const [showCreate, setShowCreate] = useState(false);
+  const [editingTask, setEditingTask] = useState<TaskRow | null>(null);
+
+  const { data: groups } = trpc.workingGroup.list.useQuery();
+  const { data: standardsResp } = trpc.standard.list.useQuery({ page: 1, pageSize: 200 });
+  const { data: tasks } = trpc.task.list.useQuery({
+    workingGroupId:
+      selectedScope.kind === 'wg'
+        ? selectedScope.id
+        : selectedScope.kind === 'std'
+          ? selectedScope.wgId
+          : undefined,
+    standardId: selectedScope.kind === 'std' ? selectedScope.id : undefined,
+  });
 
   const utils = trpc.useUtils();
-  const { data: groups } = trpc.workingGroup.list.useQuery();
-  const { data: tasks, isLoading } = trpc.task.list.useQuery({
-    workingGroupId: wgFilter || undefined,
-    status: statusFilter === 'ALL' ? undefined : statusFilter,
-  });
-
-  const changeStatusMutation = trpc.task.changeStatus.useMutation({
-    onSuccess: () => void utils.task.list.invalidate(),
-  });
-  const updateMutation = trpc.task.update.useMutation({
+  const toggleTask = trpc.task.changeStatus.useMutation({
     onSuccess: () => {
       void utils.task.list.invalidate();
-      setEditing(null);
+      void utils.dashboard.kpis.invalidate();
+      void utils.dashboard.navCounts.invalidate();
     },
-    onError: (e) => setEditError(e.message),
   });
-  const deleteMutation = trpc.task.delete.useMutation({
+  const deleteTask = trpc.task.delete.useMutation({
     onSuccess: () => void utils.task.list.invalidate(),
   });
 
-  useEscape(!!editing, () => setEditing(null));
+  type StandardItem = NonNullable<typeof standardsResp>['items'][number];
+  const standardsByWg = useMemo(() => {
+    const map = new Map<string, StandardItem[]>();
+    (standardsResp?.items ?? []).forEach((s) => {
+      const arr = map.get(s.workingGroupId) ?? [];
+      arr.push(s);
+      map.set(s.workingGroupId, arr);
+    });
+    return map;
+  }, [standardsResp]);
+
+  // Counts per scope
+  const tasksByStandard = useMemo(() => {
+    const map = new Map<string, { open: number; overdue: number }>();
+    const now = new Date();
+    (tasks ?? []).forEach((t) => {
+      const cur = map.get(t.standardId) ?? { open: 0, overdue: 0 };
+      const isOpen = t.status === 'OPEN' || t.status === 'IN_PROGRESS';
+      if (isOpen) {
+        cur.open += 1;
+        if (t.dueDate && new Date(t.dueDate) < now) cur.overdue += 1;
+      }
+      map.set(t.standardId, cur);
+    });
+    return map;
+  }, [tasks]);
+
+  const tasksByWg = useMemo(() => {
+    const map = new Map<string, { open: number; overdue: number }>();
+    tasksByStandard.forEach((v, stdId) => {
+      const std = standardsResp?.items.find((s) => s.id === stdId);
+      if (!std) return;
+      const cur = map.get(std.workingGroupId) ?? { open: 0, overdue: 0 };
+      cur.open += v.open;
+      cur.overdue += v.overdue;
+      map.set(std.workingGroupId, cur);
+    });
+    return map;
+  }, [tasksByStandard, standardsResp]);
+
+  // Apply filter to tasks
+  const filteredTasks: TaskRow[] = useMemo(() => {
+    if (!tasks) return [];
+    return (tasks as TaskRow[]).filter((t) => {
+      if (filter === 'open' && t.status === 'DONE') return false;
+      if (filter === 'done' && t.status !== 'DONE') return false;
+      if (filter === 'mine' && t.assigneeId !== userId) return false;
+      if (search.trim()) {
+        const q = search.toLowerCase();
+        if (!t.title.toLowerCase().includes(q) && !t.standard.code.toLowerCase().includes(q))
+          return false;
+      }
+      return true;
+    });
+  }, [tasks, filter, search, userId]);
+
+  const openTasks = filteredTasks.filter((t) => t.status !== 'DONE' && t.status !== 'CANCELLED');
+  const doneTasks = filteredTasks.filter((t) => t.status === 'DONE');
+
+  // Right-pane breadcrumb
+  const scopeLabel = useMemo(() => {
+    if (selectedScope.kind === 'all') return 'Усі робочі групи';
+    if (selectedScope.kind === 'wg') {
+      const g = groups?.find((x) => x.id === selectedScope.id);
+      return g ? `${g.code} · ${g.name}` : 'РГ';
+    }
+    const std = standardsResp?.items.find((x) => x.id === selectedScope.id);
+    const g = groups?.find((x) => x.id === selectedScope.wgId);
+    return std && g ? `${g.code}  ·  ${std.code} — ${std.title}` : 'Стандарт';
+  }, [selectedScope, groups, standardsResp]);
+
+  const totalCount = tasks?.length ?? 0;
+  const doneCount = (tasks ?? []).filter((t) => t.status === 'DONE').length;
+  const overdueCount = (tasks ?? []).filter(
+    (t) =>
+      t.status !== 'DONE' &&
+      t.status !== 'CANCELLED' &&
+      t.dueDate &&
+      new Date(t.dueDate) < new Date(),
+  ).length;
 
   return (
-    <div className="space-y-5">
-      <div className="flex items-center justify-between">
-        <h1 className="text-[19px] font-extrabold text-navy">Завдання</h1>
-      </div>
-
-      {/* Filters */}
-      <div className="card p-4">
-        <div className="flex gap-3 flex-wrap items-center">
-          <select
-            value={wgFilter}
-            onChange={(e) => setWgFilter(e.target.value)}
-            className="select max-w-[260px]"
-          >
-            <option value="">Всі РГ</option>
-            {groups?.map((g) => (
-              <option key={g.id} value={g.id}>
-                {g.code} — {g.name}
-              </option>
-            ))}
-          </select>
-          <div className="flex gap-1">
-            {(['ALL', 'OPEN', 'IN_PROGRESS', 'DONE'] as const).map((s) => (
-              <button
-                key={s}
-                onClick={() => setStatusFilter(s)}
-                className={`text-xs px-3 py-1.5 rounded-full border-[1.5px] font-semibold transition-colors ${
-                  statusFilter === s
-                    ? 'border-brand bg-brand-soft text-brand'
-                    : 'border-hairline text-mid hover:border-mid'
-                }`}
-              >
-                {s === 'ALL'
-                  ? 'Всі'
-                  : s === 'OPEN'
-                    ? 'Відкриті'
-                    : s === 'IN_PROGRESS'
-                      ? 'В роботі'
-                      : 'Виконані'}
-              </button>
-            ))}
-          </div>
+    <div className="pg-enter">
+      {/* Header */}
+      <div className="flex items-center justify-between mb-5">
+        <div className="flex items-center gap-4 text-sm">
+          <h1 className="text-[19px] font-extrabold text-navy">Завдання</h1>
+          <span className="text-light">
+            Всього: <b className="text-ink">{totalCount}</b>
+            {' · '}Виконано: <b className="text-emerald-600">{doneCount}</b>
+            {' · '}Прострочено: <b className="text-red-600">{overdueCount}</b>
+          </span>
         </div>
+        <button onClick={() => setShowCreate(true)} className="btn-primary">
+          <Plus className="w-4 h-4" />
+          Завдання
+        </button>
       </div>
 
-      {/* Table */}
-      <div className="card overflow-hidden">
-        {isLoading ? (
-          <div className="py-12 text-center text-light text-sm">Завантаження…</div>
-        ) : !tasks || tasks.length === 0 ? (
-          <div className="py-12 text-center text-light text-sm">Завдань немає</div>
-        ) : (
-          <table className="w-full text-sm">
-            <thead className="bg-[#FAFBFD] border-b border-hairline">
-              <tr className="text-left text-[11px] text-light uppercase tracking-wide">
-                <th className="px-5 py-3 font-bold">Завдання</th>
-                <th className="px-3 py-3 font-bold">Стандарт</th>
-                <th className="px-3 py-3 font-bold">Пріоритет</th>
-                <th className="px-3 py-3 font-bold">Виконавець</th>
-                <th className="px-3 py-3 font-bold">Дедлайн</th>
-                <th className="px-3 py-3 font-bold">Статус</th>
-                <th className="px-3 py-3 font-bold text-right">Дії</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-hairline">
-              {tasks.map((t) => {
-                const status = STATUS_LABELS[t.status] ?? { label: t.status, cls: '' };
-                const isDone = t.status === 'DONE';
-                const isOverdue = t.dueDate && !isDone && new Date(t.dueDate) < new Date();
-                return (
-                  <tr key={t.id} className="hover:bg-[#FAFBFD] transition-colors">
-                    <td className="px-5 py-3">
-                      <div className="flex items-center gap-3">
-                        <button
-                          onClick={() =>
-                            changeStatusMutation.mutate({
-                              id: t.id,
-                              status: isDone ? 'OPEN' : 'DONE',
-                            })
-                          }
-                          className={`w-[18px] h-[18px] rounded-md border-[1.5px] inline-flex items-center justify-center transition ${
-                            isDone
-                              ? 'bg-emerald-500 border-emerald-500'
-                              : 'border-hairline hover:border-brand'
-                          }`}
-                          aria-label={isDone ? 'Відновити' : 'Виконати'}
-                        >
-                          {isDone && <Check className="w-3 h-3 text-white" />}
-                        </button>
-                        <span
-                          className={`font-medium ${isDone ? 'text-light line-through' : 'text-ink'}`}
-                        >
-                          {t.title}
-                        </span>
-                      </div>
-                    </td>
-                    <td className="px-3 py-3">
-                      <Link
-                        href={`/standards/${t.standardId}`}
-                        className="font-mono text-xs text-mid hover:text-brand"
-                      >
-                        {t.standard.code}
-                      </Link>
-                    </td>
-                    <td className="px-3 py-3">
-                      <span className="inline-flex items-center gap-1.5 text-xs">
-                        <span
-                          className={`w-1.5 h-1.5 rounded-full ${PRIORITY_DOT[t.priority] ?? 'bg-slate-300'}`}
-                        />
-                        {PRIORITY_LABELS[t.priority] ?? t.priority}
-                      </span>
-                    </td>
-                    <td className="px-3 py-3">
-                      {t.assignee ? (
-                        <div className="flex items-center gap-2">
-                          <Avatar
-                            name={t.assignee.name}
-                            avatarUrl={t.assignee.avatarUrl ?? undefined}
-                            size="xs"
-                          />
-                          <span className="text-xs text-mid">{t.assignee.name}</span>
-                        </div>
-                      ) : (
-                        <span className="text-xs text-light">—</span>
-                      )}
-                    </td>
-                    <td className="px-3 py-3 text-xs">
-                      {t.dueDate ? (
-                        <span className={isOverdue ? 'text-red-600 font-semibold' : 'text-mid'}>
-                          {formatDate(t.dueDate)}
-                        </span>
-                      ) : (
-                        <span className="text-light">—</span>
-                      )}
-                    </td>
-                    <td className="px-3 py-3">
+      <div className="grid grid-cols-[260px_1fr] gap-5 items-start">
+        {/* LEFT: Tree */}
+        <aside className="card overflow-hidden self-stretch">
+          <div className="p-3 border-b border-hairline">
+            <input
+              type="search"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="🔍 Пошук по РГ / стандарту"
+              className="w-full px-3 py-2 text-[13px] bg-page border border-hairline rounded-[10px] text-ink placeholder:text-light focus:outline-none focus:border-brand"
+            />
+          </div>
+          <div className="py-2 max-h-[calc(100vh-260px)] overflow-y-auto scrollbar-thin">
+            <button
+              onClick={() => setSelectedScope({ kind: 'all' })}
+              className={`w-full text-left flex items-center gap-2 px-3 py-1.5 text-[13px] font-semibold transition-colors ${
+                selectedScope.kind === 'all' ? 'bg-brand-soft text-brand' : 'text-ink hover:bg-pill'
+              }`}
+            >
+              <span className="w-2 h-2 rounded-full bg-light" />
+              Усі групи
+            </button>
+            {(groups ?? []).map((g) => {
+              const stdList = standardsByWg.get(g.id) ?? [];
+              const isExpanded = expanded[g.id] ?? selectedScope.kind !== 'all';
+              const wgStat = tasksByWg.get(g.id) ?? { open: 0, overdue: 0 };
+              const isWgSelected =
+                (selectedScope.kind === 'wg' && selectedScope.id === g.id) ||
+                (selectedScope.kind === 'std' && selectedScope.wgId === g.id);
+              return (
+                <div key={g.id}>
+                  <button
+                    onClick={() => {
+                      setExpanded((p) => ({ ...p, [g.id]: !isExpanded }));
+                      setSelectedScope({ kind: 'wg', id: g.id });
+                    }}
+                    className={`w-full text-left flex items-center gap-2 px-3 py-2 text-[13px] font-semibold transition-colors ${
+                      isWgSelected ? 'bg-brand-soft text-brand' : 'text-ink hover:bg-pill'
+                    }`}
+                  >
+                    {isExpanded ? (
+                      <ChevronDown className="w-3.5 h-3.5 text-light" />
+                    ) : (
+                      <ChevronRight className="w-3.5 h-3.5 text-light" />
+                    )}
+                    <span
+                      className="w-2 h-2 rounded-full shrink-0"
+                      style={{ backgroundColor: g.color }}
+                    />
+                    <span className="flex-1 truncate">{g.code}</span>
+                    {wgStat.open > 0 && (
                       <span
-                        className={`text-[11px] px-2 py-0.5 rounded-full font-semibold ${status.cls}`}
+                        className={`text-[10px] font-bold ${
+                          wgStat.overdue > 0 ? 'text-red-600' : 'text-mid'
+                        }`}
                       >
-                        {status.label}
+                        {wgStat.open}
+                        {wgStat.overdue > 0 && <AlertTriangle className="w-3 h-3 inline ml-0.5" />}
                       </span>
-                    </td>
-                    <td className="px-3 py-3 text-right">
-                      <div className="inline-flex gap-1">
+                    )}
+                  </button>
+                  {isExpanded &&
+                    stdList.map((s) => {
+                      const isSel = selectedScope.kind === 'std' && selectedScope.id === s.id;
+                      const stdStat = tasksByStandard.get(s.id) ?? { open: 0, overdue: 0 };
+                      return (
                         <button
-                          onClick={() => {
-                            setEditing({
-                              id: t.id,
-                              title: t.title,
-                              description: t.description ?? '',
-                              priority: t.priority,
-                              dueDate: t.dueDate
-                                ? new Date(t.dueDate).toISOString().slice(0, 10)
-                                : '',
-                            });
-                            setEditError(null);
-                          }}
-                          className="p-1.5 rounded hover:bg-pill text-mid hover:text-brand transition-colors"
-                          title="Редагувати"
+                          key={s.id}
+                          onClick={() => setSelectedScope({ kind: 'std', id: s.id, wgId: g.id })}
+                          className={`w-full text-left flex items-center gap-2 px-3 py-1.5 pl-8 text-[12px] transition-colors ${
+                            isSel
+                              ? 'bg-brand-soft text-brand'
+                              : 'text-mid hover:bg-pill hover:text-ink'
+                          }`}
+                          style={isSel ? { boxShadow: 'inset 2px 0 0 var(--c-brand)' } : undefined}
                         >
-                          <Pencil className="w-3.5 h-3.5" />
-                        </button>
-                        {(session?.user.globalRole === 'ADMIN' ||
-                          t.createdById === session?.user.id) && (
-                          <button
-                            onClick={() => {
-                              if (confirm(`Видалити завдання "${t.title}"?`))
-                                deleteMutation.mutate({ id: t.id });
-                            }}
-                            className="p-1.5 rounded hover:bg-red-50 text-mid hover:text-red-600 transition-colors"
-                            title="Видалити"
+                          <span
+                            className="font-mono font-bold text-[11px]"
+                            style={isSel ? undefined : { color: g.color }}
                           >
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </button>
-                        )}
-                      </div>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        )}
-      </div>
+                            {s.code}
+                          </span>
+                          <span className="flex-1 truncate">{s.title}</span>
+                          {stdStat.open > 0 && (
+                            <span
+                              className={`text-[10px] font-bold ${
+                                stdStat.overdue > 0 ? 'text-red-600' : 'text-mid'
+                              }`}
+                            >
+                              {stdStat.open}
+                            </span>
+                          )}
+                        </button>
+                      );
+                    })}
+                </div>
+              );
+            })}
+          </div>
+        </aside>
 
-      {/* Edit modal */}
-      <Modal
-        open={!!editing}
-        onClose={() => setEditing(null)}
-        title="Редагувати завдання"
-        size="md"
-      >
-        {editing && (
-          <div className="space-y-4">
-            <div>
-              <label className="field-label">Назва *</label>
-              <input
-                className="input"
-                value={editing.title}
-                onChange={(e) => setEditing((s) => (s ? { ...s, title: e.target.value } : s))}
-              />
+        {/* RIGHT: List */}
+        <main className="card overflow-hidden">
+          <div className="card-head">
+            <div className="min-w-0">
+              <p className="text-[11px] font-bold uppercase tracking-wide text-light">
+                {selectedScope.kind === 'all'
+                  ? 'Усі групи'
+                  : selectedScope.kind === 'wg'
+                    ? groups?.find((g) => g.id === selectedScope.id)?.code
+                    : groups?.find((g) => g.id === selectedScope.wgId)?.code}
+              </p>
+              <h2 className="text-[15px] font-bold text-ink truncate">{scopeLabel}</h2>
             </div>
-            <div>
-              <label className="field-label">Опис</label>
-              <textarea
-                rows={3}
-                className="textarea resize-none"
-                value={editing.description}
-                onChange={(e) => setEditing((s) => (s ? { ...s, description: e.target.value } : s))}
-              />
-            </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className="field-label">Пріоритет</label>
-                <select
-                  className="select"
-                  value={editing.priority}
-                  onChange={(e) =>
-                    setEditing((s) =>
-                      s
-                        ? {
-                            ...s,
-                            priority: e.target.value as 'HIGH' | 'MEDIUM' | 'LOW',
-                          }
-                        : s,
-                    )
-                  }
+            <div className="inline-flex rounded-full border border-hairline p-0.5 bg-card">
+              {(
+                [
+                  ['all', 'Всі'],
+                  ['open', 'Відкриті'],
+                  ['done', 'Виконані'],
+                  ['mine', 'Мої'],
+                ] as const
+              ).map(([k, label]) => (
+                <button
+                  key={k}
+                  onClick={() => setFilter(k)}
+                  className={`text-[12px] font-semibold px-3 py-1 rounded-full transition-colors ${
+                    filter === k ? 'bg-brand-soft text-brand' : 'text-mid hover:text-ink'
+                  }`}
                 >
-                  <option value="HIGH">Високий</option>
-                  <option value="MEDIUM">Середній</option>
-                  <option value="LOW">Низький</option>
-                </select>
-              </div>
-              <div>
-                <label className="field-label">Дедлайн</label>
-                <input
-                  type="date"
-                  className="input"
-                  value={editing.dueDate}
-                  onChange={(e) => setEditing((s) => (s ? { ...s, dueDate: e.target.value } : s))}
-                />
-              </div>
-            </div>
-            {editError && (
-              <p className="text-sm text-red-600 bg-red-50 rounded-[10px] px-3 py-2">{editError}</p>
-            )}
-            <div className="flex gap-3 pt-2 border-t border-slate-100">
-              <button
-                type="button"
-                onClick={() => setEditing(null)}
-                className="flex-1 btn-secondary"
-              >
-                Скасувати
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  if (!editing) return;
-                  if (!editing.title.trim()) {
-                    setEditError('Введіть назву');
-                    return;
-                  }
-                  const trim = (v: string): string | undefined => {
-                    const t = v.trim();
-                    return t === '' ? undefined : t;
-                  };
-                  updateMutation.mutate({
-                    id: editing.id,
-                    title: editing.title.trim(),
-                    description: trim(editing.description),
-                    priority: editing.priority,
-                    dueDate: editing.dueDate ? new Date(editing.dueDate) : null,
-                  });
-                }}
-                disabled={updateMutation.isPending}
-                className="flex-1 btn-primary"
-              >
-                {updateMutation.isPending ? 'Збереження…' : 'Зберегти'}
-              </button>
+                  {label}
+                </button>
+              ))}
             </div>
           </div>
-        )}
-      </Modal>
+
+          {!tasks ? (
+            <div className="py-16 text-center text-light text-sm">Завантаження…</div>
+          ) : (
+            <div className="p-5 space-y-5">
+              {/* OPEN */}
+              <section>
+                <div className="text-[11px] font-bold uppercase tracking-[0.8px] text-light mb-2">
+                  Відкриті · {openTasks.length}
+                </div>
+                {openTasks.length === 0 ? (
+                  <p className="text-sm text-light px-1 py-3">Завдань немає</p>
+                ) : (
+                  <ul className="space-y-2">
+                    {openTasks.map((t) => (
+                      <TaskRowItem
+                        key={t.id}
+                        task={t}
+                        toggle={() => toggleTask.mutate({ id: t.id, status: 'DONE' })}
+                        onEdit={() => setEditingTask(t)}
+                        onDelete={() => {
+                          if (confirm(`Видалити завдання "${t.title}"?`))
+                            deleteTask.mutate({ id: t.id });
+                        }}
+                        showStandard={selectedScope.kind !== 'std'}
+                        canDelete={t.createdById === userId || session?.user.globalRole === 'ADMIN'}
+                      />
+                    ))}
+                  </ul>
+                )}
+                <button
+                  onClick={() => setShowCreate(true)}
+                  className="mt-2 w-full text-center text-[13px] py-2.5 rounded-[10px] border border-dashed border-hairline text-mid hover:text-brand hover:border-brand transition-colors"
+                >
+                  + Додати завдання
+                </button>
+              </section>
+
+              {/* DONE */}
+              {doneTasks.length > 0 && (
+                <section>
+                  <div className="text-[11px] font-bold uppercase tracking-[0.8px] text-light mb-2">
+                    Виконані · {doneTasks.length}
+                  </div>
+                  <ul className="space-y-2">
+                    {doneTasks.map((t) => (
+                      <TaskRowItem
+                        key={t.id}
+                        task={t}
+                        toggle={() => toggleTask.mutate({ id: t.id, status: 'OPEN' })}
+                        onEdit={() => setEditingTask(t)}
+                        onDelete={() => {
+                          if (confirm(`Видалити завдання "${t.title}"?`))
+                            deleteTask.mutate({ id: t.id });
+                        }}
+                        showStandard={selectedScope.kind !== 'std'}
+                        canDelete={t.createdById === userId || session?.user.globalRole === 'ADMIN'}
+                      />
+                    ))}
+                  </ul>
+                </section>
+              )}
+            </div>
+          )}
+        </main>
+      </div>
+
+      <TaskFormModal
+        open={showCreate}
+        onClose={() => setShowCreate(false)}
+        initial={
+          selectedScope.kind === 'wg'
+            ? { workingGroupId: selectedScope.id }
+            : selectedScope.kind === 'std'
+              ? { workingGroupId: selectedScope.wgId, standardId: selectedScope.id }
+              : undefined
+        }
+        lockedStandardId={selectedScope.kind === 'std' ? selectedScope.id : undefined}
+        lockedWorkingGroupId={selectedScope.kind === 'wg' ? selectedScope.id : undefined}
+      />
+      <TaskFormModal
+        open={!!editingTask}
+        onClose={() => setEditingTask(null)}
+        initial={
+          editingTask
+            ? {
+                id: editingTask.id,
+                workingGroupId: editingTask.standard.workingGroupId,
+                standardId: editingTask.standardId,
+                title: editingTask.title,
+                description: editingTask.description ?? '',
+                priority: editingTask.priority,
+                assigneeId: editingTask.assigneeId ?? '',
+                dueDate: editingTask.dueDate
+                  ? new Date(editingTask.dueDate).toISOString().slice(0, 10)
+                  : '',
+              }
+            : undefined
+        }
+      />
     </div>
   );
+}
+
+function TaskRowItem({
+  task,
+  toggle,
+  onEdit,
+  onDelete,
+  showStandard,
+  canDelete,
+}: {
+  task: TaskRow;
+  toggle: () => void;
+  onEdit: () => void;
+  onDelete: () => void;
+  showStandard: boolean;
+  canDelete: boolean;
+}) {
+  const isDone = task.status === 'DONE';
+  const due = task.dueDate ? new Date(task.dueDate) : null;
+  const dueLabel = dueChip(due, isDone);
+
+  return (
+    <li className="group flex items-center gap-3 bg-card border border-hairline rounded-[10px] px-4 py-3 hover:border-brand/40 transition-colors">
+      <button
+        onClick={toggle}
+        className={`w-[18px] h-[18px] rounded-md border-[1.5px] inline-flex items-center justify-center transition shrink-0 ${
+          isDone ? 'bg-emerald-500 border-emerald-500' : 'border-hairline hover:border-brand'
+        }`}
+        aria-label={isDone ? 'Відновити' : 'Виконати'}
+      >
+        {isDone && (
+          <svg viewBox="0 0 12 12" className="w-3 h-3 fill-none stroke-white stroke-[2.5]">
+            <path d="M2.5 6.5 5 9l4.5-5.5" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
+        )}
+      </button>
+      <span
+        className={`w-2 h-2 rounded-full shrink-0 ${PRIORITY_DOT[task.priority] ?? 'bg-slate-300'}`}
+      />
+      <button
+        onClick={onEdit}
+        className={`flex-1 text-left text-sm truncate transition-colors ${
+          isDone ? 'text-light line-through' : 'text-ink hover:text-brand'
+        }`}
+      >
+        {task.title}
+      </button>
+      {showStandard && (
+        <Link
+          href={`/standards/${task.standardId}`}
+          className="text-[10px] font-mono font-bold px-2 py-0.5 rounded bg-pill text-mid hover:text-brand"
+        >
+          {task.standard.code}
+        </Link>
+      )}
+      {task.assignee && (
+        <div className="inline-flex items-center gap-1.5 shrink-0">
+          <Avatar
+            name={task.assignee.name}
+            avatarUrl={task.assignee.avatarUrl ?? undefined}
+            size="xs"
+          />
+          <span className="text-[11px] text-mid hidden md:inline">
+            {abbrevName(task.assignee.name)}
+          </span>
+        </div>
+      )}
+      {dueLabel}
+      <div className="ml-1 inline-flex gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+        <button
+          onClick={onEdit}
+          className="p-1 rounded hover:bg-pill text-mid hover:text-brand"
+          title="Редагувати"
+        >
+          <Pencil className="w-3.5 h-3.5" />
+        </button>
+        {canDelete && (
+          <button
+            onClick={onDelete}
+            className="p-1 rounded hover:bg-red-50 text-mid hover:text-red-600"
+            title="Видалити"
+          >
+            <Trash2 className="w-3.5 h-3.5" />
+          </button>
+        )}
+      </div>
+    </li>
+  );
+}
+
+function abbrevName(full: string) {
+  const parts = full.trim().split(/\s+/);
+  if (parts.length < 2) return full;
+  return `${parts[0]} ${getInitials(parts.slice(1).join(' '))}.`;
 }

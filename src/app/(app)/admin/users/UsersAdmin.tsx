@@ -5,9 +5,12 @@ import { trpc } from '@/lib/trpc/client';
 import { useSession } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
 import { Avatar } from '@/components/ui/Avatar';
+import { Modal } from '@/components/ui/Modal';
 import { formatDate } from '@/lib/utils';
 import { useEscape } from '@/lib/useEscape';
-import { UserX, UserCheck } from 'lucide-react';
+import { UserX, UserCheck, Pencil, X, Plus } from 'lucide-react';
+
+type WGRole = 'LEADER' | 'DEPUTY' | 'SECRETARY' | 'MEMBER' | 'GUEST';
 
 const GLOBAL_ROLE_LABELS: Record<string, { label: string; cls: string }> = {
   ADMIN: { label: 'Адмін', cls: 'bg-purple-100 text-purple-700' },
@@ -59,10 +62,30 @@ export function UsersAdmin() {
     onSuccess: () => void utils.user.list.invalidate(),
   });
 
+  const addMemberMutation = trpc.workingGroup.addMember.useMutation({
+    onSuccess: () => void utils.user.list.invalidate(),
+  });
+  const removeMemberMutation = trpc.workingGroup.removeMember.useMutation({
+    onSuccess: () => void utils.user.list.invalidate(),
+  });
+  const changeMemberRoleMutation = trpc.workingGroup.changeMemberRole.useMutation({
+    onSuccess: () => void utils.user.list.invalidate(),
+  });
+
+  const [editingUser, setEditingUser] = useState<{
+    id: string;
+    name: string;
+    email: string;
+  } | null>(null);
+  const [newWgId, setNewWgId] = useState('');
+  const [newWgRole, setNewWgRole] = useState<WGRole>('MEMBER');
+  const editingUserData = users?.find((u) => u.id === editingUser?.id);
+
   useEscape(showInvite, () => {
     setShowInvite(false);
     setInviteError('');
   });
+  useEscape(!!editingUser, () => setEditingUser(null));
 
   useEffect(() => {
     if (session && !isAdmin) router.replace('/dashboard');
@@ -206,41 +229,51 @@ export function UsersAdmin() {
                     </td>
                     <td className="px-3 py-3.5 text-xs text-light">{formatDate(u.createdAt)}</td>
                     <td className="px-3 py-3.5 text-right">
-                      {!isSelf && (
+                      <div className="inline-flex gap-1.5">
                         <button
-                          onClick={() => {
-                            const wantActive = !(u as { isActive?: boolean }).isActive
-                              ? true
-                              : false;
-                            if (
-                              confirm(
-                                `${wantActive ? 'Активувати' : 'Деактивувати'} користувача "${u.name}"?`,
-                              )
-                            ) {
-                              setActiveMutation.mutate({ userId: u.id, isActive: wantActive });
-                            }
-                          }}
-                          disabled={setActiveMutation.isPending}
-                          className="text-xs text-mid hover:text-ink inline-flex items-center gap-1 border border-hairline rounded-lg px-2.5 py-1 hover:bg-page disabled:opacity-50"
-                          title={
-                            (u as { isActive?: boolean }).isActive === false
-                              ? 'Активувати'
-                              : 'Деактивувати'
-                          }
+                          onClick={() => setEditingUser({ id: u.id, name: u.name, email: u.email })}
+                          className="text-xs text-mid hover:text-brand inline-flex items-center gap-1 border border-hairline rounded-lg px-2.5 py-1 hover:bg-page"
+                          title="Редагувати"
                         >
-                          {(u as { isActive?: boolean }).isActive === false ? (
-                            <>
-                              <UserCheck className="w-3.5 h-3.5" />
-                              Активувати
-                            </>
-                          ) : (
-                            <>
-                              <UserX className="w-3.5 h-3.5" />
-                              Деактивувати
-                            </>
-                          )}
+                          <Pencil className="w-3.5 h-3.5" />
+                          Редагувати
                         </button>
-                      )}
+                        {!isSelf && (
+                          <button
+                            onClick={() => {
+                              const wantActive = !(u as { isActive?: boolean }).isActive
+                                ? true
+                                : false;
+                              if (
+                                confirm(
+                                  `${wantActive ? 'Активувати' : 'Деактивувати'} користувача "${u.name}"?`,
+                                )
+                              ) {
+                                setActiveMutation.mutate({ userId: u.id, isActive: wantActive });
+                              }
+                            }}
+                            disabled={setActiveMutation.isPending}
+                            className="text-xs text-mid hover:text-ink inline-flex items-center gap-1 border border-hairline rounded-lg px-2.5 py-1 hover:bg-page disabled:opacity-50"
+                            title={
+                              (u as { isActive?: boolean }).isActive === false
+                                ? 'Активувати'
+                                : 'Деактивувати'
+                            }
+                          >
+                            {(u as { isActive?: boolean }).isActive === false ? (
+                              <>
+                                <UserCheck className="w-3.5 h-3.5" />
+                                Активувати
+                              </>
+                            ) : (
+                              <>
+                                <UserX className="w-3.5 h-3.5" />
+                                Деактивувати
+                              </>
+                            )}
+                          </button>
+                        )}
+                      </div>
                     </td>
                   </tr>
                 );
@@ -341,6 +374,155 @@ export function UsersAdmin() {
           </div>
         </div>
       )}
+
+      {/* Edit user modal */}
+      <Modal
+        open={!!editingUser}
+        onClose={() => setEditingUser(null)}
+        title={editingUser ? `Редагувати: ${editingUser.name}` : ''}
+        subtitle={editingUser?.email}
+        size="md"
+      >
+        {editingUserData && (
+          <div className="space-y-4">
+            <div>
+              <label className="field-label">Глобальна роль</label>
+              <select
+                className="select"
+                value={editingUserData.globalRole}
+                onChange={(e) =>
+                  changeRoleMutation.mutate({
+                    userId: editingUserData.id,
+                    globalRole: e.target.value as 'ADMIN' | 'DIRECTOR' | 'USER',
+                  })
+                }
+                disabled={editingUserData.id === session?.user.id}
+              >
+                <option value="USER">Користувач</option>
+                <option value="DIRECTOR">Керівник центру</option>
+                <option value="ADMIN">Адмін</option>
+              </select>
+              {editingUserData.id === session?.user.id && (
+                <p className="text-[11px] text-light mt-1">Власну роль змінити не можна</p>
+              )}
+            </div>
+
+            <div>
+              <label className="field-label">Робочі групи</label>
+              <p className="text-[11px] text-light mb-2">
+                Користувач може бути учасником декількох груп з різними ролями
+              </p>
+              {editingUserData.memberships.length === 0 ? (
+                <p className="text-sm text-light italic">Поки не є учасником жодної групи</p>
+              ) : (
+                <div className="space-y-1.5">
+                  {editingUserData.memberships.map((m) => (
+                    <div
+                      key={m.workingGroup.id}
+                      className="flex items-center gap-2 bg-page border border-hairline rounded-[10px] px-3 py-2"
+                    >
+                      <span
+                        className="w-2 h-2 rounded-full shrink-0"
+                        style={{ backgroundColor: m.workingGroup.color }}
+                      />
+                      <span className="font-mono text-xs font-bold text-ink flex-1">
+                        {m.workingGroup.code}
+                      </span>
+                      <select
+                        value={m.role}
+                        onChange={(e) =>
+                          changeMemberRoleMutation.mutate({
+                            workingGroupId: m.workingGroup.id,
+                            userId: editingUserData.id,
+                            role: e.target.value as WGRole,
+                          })
+                        }
+                        className="text-xs border border-hairline rounded-md px-2 py-1 bg-card text-ink focus:outline-none focus:border-brand"
+                      >
+                        {Object.entries(WG_ROLE_LABELS).map(([k, v]) => (
+                          <option key={k} value={k}>
+                            {v}
+                          </option>
+                        ))}
+                      </select>
+                      <button
+                        onClick={() => {
+                          if (confirm(`Видалити з групи ${m.workingGroup.code}?`)) {
+                            removeMemberMutation.mutate({
+                              workingGroupId: m.workingGroup.id,
+                              userId: editingUserData.id,
+                            });
+                          }
+                        }}
+                        className="p-1 text-mid hover:text-red-600 rounded hover:bg-red-50"
+                        title="Видалити з групи"
+                      >
+                        <X className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Add WG */}
+            <div className="border-t border-hairline pt-4">
+              <label className="field-label">Додати до групи</label>
+              <div className="flex gap-2">
+                <select
+                  className="select flex-1"
+                  value={newWgId}
+                  onChange={(e) => setNewWgId(e.target.value)}
+                >
+                  <option value="">— оберіть групу —</option>
+                  {groups
+                    ?.filter(
+                      (g) => !editingUserData.memberships.some((m) => m.workingGroup.id === g.id),
+                    )
+                    .map((g) => (
+                      <option key={g.id} value={g.id}>
+                        {g.code} — {g.name}
+                      </option>
+                    ))}
+                </select>
+                <select
+                  className="select w-40"
+                  value={newWgRole}
+                  onChange={(e) => setNewWgRole(e.target.value as WGRole)}
+                >
+                  {Object.entries(WG_ROLE_LABELS).map(([k, v]) => (
+                    <option key={k} value={k}>
+                      {v}
+                    </option>
+                  ))}
+                </select>
+                <button
+                  onClick={() => {
+                    if (!newWgId) return;
+                    addMemberMutation.mutate({
+                      workingGroupId: newWgId,
+                      userId: editingUserData.id,
+                      role: newWgRole,
+                    });
+                    setNewWgId('');
+                    setNewWgRole('MEMBER');
+                  }}
+                  disabled={!newWgId || addMemberMutation.isPending}
+                  className="btn-primary shrink-0"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            </div>
+
+            <div className="flex gap-3 justify-end pt-2 border-t border-hairline">
+              <button onClick={() => setEditingUser(null)} className="btn-secondary">
+                Закрити
+              </button>
+            </div>
+          </div>
+        )}
+      </Modal>
     </div>
   );
 }

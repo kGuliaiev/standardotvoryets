@@ -9,6 +9,8 @@ import { StatusBadge, type StandardStatus } from '@/components/ui/StatusBadge';
 import { Avatar } from '@/components/ui/Avatar';
 import { Modal } from '@/components/ui/Modal';
 import { ActivityFeed } from '@/components/ActivityFeed';
+import { TaskFormModal } from '@/components/TaskFormModal';
+import { DocumentUploadModal } from '@/components/DocumentUploadModal';
 import { formatDate, formatDateTime, formatBytes } from '@/lib/utils';
 import { can } from '@/lib/rbac';
 import type { GlobalRole, WorkingGroupRole } from '@prisma/client';
@@ -75,6 +77,8 @@ export function StandardDetail({ id }: { id: string }) {
     progress: 0,
   });
   const [editError, setEditError] = useState<string | null>(null);
+  const [taskModalOpen, setTaskModalOpen] = useState(false);
+  const [docModalOpen, setDocModalOpen] = useState(false);
 
   const updateMutation = trpc.standard.update.useMutation({
     onSuccess: () => {
@@ -335,12 +339,12 @@ export function StandardDetail({ id }: { id: string }) {
           <div className="px-5 py-4 border-b border-hairline flex items-center justify-between">
             <h3 className="font-semibold text-ink">Документи</h3>
             {canUpload && (
-              <Link
-                href={`/standards/${id}/upload`}
-                className="text-xs font-medium text-blue-700 hover:underline"
+              <button
+                onClick={() => setDocModalOpen(true)}
+                className="text-xs font-bold text-brand hover:underline"
               >
                 + Завантажити
-              </Link>
+              </button>
             )}
           </div>
           {standard.documents.length === 0 ? (
@@ -512,12 +516,12 @@ export function StandardDetail({ id }: { id: string }) {
           <div className="bg-card rounded-xl border border-hairline">
             <div className="px-5 py-4 border-b border-hairline flex items-center justify-between">
               <h3 className="font-semibold text-ink">Відкриті завдання ({openTasks.length})</h3>
-              <Link
-                href={`/standards/${id}/tasks/new`}
-                className="text-xs text-blue-700 hover:underline"
+              <button
+                onClick={() => setTaskModalOpen(true)}
+                className="text-xs font-bold text-brand hover:underline"
               >
                 + Додати
-              </Link>
+              </button>
             </div>
             {openTasks.length === 0 ? (
               <div className="py-10 text-center text-light text-sm">Завдань немає</div>
@@ -733,6 +737,21 @@ export function StandardDetail({ id }: { id: string }) {
           </div>
         </div>
       </Modal>
+
+      <TaskFormModal
+        open={taskModalOpen}
+        onClose={() => setTaskModalOpen(false)}
+        initial={{ workingGroupId: standard.workingGroupId, standardId: id }}
+        lockedStandardId={id}
+        onSaved={() => void refetch()}
+      />
+
+      <DocumentUploadModal
+        open={docModalOpen}
+        onClose={() => setDocModalOpen(false)}
+        standardId={id}
+        onSaved={() => void refetch()}
+      />
     </div>
   );
 }
