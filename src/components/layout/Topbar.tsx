@@ -4,6 +4,7 @@ import { type Session } from 'next-auth';
 import { Bell, Search } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
+import { trpc } from '@/lib/trpc/client';
 
 interface TopbarProps {
   session: Session;
@@ -12,6 +13,7 @@ interface TopbarProps {
 const PAGE_TITLES: Record<string, string> = {
   '/dashboard': 'Дашборд',
   '/standards': 'Стандарти',
+  '/working-groups': 'Робочі групи',
   '/meetings': 'Засідання',
   '/tasks': 'Завдання',
   '/notifications': 'Сповіщення',
@@ -20,6 +22,9 @@ const PAGE_TITLES: Record<string, string> = {
 
 export function Topbar({ session: _session }: TopbarProps) {
   const pathname = usePathname();
+  const { data: unreadCount } = trpc.notification.unreadCount.useQuery(undefined, {
+    refetchInterval: 60_000,
+  });
 
   // Find the title by longest matching prefix
   const title =
@@ -27,31 +32,36 @@ export function Topbar({ session: _session }: TopbarProps) {
       .filter(([key]) => pathname.startsWith(key))
       .sort(([a], [b]) => b.length - a.length)[0]?.[1] ?? '';
 
+  const hasUnread = (unreadCount ?? 0) > 0;
+
   return (
-    <header className="h-14 bg-white border-b border-slate-200 flex items-center gap-4 px-6 shrink-0">
+    <header className="h-[54px] bg-white border-b border-hairline flex items-center gap-4 px-6 shrink-0">
       {/* Page title */}
-      <h1 className="text-base font-semibold text-slate-800 min-w-0 truncate">{title}</h1>
+      <h1 className="text-[15px] font-bold text-navy min-w-0 truncate">{title}</h1>
 
       <div className="flex-1" />
 
       {/* Search */}
       <div className="relative hidden md:flex items-center">
-        <Search size={15} className="absolute left-3 text-slate-400 pointer-events-none" />
+        <Search size={15} className="absolute left-3 text-light pointer-events-none" />
         <input
           type="search"
-          placeholder="Пошук стандартів..."
-          className="pl-9 pr-4 py-1.5 bg-slate-100 border border-transparent rounded-xl text-sm text-slate-700 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:bg-white transition-all w-56"
+          placeholder="Пошук стандартів…"
+          className="pl-9 pr-4 py-1.5 bg-page border border-hairline rounded-[10px] text-sm text-ink placeholder:text-light focus:outline-none focus:border-brand transition-all w-60"
         />
       </div>
 
       {/* Notifications bell */}
       <Link
         href="/notifications"
-        className="relative w-8 h-8 flex items-center justify-center text-slate-500 hover:text-slate-800 hover:bg-slate-100 rounded-lg transition-colors"
+        className="relative w-[34px] h-[34px] flex items-center justify-center text-mid hover:text-ink hover:bg-pill rounded-[10px] transition-colors"
       >
         <Bell size={18} />
-        {/* Unread badge — will be dynamic once notification router is wired */}
-        <span className="absolute top-1 right-1 w-2 h-2 bg-red-500 rounded-full" />
+        {hasUnread && (
+          <span className="absolute top-1.5 right-1.5 min-w-[16px] h-[16px] px-1 bg-red-500 text-white rounded-full text-[10px] font-bold flex items-center justify-center">
+            {(unreadCount ?? 0) > 9 ? '9+' : unreadCount}
+          </span>
+        )}
       </Link>
     </header>
   );
