@@ -44,6 +44,9 @@ export function DocumentUploadModal({
   const [isCurrent, setIsCurrent] = useState(true);
   const [note, setNote] = useState('');
   const [error, setError] = useState<string | null>(null);
+  const [progress, setProgress] = useState<'idle' | 'getting-url' | 'uploading' | 'confirming'>(
+    'idle',
+  );
 
   useEffect(() => {
     if (open) {
@@ -53,10 +56,12 @@ export function DocumentUploadModal({
       setIsCurrent(true);
       setNote('');
       setError(null);
+      setProgress('idle');
     }
   }, [open]);
 
-  const registerMutation = trpc.document.registerMetadata.useMutation({
+  const getUploadUrlMutation = trpc.document.getUploadUrl.useMutation();
+  const confirmUploadMutation = trpc.document.confirmUpload.useMutation({
     onSuccess: () => {
       void utils.standard.byId.invalidate({ id: standardId });
       void utils.document.list.invalidate({ standardId });
@@ -64,7 +69,10 @@ export function DocumentUploadModal({
       onSaved?.();
       onClose();
     },
-    onError: (e) => setError(e.message),
+    onError: (e) => {
+      setError(e.message);
+      setProgress('idle');
+    },
   });
 
   function onPick(e: React.ChangeEvent<HTMLInputElement>) {
@@ -82,7 +90,7 @@ export function DocumentUploadModal({
     setError(null);
   }
 
-  function submit() {
+  async function submit() {
     setError(null);
     if (!file) {
       setError('Оберіть файл');
@@ -92,19 +100,51 @@ export function DocumentUploadModal({
       setError('Введіть версію');
       return;
     }
-    // NOTE: S3 storage not configured on this deployment.
-    // We register metadata only. Once S3 is configured, switch to
-    // document.getUploadUrl + direct S3 upload + document.confirmUpload.
-    registerMutation.mutate({
-      standardId,
-      filename: file.name,
-      sizeBytes: file.size,
-      version: version.trim(),
-      type,
-      note: note.trim() || undefined,
-      isCurrent,
-    });
+
+    try {
+      // 1) Get presigned URL from server
+      setProgress('getting-url');
+      const { uploadUrl, s3Key } = await getUploadUrlMutation.mutateAsync({
+        standardId,
+        filename: file.name,
+        contentType: file.type,
+        type,
+        version: version.trim(),
+      });
+
+      // 2) Direct upload to S3
+      setProgress('uploading');
+      const putResp = await fetch(uploadUrl, {
+        method: 'PUT',
+        body: file,
+        headers: { 'Content-Type': file.type },
+      });
+      if (!putResp.ok) {
+        const text = await putResp.text().catch(() => '');
+        throw new Error(
+          `Не вдалося завантажити файл (HTTP ${putResp.status}). ${text.slice(0, 120)}`,
+        );
+      }
+
+      // 3) Confirm: create document record
+      setProgress('confirming');
+      confirmUploadMutation.mutate({
+        standardId,
+        s3Key,
+        filename: file.name,
+        sizeBytes: file.size,
+        version: version.trim(),
+        type,
+        note: note.trim() || undefined,
+        isCurrent,
+      });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Помилка завантаження');
+      setProgress('idle');
+    }
   }
+
+  const busy = progress !== 'idle' || confirmUploadMutation.isPending;
 
   return (
     <Modal open={open} onClose={onClose} title="Завантажити документ" size="md">
@@ -118,6 +158,7 @@ export function DocumentUploadModal({
               className="hidden"
               accept={ALLOWED_MIMES.join(',')}
               onChange={onPick}
+              disabled={busy}
             />
             {file ? (
               <>
@@ -184,30 +225,23 @@ export function DocumentUploadModal({
           <span className="text-ink">Позначити як актуальну версію</span>
         </label>
 
-        {!file && (
-          <p className="text-[11px] text-light leading-relaxed">
-            Примітка: на цьому розгортанні S3-сховище ще не налаштоване, тому файл зберігається лише
-            як запис у журналі (метадані). Як тільки буде підключено бакет — реальне завантаження
-            активується автоматично.
-          </p>
-        )}
-
         {error && (
           <p className="text-sm text-red-600 bg-red-50 rounded-[10px] px-3 py-2">{error}</p>
         )}
 
         <div className="flex gap-3 justify-end pt-2 border-t border-hairline">
-          <button type="button" onClick={onClose} className="btn-secondary">
+          <button type="button" onClick={onClose} className="btn-secondary" disabled={busy}>
             Скасувати
           </button>
-          <button
-            type="button"
-            onClick={submit}
-            disabled={registerMutation.isPending}
-            className="btn-primary"
-          >
-            {registerMutation.isPending && <Loader2 className="w-4 h-4 animate-spin" />}
-            Зберегти
+          <button type="button" onClick={submit} disabled={busy} className="btn-primary">
+            {busy && <Loader2 className="w-4 h-4 animate-spin" />}
+            {progress === 'getting-url'
+              ? 'Отримуємо URL…'
+              : progress === 'uploading'
+                ? 'Завантажуємо…'
+                : progress === 'confirming'
+                  ? 'Реєструємо…'
+                  : 'Завантажити'}
           </button>
         </div>
       </div>

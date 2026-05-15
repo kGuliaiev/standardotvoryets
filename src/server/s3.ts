@@ -3,12 +3,16 @@ import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { GetObjectCommand } from '@aws-sdk/client-s3';
 import { env } from '@/lib/env';
 
+// Detect Railway-hosted bucket (virtual-hosted style) vs MinIO (path style).
+// Railway uses *.storageapi.dev which requires virtual-hosted URLs.
+const isRailwayBucket = env.S3_ENDPOINT?.includes('storageapi.dev') ?? false;
+
 export const s3 = new S3Client({
   region: env.S3_REGION,
   ...(env.S3_ENDPOINT
     ? {
         endpoint: env.S3_ENDPOINT,
-        forcePathStyle: true, // Required for MinIO
+        forcePathStyle: !isRailwayBucket, // MinIO needs path-style; Railway needs virtual-hosted
       }
     : {}),
   credentials: {
