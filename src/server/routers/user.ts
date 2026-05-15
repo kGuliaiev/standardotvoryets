@@ -3,6 +3,7 @@ import { TRPCError } from '@trpc/server';
 import type { GlobalRole, WorkingGroupRole } from '@prisma/client';
 import { createTRPCRouter, protectedProcedure } from '@/server/trpc';
 import { can } from '@/lib/rbac';
+import { logActivity } from '@/server/audit';
 import bcrypt from 'bcryptjs';
 import { addDays } from 'date-fns';
 
@@ -228,11 +229,24 @@ export const userRouter = createTRPCRouter({
       if (ctx.session.user.globalRole !== 'ADMIN') {
         throw new TRPCError({ code: 'FORBIDDEN' });
       }
-      return ctx.db.user.update({
+      const before = await ctx.db.user.findUniqueOrThrow({
+        where: { id: input.userId },
+        select: { globalRole: true },
+      });
+      const updated = await ctx.db.user.update({
         where: { id: input.userId },
         data: { globalRole: input.globalRole },
         select: { id: true, globalRole: true },
       });
+      await logActivity(ctx.db, {
+        userId: ctx.session.user.id,
+        action: 'UPDATE',
+        entity: 'User',
+        entityId: input.userId,
+        before: { globalRole: before.globalRole },
+        after: { globalRole: input.globalRole },
+      });
+      return updated;
     }),
 
   // ── setActive (ADMIN only) ───────────────────────────────────────────
@@ -245,9 +259,19 @@ export const userRouter = createTRPCRouter({
       if (input.userId === ctx.session.user.id) {
         throw new TRPCError({ code: 'BAD_REQUEST', message: 'Не можна деактивувати себе' });
       }
-      return ctx.db.user.update({
+      const updated = await ctx.db.user.update({
         where: { id: input.userId },
         data: { isActive: input.isActive },
       });
+      await logActivity(ctx.db, {
+        userId: ctx.session.user.id,
+        action: input.isActive ? 'RESTORE' : 'ARCHIVE',
+        entity: 'User',
+        entityId: input.userId,
+        before: { isActive: !input.isActive },
+        after: { isActive: input.isActive },
+        note: input.isActive ? 'Активовано' : 'Деактивовано',
+      });
+      return updated;
     }),
 });

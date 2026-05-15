@@ -9,6 +9,7 @@ import { taskRouter } from './task';
 import { notificationRouter } from './notification';
 import { dashboardRouter } from './dashboard';
 import { activityLogRouter } from './activityLog';
+import { commentRouter } from './comment';
 
 /**
  * This is the primary router for the server.
@@ -25,6 +26,7 @@ export const appRouter = createTRPCRouter({
   notification: notificationRouter,
   dashboard: dashboardRouter,
   activityLog: activityLogRouter,
+  comment: commentRouter,
 });
 
 export type AppRouter = typeof appRouter;

@@ -2,6 +2,7 @@ import { z } from 'zod';
 import { TRPCError } from '@trpc/server';
 import { createTRPCRouter, protectedProcedure } from '@/server/trpc';
 import { can } from '@/lib/rbac';
+import { logActivity } from '@/server/audit';
 import type { GlobalRole, WorkingGroupRole } from '@prisma/client';
 
 function userCtx(session: {
@@ -105,8 +106,18 @@ export const workingGroupRouter = createTRPCRouter({
       if (!isAdmin && !can(uctx, 'wg:invite', input.id)) {
         throw new TRPCError({ code: 'FORBIDDEN' });
       }
+      const before = await ctx.db.workingGroup.findUniqueOrThrow({ where: { id: input.id } });
       const { id, ...data } = input;
-      return ctx.db.workingGroup.update({ where: { id }, data });
+      const updated = await ctx.db.workingGroup.update({ where: { id }, data });
+      await logActivity(ctx.db, {
+        userId: ctx.session.user.id,
+        action: 'UPDATE',
+        entity: 'WorkingGroup',
+        entityId: id,
+        before,
+        after: updated,
+      });
+      return updated;
     }),
 
   // ── addMember ─────────────────────────────────────────────────────────
@@ -178,10 +189,19 @@ export const workingGroupRouter = createTRPCRouter({
       if (ctx.session.user.globalRole !== 'ADMIN') {
         throw new TRPCError({ code: 'FORBIDDEN' });
       }
-      return ctx.db.workingGroup.update({
+      const updated = await ctx.db.workingGroup.update({
         where: { id: input.id },
         data: { isArchived: input.isArchived },
       });
+      await logActivity(ctx.db, {
+        userId: ctx.session.user.id,
+        action: input.isArchived ? 'ARCHIVE' : 'RESTORE',
+        entity: 'WorkingGroup',
+        entityId: input.id,
+        before: { isArchived: !input.isArchived },
+        after: { isArchived: input.isArchived },
+      });
+      return updated;
     }),
 
   // ── stats ─────────────────────────────────────────────────────────────

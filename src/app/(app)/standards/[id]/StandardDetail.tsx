@@ -11,17 +11,19 @@ import { Modal } from '@/components/ui/Modal';
 import { ActivityFeed } from '@/components/ActivityFeed';
 import { TaskFormModal } from '@/components/TaskFormModal';
 import { DocumentUploadModal } from '@/components/DocumentUploadModal';
+import { CommentsThread } from '@/components/CommentsThread';
 import { formatDate, formatDateTime, formatBytes } from '@/lib/utils';
 import { can } from '@/lib/rbac';
 import type { GlobalRole, WorkingGroupRole } from '@prisma/client';
 
-type Tab = 'overview' | 'documents' | 'voting' | 'tasks' | 'history';
+type Tab = 'overview' | 'documents' | 'voting' | 'tasks' | 'comments' | 'history';
 
 const TABS: { id: Tab; label: string }[] = [
   { id: 'overview', label: 'Огляд' },
   { id: 'documents', label: 'Документи' },
   { id: 'voting', label: 'Голосування' },
   { id: 'tasks', label: 'Завдання' },
+  { id: 'comments', label: 'Обговорення' },
   { id: 'history', label: 'Історія' },
 ];
 
@@ -574,6 +576,8 @@ export function StandardDetail({ id }: { id: string }) {
           )}
         </div>
       )}
+
+      {activeTab === 'comments' && <CommentsThread standardId={id} />}
 
       {activeTab === 'history' && (
         <div className="space-y-5">

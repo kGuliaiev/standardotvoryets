@@ -2,9 +2,12 @@ import { z } from 'zod';
 import { TRPCError } from '@trpc/server';
 import { createTRPCRouter, protectedProcedure } from '@/server/trpc';
 import { can } from '@/lib/rbac';
+import { logActivity } from '@/server/audit';
 import type { GlobalRole, WorkingGroupRole } from '@prisma/client';
 
-function userCtx(session: { user: { globalRole: string; memberships: { workingGroupId: string; role: string }[] } }) {
+function userCtx(session: {
+  user: { globalRole: string; memberships: { workingGroupId: string; role: string }[] };
+}) {
   return {
     globalRole: session.user.globalRole as GlobalRole,
     memberships: session.user.memberships.map((m) => ({
@@ -142,7 +145,16 @@ export const taskRouter = createTRPCRouter({
       }
 
       const { id, ...data } = input;
-      return ctx.db.task.update({ where: { id }, data });
+      const updated = await ctx.db.task.update({ where: { id }, data });
+      await logActivity(ctx.db, {
+        userId: ctx.session.user.id,
+        action: 'UPDATE',
+        entity: 'Task',
+        entityId: id,
+        before: task,
+        after: updated,
+      });
+      return updated;
     }),
 
   // ── changeStatus ──────────────────────────────────────────────────────
@@ -168,13 +180,22 @@ export const taskRouter = createTRPCRouter({
         throw new TRPCError({ code: 'FORBIDDEN' });
       }
 
-      return ctx.db.task.update({
+      const updated = await ctx.db.task.update({
         where: { id: input.id },
         data: {
           status: input.status,
           completedAt: input.status === 'DONE' ? new Date() : null,
         },
       });
+      await logActivity(ctx.db, {
+        userId: ctx.session.user.id,
+        action: 'STATUS_CHANGE',
+        entity: 'Task',
+        entityId: input.id,
+        before: { status: task.status },
+        after: { status: input.status },
+      });
+      return updated;
     }),
 
   // ── delete ───────────────────────────────────────────────────────────
@@ -207,9 +228,7 @@ export const taskRouter = createTRPCRouter({
       where: {
         dueDate: { lt: new Date() },
         status: { notIn: ['DONE', 'CANCELLED'] },
-        ...(isAdmin
-          ? {}
-          : { standard: { workingGroupId: { in: memberGroupIds } } }),
+        ...(isAdmin ? {} : { standard: { workingGroupId: { in: memberGroupIds } } }),
       },
       include: {
         standard: { select: { id: true, code: true, workingGroupId: true } },
