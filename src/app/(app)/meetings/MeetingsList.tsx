@@ -7,11 +7,22 @@ import { useSearchParams } from 'next/navigation';
 import { useSession } from 'next-auth/react';
 import { can } from '@/lib/rbac';
 import { formatDate } from '@/lib/utils';
+import { useEscape } from '@/lib/useEscape';
 import type { GlobalRole, WorkingGroupRole } from '@prisma/client';
 
 const MONTHS_UA = [
-  'Січень', 'Лютий', 'Березень', 'Квітень', 'Травень', 'Червень',
-  'Липень', 'Серпень', 'Вересень', 'Жовтень', 'Листопад', 'Грудень',
+  'Січень',
+  'Лютий',
+  'Березень',
+  'Квітень',
+  'Травень',
+  'Червень',
+  'Липень',
+  'Серпень',
+  'Вересень',
+  'Жовтень',
+  'Листопад',
+  'Грудень',
 ];
 
 const FORMAT_LABELS: Record<string, string> = {
@@ -60,7 +71,15 @@ export function MeetingsList() {
     onSuccess: () => {
       void utils.meeting.list.invalidate();
       setShowCreate(false);
-      setForm({ workingGroupId: '', title: '', format: 'ONLINE', location: '', startAt: '', durationMins: 60, agendaText: '' });
+      setForm({
+        workingGroupId: '',
+        title: '',
+        format: 'ONLINE',
+        location: '',
+        startAt: '',
+        durationMins: 60,
+        agendaText: '',
+      });
       setCreateError('');
     },
     onError: (e) => setCreateError(e.message),
@@ -70,10 +89,20 @@ export function MeetingsList() {
     onSuccess: () => void utils.meeting.list.invalidate(),
   });
 
-  const userCtx = session ? {
-    globalRole: session.user.globalRole as GlobalRole,
-    memberships: (session.user.memberships ?? []) as { workingGroupId: string; role: WorkingGroupRole }[],
-  } : null;
+  useEscape(showCreate, () => {
+    setShowCreate(false);
+    setCreateError('');
+  });
+
+  const userCtx = session
+    ? {
+        globalRole: session.user.globalRole as GlobalRole,
+        memberships: (session.user.memberships ?? []) as {
+          workingGroupId: string;
+          role: WorkingGroupRole;
+        }[],
+      }
+    : null;
 
   function canCreateInGroup(wgId: string) {
     if (!userCtx) return false;
@@ -106,8 +135,10 @@ export function MeetingsList() {
           <div className="flex items-center gap-1">
             <button
               onClick={() => {
-                if (month === 1) { setMonth(12); setYear(y => y - 1); }
-                else setMonth(m => m - 1);
+                if (month === 1) {
+                  setMonth(12);
+                  setYear((y) => y - 1);
+                } else setMonth((m) => m - 1);
               }}
               className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-slate-100 text-slate-500 transition-colors"
             >
@@ -118,8 +149,10 @@ export function MeetingsList() {
             </span>
             <button
               onClick={() => {
-                if (month === 12) { setMonth(1); setYear(y => y + 1); }
-                else setMonth(m => m + 1);
+                if (month === 12) {
+                  setMonth(1);
+                  setYear((y) => y + 1);
+                } else setMonth((m) => m + 1);
               }}
               className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-slate-100 text-slate-500 transition-colors"
             >
@@ -135,12 +168,18 @@ export function MeetingsList() {
           >
             <option value="">Всі РГ</option>
             {groups?.map((g) => (
-              <option key={g.id} value={g.id}>{g.code} — {g.name}</option>
+              <option key={g.id} value={g.id}>
+                {g.code} — {g.name}
+              </option>
             ))}
           </select>
 
           <button
-            onClick={() => { setMonth(now.getMonth() + 1); setYear(now.getFullYear()); setWgFilter(''); }}
+            onClick={() => {
+              setMonth(now.getMonth() + 1);
+              setYear(now.getFullYear());
+              setWgFilter('');
+            }}
             className="text-xs text-slate-400 hover:text-slate-600 underline underline-offset-2"
           >
             Поточний місяць
@@ -173,37 +212,47 @@ export function MeetingsList() {
             <tbody className="divide-y divide-slate-100">
               {meetings?.map((m) => {
                 const s = STATUS_LABELS[m.status] ?? { label: m.status, cls: '' };
-                const canCancel = userCtx && (userCtx.globalRole === 'ADMIN' || can(userCtx, 'meeting:cancel', m.workingGroup.id));
+                const canCancel =
+                  userCtx &&
+                  (userCtx.globalRole === 'ADMIN' ||
+                    can(userCtx, 'meeting:cancel', m.workingGroup.id));
                 return (
                   <tr key={m.id} className="hover:bg-slate-50 transition-colors group">
                     <td className="px-5 py-3.5 max-w-xs">
-                      <Link href={`/meetings/${m.id}`} className="font-medium text-slate-800 hover:text-blue-700 line-clamp-1">
+                      <Link
+                        href={`/meetings/${m.id}`}
+                        className="font-medium text-slate-800 hover:text-blue-700 line-clamp-1"
+                      >
                         {m.title}
                       </Link>
                     </td>
                     <td className="px-3 py-3.5">
                       <span className="flex items-center gap-1.5">
-                        <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: m.workingGroup.color }} />
-                        <span className="text-xs text-slate-600 font-medium">{m.workingGroup.code}</span>
+                        <span
+                          className="w-2.5 h-2.5 rounded-full"
+                          style={{ backgroundColor: m.workingGroup.color }}
+                        />
+                        <span className="text-xs text-slate-600 font-medium">
+                          {m.workingGroup.code}
+                        </span>
                       </span>
                     </td>
-                    <td className="px-3 py-3.5 text-xs text-slate-500">
-                      {formatDate(m.startAt)}
-                    </td>
+                    <td className="px-3 py-3.5 text-xs text-slate-500">{formatDate(m.startAt)}</td>
                     <td className="px-3 py-3.5 text-xs text-slate-500">
                       {FORMAT_LABELS[m.format] ?? m.format}
                     </td>
                     <td className="px-3 py-3.5">
-                      <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${s.cls}`}>{s.label}</span>
+                      <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${s.cls}`}>
+                        {s.label}
+                      </span>
                     </td>
-                    <td className="px-3 py-3.5 text-xs text-slate-400">
-                      {m._count.attendances}
-                    </td>
+                    <td className="px-3 py-3.5 text-xs text-slate-400">{m._count.attendances}</td>
                     <td className="px-3 py-3.5 text-right opacity-0 group-hover:opacity-100 transition-opacity">
                       {canCancel && m.status === 'PLANNED' && (
                         <button
                           onClick={() => {
-                            if (confirm('Скасувати засідання?')) cancelMutation.mutate({ id: m.id });
+                            if (confirm('Скасувати засідання?'))
+                              cancelMutation.mutate({ id: m.id });
                           }}
                           className="text-xs text-red-500 hover:text-red-700 transition-colors"
                         >
@@ -226,21 +275,29 @@ export function MeetingsList() {
             <h2 className="text-lg font-semibold text-slate-800 mb-4">Нове засідання</h2>
             <div className="space-y-4">
               <div>
-                <label className="block text-xs font-medium text-slate-600 mb-1">Робоча група *</label>
+                <label className="block text-xs font-medium text-slate-600 mb-1">
+                  Робоча група *
+                </label>
                 <select
                   value={form.workingGroupId}
                   onChange={(e) => setForm((f) => ({ ...f, workingGroupId: e.target.value }))}
                   className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                 >
                   <option value="">Оберіть групу…</option>
-                  {groups?.filter((g) => canCreateInGroup(g.id)).map((g) => (
-                    <option key={g.id} value={g.id}>{g.code} — {g.name}</option>
-                  ))}
+                  {groups
+                    ?.filter((g) => canCreateInGroup(g.id))
+                    .map((g) => (
+                      <option key={g.id} value={g.id}>
+                        {g.code} — {g.name}
+                      </option>
+                    ))}
                 </select>
               </div>
 
               <div>
-                <label className="block text-xs font-medium text-slate-600 mb-1">Тема засідання *</label>
+                <label className="block text-xs font-medium text-slate-600 mb-1">
+                  Тема засідання *
+                </label>
                 <input
                   type="text"
                   maxLength={300}
@@ -253,7 +310,9 @@ export function MeetingsList() {
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-xs font-medium text-slate-600 mb-1">Дата та час *</label>
+                  <label className="block text-xs font-medium text-slate-600 mb-1">
+                    Дата та час *
+                  </label>
                   <input
                     type="datetime-local"
                     value={form.startAt}
@@ -262,13 +321,17 @@ export function MeetingsList() {
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-medium text-slate-600 mb-1">Тривалість (хв)</label>
+                  <label className="block text-xs font-medium text-slate-600 mb-1">
+                    Тривалість (хв)
+                  </label>
                   <input
                     type="number"
                     min={15}
                     max={480}
                     value={form.durationMins}
-                    onChange={(e) => setForm((f) => ({ ...f, durationMins: Number(e.target.value) }))}
+                    onChange={(e) =>
+                      setForm((f) => ({ ...f, durationMins: Number(e.target.value) }))
+                    }
                     className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                   />
                 </div>
@@ -279,7 +342,9 @@ export function MeetingsList() {
                   <label className="block text-xs font-medium text-slate-600 mb-1">Формат</label>
                   <select
                     value={form.format}
-                    onChange={(e) => setForm((f) => ({ ...f, format: e.target.value as typeof form.format }))}
+                    onChange={(e) =>
+                      setForm((f) => ({ ...f, format: e.target.value as typeof form.format }))
+                    }
                     className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                   >
                     <option value="ONLINE">Онлайн</option>
@@ -288,7 +353,9 @@ export function MeetingsList() {
                   </select>
                 </div>
                 <div>
-                  <label className="block text-xs font-medium text-slate-600 mb-1">Місце / Посилання</label>
+                  <label className="block text-xs font-medium text-slate-600 mb-1">
+                    Місце / Посилання
+                  </label>
                   <input
                     type="text"
                     placeholder="https://meet.google.com/…"
@@ -300,7 +367,9 @@ export function MeetingsList() {
               </div>
 
               <div>
-                <label className="block text-xs font-medium text-slate-600 mb-1">Порядок денний</label>
+                <label className="block text-xs font-medium text-slate-600 mb-1">
+                  Порядок денний
+                </label>
                 <textarea
                   rows={4}
                   placeholder="1. Розгляд стандарту ДСТУ-ХХ&#10;2. Обговорення коментарів&#10;3. Різне"
@@ -316,7 +385,10 @@ export function MeetingsList() {
 
               <div className="flex gap-3 pt-1">
                 <button
-                  onClick={() => { setShowCreate(false); setCreateError(''); }}
+                  onClick={() => {
+                    setShowCreate(false);
+                    setCreateError('');
+                  }}
                   className="flex-1 py-2 text-sm border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors"
                 >
                   Скасувати
@@ -329,7 +401,9 @@ export function MeetingsList() {
                       startAt: new Date(form.startAt),
                     });
                   }}
-                  disabled={createMutation.isPending || !form.workingGroupId || !form.title || !form.startAt}
+                  disabled={
+                    createMutation.isPending || !form.workingGroupId || !form.title || !form.startAt
+                  }
                   className="flex-1 py-2 text-sm bg-blue-700 text-white rounded-lg hover:bg-blue-800 disabled:opacity-50 transition-colors font-medium"
                 >
                   {createMutation.isPending ? 'Створення…' : 'Створити'}

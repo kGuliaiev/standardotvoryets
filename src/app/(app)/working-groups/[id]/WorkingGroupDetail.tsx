@@ -3,11 +3,14 @@
 import { useState } from 'react';
 import { trpc } from '@/lib/trpc/client';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { useSession } from 'next-auth/react';
 import { Avatar } from '@/components/ui/Avatar';
 import { StatusBadge } from '@/components/ui/StatusBadge';
 import { formatDate } from '@/lib/utils';
 import { can } from '@/lib/rbac';
+import { useEscape } from '@/lib/useEscape';
+import { Archive, ArchiveRestore } from 'lucide-react';
 import type { GlobalRole, WorkingGroupRole } from '@prisma/client';
 
 const TABS = [
@@ -89,6 +92,20 @@ export function WorkingGroupDetail({ id }: Props) {
     },
   });
 
+  const router = useRouter();
+  const archiveMutation = trpc.workingGroup.setArchived.useMutation({
+    onSuccess: () => {
+      void utils.workingGroup.list.invalidate();
+      router.push('/working-groups');
+    },
+  });
+
+  useEscape(showAddMember, () => {
+    setShowAddMember(false);
+    setAddError('');
+  });
+  useEscape(showEditName, () => setShowEditName(false));
+
   if (isLoading) {
     return <div className="py-16 text-center text-slate-400 text-sm">Завантаження…</div>;
   }
@@ -126,18 +143,47 @@ export function WorkingGroupDetail({ id }: Props) {
             <h1 className="text-xl font-bold text-slate-900">{group.name}</h1>
           </div>
         </div>
-        {canInvite && (
-          <button
-            onClick={() => {
-              setEditForm({ name: group.name, description: group.description ?? '' });
-              setShowEditName(true);
-            }}
-            className="text-xs text-slate-400 hover:text-slate-600 border border-slate-200 rounded-lg px-3 py-1.5 hover:bg-slate-50 transition-colors"
-          >
-            Редагувати
-          </button>
-        )}
+        <div className="flex gap-2">
+          {isAdmin && (
+            <button
+              onClick={() => {
+                if (
+                  confirm(`${group.isArchived ? 'Відновити' : 'Архівувати'} групу "${group.name}"?`)
+                ) {
+                  archiveMutation.mutate({ id, isArchived: !group.isArchived });
+                }
+              }}
+              disabled={archiveMutation.isPending}
+              className="text-xs text-slate-500 hover:text-slate-700 border border-slate-200 rounded-lg px-3 py-1.5 hover:bg-slate-50 transition-colors inline-flex items-center gap-1.5 disabled:opacity-50"
+            >
+              {group.isArchived ? (
+                <ArchiveRestore className="w-3.5 h-3.5" />
+              ) : (
+                <Archive className="w-3.5 h-3.5" />
+              )}
+              {group.isArchived ? 'Відновити' : 'Архівувати'}
+            </button>
+          )}
+          {canInvite && (
+            <button
+              onClick={() => {
+                setEditForm({ name: group.name, description: group.description ?? '' });
+                setShowEditName(true);
+              }}
+              className="text-xs text-slate-400 hover:text-slate-600 border border-slate-200 rounded-lg px-3 py-1.5 hover:bg-slate-50 transition-colors"
+            >
+              Редагувати
+            </button>
+          )}
+        </div>
       </div>
+
+      {/* Archived banner */}
+      {group.isArchived && (
+        <div className="rounded-[10px] border border-amber-200 bg-amber-50 text-amber-800 text-sm px-4 py-2.5">
+          Цю робочу групу архівовано. Дії над нею недоступні.
+        </div>
+      )}
 
       {/* Tabs */}
       <div className="border-b border-slate-200">

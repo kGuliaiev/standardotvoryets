@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { trpc } from '@/lib/trpc/client';
 import Link from 'next/link';
 import { useSession } from 'next-auth/react';
+import { useEscape } from '@/lib/useEscape';
 
 const ROLE_LABELS: Record<string, string> = {
   LEADER: 'Керівник',
@@ -30,6 +31,11 @@ export function WorkingGroupsList() {
       setError('');
     },
     onError: (e) => setError(e.message),
+  });
+
+  useEscape(showCreate, () => {
+    setShowCreate(false);
+    setError('');
   });
 
   function handleCreate(e: React.FormEvent) {

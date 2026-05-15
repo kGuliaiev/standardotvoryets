@@ -70,6 +70,7 @@ export const userRouter = createTRPCRouter({
         name: true,
         globalRole: true,
         avatarUrl: true,
+        isActive: true,
         createdAt: true,
         memberships: {
           select: {

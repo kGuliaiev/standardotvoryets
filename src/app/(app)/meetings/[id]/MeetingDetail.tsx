@@ -7,6 +7,7 @@ import { useSession } from 'next-auth/react';
 import { Avatar } from '@/components/ui/Avatar';
 import { formatDate } from '@/lib/utils';
 import { can } from '@/lib/rbac';
+import { useEscape } from '@/lib/useEscape';
 import type { GlobalRole, WorkingGroupRole } from '@prisma/client';
 
 const FORMAT_LABELS: Record<string, string> = {
@@ -28,7 +29,9 @@ const ATTENDANCE_LABELS: Record<string, { label: string; cls: string }> = {
   DECLINED: { label: 'Відмовлено', cls: 'text-red-500' },
 };
 
-interface Props { id: string }
+interface Props {
+  id: string;
+}
 
 export function MeetingDetail({ id }: Props) {
   const { data: session } = useSession();
@@ -51,13 +54,22 @@ export function MeetingDetail({ id }: Props) {
     onSuccess: () => void utils.meeting.byId.invalidate({ id }),
   });
 
-  if (isLoading) return <div className="py-16 text-center text-slate-400 text-sm">Завантаження…</div>;
-  if (!meeting) return <div className="py-16 text-center text-slate-400 text-sm">Засідання не знайдено</div>;
+  useEscape(showMinutes, () => setShowMinutes(false));
 
-  const userCtx = session ? {
-    globalRole: session.user.globalRole as GlobalRole,
-    memberships: (session.user.memberships ?? []) as { workingGroupId: string; role: WorkingGroupRole }[],
-  } : null;
+  if (isLoading)
+    return <div className="py-16 text-center text-slate-400 text-sm">Завантаження…</div>;
+  if (!meeting)
+    return <div className="py-16 text-center text-slate-400 text-sm">Засідання не знайдено</div>;
+
+  const userCtx = session
+    ? {
+        globalRole: session.user.globalRole as GlobalRole,
+        memberships: (session.user.memberships ?? []) as {
+          workingGroupId: string;
+          role: WorkingGroupRole;
+        }[],
+      }
+    : null;
   const isAdmin = session?.user.globalRole === 'ADMIN';
   const wgId = meeting.workingGroup.id;
   const canManage = userCtx && (isAdmin || can(userCtx, 'meeting:uploadMinutes', wgId));
@@ -72,11 +84,19 @@ export function MeetingDetail({ id }: Props) {
       <div className="flex items-start justify-between">
         <div className="space-y-1">
           <div className="flex items-center gap-2 text-sm text-slate-400">
-            <Link href="/meetings" className="hover:text-slate-600 transition-colors">← Засідання</Link>
+            <Link href="/meetings" className="hover:text-slate-600 transition-colors">
+              ← Засідання
+            </Link>
             <span>/</span>
             <span className="flex items-center gap-1.5">
-              <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: meeting.workingGroup.color }} />
-              <Link href={`/working-groups/${wgId}`} className="hover:text-slate-600 transition-colors">
+              <span
+                className="w-2.5 h-2.5 rounded-full"
+                style={{ backgroundColor: meeting.workingGroup.color }}
+              />
+              <Link
+                href={`/working-groups/${wgId}`}
+                className="hover:text-slate-600 transition-colors"
+              >
                 {meeting.workingGroup.code}
               </Link>
             </span>
@@ -104,7 +124,9 @@ export function MeetingDetail({ id }: Props) {
               </div>
               <div>
                 <p className="text-xs text-slate-400 mb-1">Формат</p>
-                <p className="font-medium text-slate-800">{FORMAT_LABELS[meeting.format] ?? meeting.format}</p>
+                <p className="font-medium text-slate-800">
+                  {FORMAT_LABELS[meeting.format] ?? meeting.format}
+                </p>
               </div>
               {meeting.location && (
                 <div>
@@ -136,7 +158,10 @@ export function MeetingDetail({ id }: Props) {
                 <h3 className="text-sm font-semibold text-slate-700">Протокол</h3>
                 {canManage && meeting.status !== 'CANCELLED' && (
                   <button
-                    onClick={() => { setMinutesText(meeting.minutesText ?? ''); setShowMinutes(true); }}
+                    onClick={() => {
+                      setMinutesText(meeting.minutesText ?? '');
+                      setShowMinutes(true);
+                    }}
                     className="text-xs text-blue-600 hover:text-blue-800 transition-colors"
                   >
                     {meeting.minutesText ? 'Редагувати' : '+ Додати протокол'}
@@ -160,7 +185,9 @@ export function MeetingDetail({ id }: Props) {
               <div className="flex gap-2 flex-wrap">
                 {meeting.status === 'PLANNED' && (
                   <button
-                    onClick={() => changeStatusMutation.mutate({ meetingId: id, status: 'IN_PROGRESS' })}
+                    onClick={() =>
+                      changeStatusMutation.mutate({ meetingId: id, status: 'IN_PROGRESS' })
+                    }
                     className="text-xs bg-amber-100 text-amber-700 hover:bg-amber-200 px-3 py-1.5 rounded-lg transition-colors font-medium"
                   >
                     Розпочати
@@ -168,7 +195,9 @@ export function MeetingDetail({ id }: Props) {
                 )}
                 {(meeting.status === 'PLANNED' || meeting.status === 'IN_PROGRESS') && (
                   <button
-                    onClick={() => changeStatusMutation.mutate({ meetingId: id, status: 'COMPLETED' })}
+                    onClick={() =>
+                      changeStatusMutation.mutate({ meetingId: id, status: 'COMPLETED' })
+                    }
                     className="text-xs bg-green-100 text-green-700 hover:bg-green-200 px-3 py-1.5 rounded-lg transition-colors font-medium"
                   >
                     Завершити
@@ -176,7 +205,10 @@ export function MeetingDetail({ id }: Props) {
                 )}
                 {canCancel && meeting.status === 'PLANNED' && (
                   <button
-                    onClick={() => { if (confirm('Скасувати засідання?')) changeStatusMutation.mutate({ meetingId: id, status: 'CANCELLED' }); }}
+                    onClick={() => {
+                      if (confirm('Скасувати засідання?'))
+                        changeStatusMutation.mutate({ meetingId: id, status: 'CANCELLED' });
+                    }}
                     className="text-xs bg-red-50 text-red-600 hover:bg-red-100 px-3 py-1.5 rounded-lg transition-colors font-medium"
                   >
                     Скасувати
