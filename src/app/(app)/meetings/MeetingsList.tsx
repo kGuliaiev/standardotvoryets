@@ -58,7 +58,7 @@ export function MeetingsList() {
 
   const createMutation = trpc.meeting.create.useMutation({
     onSuccess: () => {
-      utils.meeting.list.invalidate();
+      void utils.meeting.list.invalidate();
       setShowCreate(false);
       setForm({ workingGroupId: '', title: '', format: 'ONLINE', location: '', startAt: '', durationMins: 60, agendaText: '' });
       setCreateError('');
@@ -67,12 +67,12 @@ export function MeetingsList() {
   });
 
   const cancelMutation = trpc.meeting.cancel.useMutation({
-    onSuccess: () => utils.meeting.list.invalidate(),
+    onSuccess: () => void utils.meeting.list.invalidate(),
   });
 
   const userCtx = session ? {
     globalRole: session.user.globalRole as GlobalRole,
-    memberships: (session.user.memberships ?? []) as Array<{ workingGroupId: string; role: WorkingGroupRole }>,
+    memberships: (session.user.memberships ?? []) as { workingGroupId: string; role: WorkingGroupRole }[],
   } : null;
 
   function canCreateInGroup(wgId: string) {
@@ -83,8 +83,6 @@ export function MeetingsList() {
   function canCreateAny() {
     return groups?.some((g) => canCreateInGroup(g.id)) ?? false;
   }
-
-  const years = [now.getFullYear() - 1, now.getFullYear(), now.getFullYear() + 1];
 
   return (
     <div className="space-y-5">

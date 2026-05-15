@@ -11,11 +11,11 @@ declare module 'next-auth' {
     user: {
       id: string;
       globalRole: string;
-      memberships: Array<{
+      memberships: {
         workingGroupId: string;
         role: string;
         workingGroup: { code: string; color: string };
-      }>;
+      }[];
     } & DefaultSession['user'];
   }
   interface User {

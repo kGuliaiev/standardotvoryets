@@ -8,7 +8,7 @@ import { StatusBadge, type StandardStatus } from '@/components/ui/StatusBadge';
 import { Avatar } from '@/components/ui/Avatar';
 import { formatDate } from '@/lib/utils';
 
-const STATUS_TABS: Array<{ value: StandardStatus | 'ALL'; label: string }> = [
+const STATUS_TABS: { value: StandardStatus | 'ALL'; label: string }[] = [
   { value: 'ALL', label: 'Всі' },
   { value: 'DRAFT', label: 'Чернетки' },
   { value: 'IN_REVIEW', label: 'На розгляді' },

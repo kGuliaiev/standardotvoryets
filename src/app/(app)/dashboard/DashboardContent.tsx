@@ -4,7 +4,6 @@ import { trpc } from '@/lib/trpc/client';
 import { useSession } from 'next-auth/react';
 import Link from 'next/link';
 import { StatusBadge } from '@/components/ui/StatusBadge';
-import { Avatar } from '@/components/ui/Avatar';
 import { formatDate, formatDateTime } from '@/lib/utils';
 
 function StatCard({ label, value, sub, color }: { label: string; value: number | string; sub?: string; color: string }) {

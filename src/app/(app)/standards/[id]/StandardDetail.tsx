@@ -13,7 +13,7 @@ import type { GlobalRole, WorkingGroupRole } from '@prisma/client';
 
 type Tab = 'overview' | 'documents' | 'voting' | 'tasks' | 'history';
 
-const TABS: Array<{ id: Tab; label: string }> = [
+const TABS: { id: Tab; label: string }[] = [
   { id: 'overview', label: 'Огляд' },
   { id: 'documents', label: 'Документи' },
   { id: 'voting', label: 'Голосування' },

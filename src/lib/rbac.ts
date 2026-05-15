@@ -2,7 +2,7 @@ import type { WorkingGroupRole, GlobalRole } from '@prisma/client';
 
 type UserContext = {
   globalRole: GlobalRole;
-  memberships: Array<{ workingGroupId: string; role: WorkingGroupRole }>;
+  memberships: { workingGroupId: string; role: WorkingGroupRole }[];
 };
 
 export function getUserRoleInGroup(

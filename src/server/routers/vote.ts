@@ -4,7 +4,7 @@ import { createTRPCRouter, protectedProcedure } from '@/server/trpc';
 import { can } from '@/lib/rbac';
 import type { GlobalRole, WorkingGroupRole } from '@prisma/client';
 
-function userCtx(session: { user: { globalRole: string; memberships: Array<{ workingGroupId: string; role: string }> } }) {
+function userCtx(session: { user: { globalRole: string; memberships: { workingGroupId: string; role: string }[] } }) {
   return {
     globalRole: session.user.globalRole as GlobalRole,
     memberships: session.user.memberships.map((m) => ({

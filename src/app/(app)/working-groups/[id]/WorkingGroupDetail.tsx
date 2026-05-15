@@ -19,7 +19,7 @@ const TABS = [
 
 type TabId = typeof TABS[number]['id'];
 
-const ROLE_OPTIONS: Array<{ value: WorkingGroupRole; label: string }> = [
+const ROLE_OPTIONS: { value: WorkingGroupRole; label: string }[] = [
   { value: 'LEADER', label: 'Керівник РГ' },
   { value: 'DEPUTY', label: 'Заступник керівника' },
   { value: 'SECRETARY', label: 'Секретар' },
@@ -73,11 +73,11 @@ export function WorkingGroupDetail({ id }: Props) {
   });
 
   const removeMutation = trpc.workingGroup.removeMember.useMutation({
-    onSuccess: () => utils.workingGroup.byId.invalidate({ id }),
+    onSuccess: () => void utils.workingGroup.byId.invalidate({ id }),
   });
 
   const changeRoleMutation = trpc.workingGroup.changeMemberRole.useMutation({
-    onSuccess: () => utils.workingGroup.byId.invalidate({ id }),
+    onSuccess: () => void utils.workingGroup.byId.invalidate({ id }),
   });
 
   const updateMutation = trpc.workingGroup.update.useMutation({
@@ -96,7 +96,7 @@ export function WorkingGroupDetail({ id }: Props) {
 
   const userCtx = session ? {
     globalRole: session.user.globalRole as GlobalRole,
-    memberships: (session.user.memberships ?? []) as Array<{ workingGroupId: string; role: WorkingGroupRole }>,
+    memberships: (session.user.memberships ?? []) as { workingGroupId: string; role: WorkingGroupRole }[],
   } : null;
   const isAdmin = session?.user.globalRole === 'ADMIN';
   const canInvite = userCtx ? (isAdmin || can(userCtx, 'wg:invite', id)) : false;

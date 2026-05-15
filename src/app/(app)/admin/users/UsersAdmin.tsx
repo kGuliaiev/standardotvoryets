@@ -40,12 +40,12 @@ export function UsersAdmin() {
   const { data: groups } = trpc.workingGroup.list.useQuery();
 
   const changeRoleMutation = trpc.user.changeGlobalRole.useMutation({
-    onSuccess: () => utils.user.list.invalidate(),
+    onSuccess: () => void utils.user.list.invalidate(),
   });
 
   const inviteMutation = trpc.user.invite.useMutation({
     onSuccess: () => {
-      utils.user.list.invalidate();
+      void utils.user.list.invalidate();
       setShowInvite(false);
       setInviteForm({ email: '', workingGroupId: '', role: 'MEMBER' });
       setInviteError('');

@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { TRPCError } from '@trpc/server';
+import type { GlobalRole, WorkingGroupRole } from '@prisma/client';
 import { createTRPCRouter, protectedProcedure } from '@/server/trpc';
 import { can } from '@/lib/rbac';
 import bcrypt from 'bcryptjs';
@@ -93,7 +94,7 @@ export const userRouter = createTRPCRouter({
 
       if (
         !can(
-          { globalRole: user.globalRole as import('@prisma/client').GlobalRole, memberships: (user.memberships ?? []) as Array<{ workingGroupId: string; role: import('@prisma/client').WorkingGroupRole }> },
+          { globalRole: user.globalRole as GlobalRole, memberships: (user.memberships ?? []) as { workingGroupId: string; role: WorkingGroupRole }[] },
           'wg:invite',
           input.workingGroupId,
         )

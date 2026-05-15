@@ -39,16 +39,16 @@ export function MeetingDetail({ id }: Props) {
   const { data: meeting, isLoading } = trpc.meeting.byId.useQuery({ id });
 
   const confirmMutation = trpc.meeting.confirmAttendance.useMutation({
-    onSuccess: () => utils.meeting.byId.invalidate({ id }),
+    onSuccess: () => void utils.meeting.byId.invalidate({ id }),
   });
   const uploadMinutesMutation = trpc.meeting.uploadMinutes.useMutation({
     onSuccess: () => {
-      utils.meeting.byId.invalidate({ id });
+      void utils.meeting.byId.invalidate({ id });
       setShowMinutes(false);
     },
   });
   const changeStatusMutation = trpc.meeting.changeStatus.useMutation({
-    onSuccess: () => utils.meeting.byId.invalidate({ id }),
+    onSuccess: () => void utils.meeting.byId.invalidate({ id }),
   });
 
   if (isLoading) return <div className="py-16 text-center text-slate-400 text-sm">Завантаження…</div>;
@@ -56,7 +56,7 @@ export function MeetingDetail({ id }: Props) {
 
   const userCtx = session ? {
     globalRole: session.user.globalRole as GlobalRole,
-    memberships: (session.user.memberships ?? []) as Array<{ workingGroupId: string; role: WorkingGroupRole }>,
+    memberships: (session.user.memberships ?? []) as { workingGroupId: string; role: WorkingGroupRole }[],
   } : null;
   const isAdmin = session?.user.globalRole === 'ADMIN';
   const wgId = meeting.workingGroup.id;
@@ -130,7 +130,7 @@ export function MeetingDetail({ id }: Props) {
           )}
 
           {/* Minutes */}
-          {(meeting.minutesText || canManage) && (
+          {(meeting.minutesText != null || canManage) && (
             <div className="bg-white rounded-xl border border-slate-200 p-5">
               <div className="flex items-center justify-between mb-3">
                 <h3 className="text-sm font-semibold text-slate-700">Протокол</h3>

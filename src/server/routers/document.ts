@@ -7,7 +7,7 @@ import { DeleteObjectCommand } from '@aws-sdk/client-s3';
 import { env } from '@/lib/env';
 import type { GlobalRole, WorkingGroupRole } from '@prisma/client';
 
-function userCtx(session: { user: { globalRole: string; memberships: Array<{ workingGroupId: string; role: string }> } }) {
+function userCtx(session: { user: { globalRole: string; memberships: { workingGroupId: string; role: string }[] } }) {
   return {
     globalRole: session.user.globalRole as GlobalRole,
     memberships: session.user.memberships.map((m) => ({
