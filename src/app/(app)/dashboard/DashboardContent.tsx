@@ -106,11 +106,19 @@ export function DashboardContent() {
   const { data: session } = useSession();
   const userId = session?.user?.id;
 
-  const { data: kpis } = trpc.dashboard.kpis.useQuery();
-  const { data: upcoming } = trpc.meeting.upcomingForUser.useQuery({ limit: 5 });
-  const { data: myTasks } = trpc.task.list.useQuery({ assigneeId: userId }, { enabled: !!userId });
-  const { data: notifications } = trpc.notification.list.useQuery({ limit: 5 });
-  const { data: standardsData } = trpc.standard.list.useQuery({ page: 1, pageSize: 50 });
+  // Dashboard queries always refetch on mount + window focus so data created
+  // on other pages (e.g. a new task in /tasks) shows up immediately when the
+  // user returns. Provider-level staleTime would otherwise serve cached empty
+  // data for up to 60s.
+  const liveOpts = { refetchOnMount: 'always' as const, staleTime: 0 };
+  const { data: kpis } = trpc.dashboard.kpis.useQuery(undefined, liveOpts);
+  const { data: upcoming } = trpc.meeting.upcomingForUser.useQuery({ limit: 5 }, liveOpts);
+  const { data: myTasks } = trpc.task.list.useQuery(
+    { assigneeId: userId },
+    { ...liveOpts, enabled: !!userId },
+  );
+  const { data: notifications } = trpc.notification.list.useQuery({ limit: 5 }, liveOpts);
+  const { data: standardsData } = trpc.standard.list.useQuery({ page: 1, pageSize: 50 }, liveOpts);
   const [stdSort, setStdSort] = useSort<'stage' | 'code' | 'wg' | 'status'>('stage', 'asc');
 
   const utils = trpc.useUtils();
