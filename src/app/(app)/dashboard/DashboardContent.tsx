@@ -109,6 +109,30 @@ export function DashboardContent() {
 
   return (
     <div className="space-y-5 pg-enter">
+      {/* Overdue stages banner */}
+      {kpis && kpis.standardsOverdueStages > 0 && (
+        <Link
+          href="/standards"
+          className="flex items-center gap-3 rounded-xl border border-red-300 dark:border-red-700 bg-red-50 dark:bg-red-900/30 px-4 py-3 text-sm text-red-700 dark:text-red-300 hover:bg-red-100 dark:hover:bg-red-900/50 transition-colors"
+        >
+          <AlertTriangle className="w-5 h-5 shrink-0" />
+          <div className="flex-1">
+            <p className="font-semibold">
+              {kpis.standardsOverdueStages}{' '}
+              {kpis.standardsOverdueStages === 1
+                ? 'стандарт має прострочений етап'
+                : kpis.standardsOverdueStages < 5
+                  ? 'стандарти мають прострочений етап'
+                  : 'стандартів мають прострочений етап'}
+            </p>
+            <p className="text-xs opacity-80">
+              Секретар або керівник РГ має підтвердити виконання етапу
+            </p>
+          </div>
+          <span className="text-xs font-semibold underline">Перейти →</span>
+        </Link>
+      )}
+
       {/* KPI row */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         <KpiCard
@@ -123,11 +147,15 @@ export function DashboardContent() {
           icon={BookOpen}
         />
         <KpiCard
-          label="НА РОЗГЛЯДІ"
-          value={kpis?.standardsInReview ?? '…'}
-          sub="Очікують голосування"
-          tone="amber"
-          icon={Hourglass}
+          label="ПРОСТРОЧЕНІ ЕТАПИ"
+          value={kpis?.standardsOverdueStages ?? '…'}
+          sub={
+            (kpis?.standardsOverdueStages ?? 0) > 0
+              ? 'Потребують підтвердження'
+              : 'Усі етапи у графіку'
+          }
+          tone="rose"
+          icon={AlertTriangle}
         />
         <KpiCard
           label={`ЗАСІДАНЬ У ${MONTHS_UA_SHORT[now.getMonth()]}`}
@@ -145,7 +173,7 @@ export function DashboardContent() {
           value={kpis?.tasksOverdue ?? '…'}
           sub={(kpis?.tasksOverdue ?? 0) > 0 ? 'Потребують уваги' : 'Все під контролем'}
           tone="rose"
-          icon={AlertTriangle}
+          icon={Hourglass}
         />
       </div>
 

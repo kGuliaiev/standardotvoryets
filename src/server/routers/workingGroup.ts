@@ -119,6 +119,7 @@ export const workingGroupRouter = createTRPCRouter({
     .input(
       z.object({
         id: z.string().cuid(),
+        code: z.string().min(2).max(20).optional(),
         name: z.string().min(3).max(200).optional(),
         description: z.string().optional(),
         color: z
@@ -130,10 +131,22 @@ export const workingGroupRouter = createTRPCRouter({
     .mutation(async ({ ctx, input }) => {
       const uctx = userCtx(ctx.session);
       const isAdmin = ctx.session.user.globalRole === 'ADMIN';
+      // Renaming the code is admin-only (security: code shows in URLs / external refs)
+      if (input.code && !isAdmin) {
+        throw new TRPCError({
+          code: 'FORBIDDEN',
+          message: 'Лише адміністратор може змінювати код РГ',
+        });
+      }
       if (!isAdmin && !can(uctx, 'wg:invite', input.id)) {
         throw new TRPCError({ code: 'FORBIDDEN' });
       }
       const before = await ctx.db.workingGroup.findUniqueOrThrow({ where: { id: input.id } });
+      if (input.code && input.code !== before.code) {
+        const conflict = await ctx.db.workingGroup.findUnique({ where: { code: input.code } });
+        if (conflict)
+          throw new TRPCError({ code: 'CONFLICT', message: 'Код вже використовується' });
+      }
       const { id, ...data } = input;
       const updated = await ctx.db.workingGroup.update({ where: { id }, data });
       await logActivity(ctx.db, {

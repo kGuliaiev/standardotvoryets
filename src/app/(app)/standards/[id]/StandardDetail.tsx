@@ -13,6 +13,8 @@ import { TaskFormModal } from '@/components/TaskFormModal';
 import { DocumentUploadModal } from '@/components/DocumentUploadModal';
 import { CommentsThread } from '@/components/CommentsThread';
 import { StandardProgress } from '@/components/standards/StandardProgress';
+import { RankBadge } from '@/components/ui/RankBadge';
+import { rankLabel } from '@/lib/ranks';
 import { formatDate, formatDateTime, formatBytes } from '@/lib/utils';
 import { can } from '@/lib/rbac';
 import type { GlobalRole, WorkingGroupRole } from '@prisma/client';
@@ -63,7 +65,7 @@ export function StandardDetail({ id }: { id: string }) {
     void utils.dashboard.navCounts.invalidate();
   };
 
-  const setStage = trpc.standard.setStage.useMutation({
+  const confirmStage = trpc.standard.confirmStage.useMutation({
     onSuccess: () => {
       void refetch();
       void utils.standard.list.invalidate();
@@ -216,46 +218,35 @@ export function StandardDetail({ id }: { id: string }) {
           </div>
         </div>
 
-        {/* Etapnyi plan stepper */}
+        {/* Etapnyi plan stepper with per-stage confirm */}
         <div className="mt-5 pt-4 border-t border-hairline">
           <div className="flex items-center justify-between mb-3">
             <span className="text-xs text-mid font-semibold uppercase tracking-wide">
               Поетапний план виконання
             </span>
-            {canChangeStatus && (
-              <select
-                className="text-xs border border-hairline rounded-md px-2 py-1 bg-card text-ink focus:outline-none focus:border-brand"
-                value={standard.currentStage}
-                onChange={(e) =>
-                  setStage.mutate({
-                    id: standard.id,
-                    stage: e.target.value as
-                      | 'TECH_SPEC'
-                      | 'DRAFTING'
-                      | 'FEEDBACK'
-                      | 'TECH_REVIEW'
-                      | 'FINALIZATION'
-                      | 'COMPLETED',
-                  })
-                }
-                disabled={setStage.isPending}
-              >
-                <option value="TECH_SPEC">1. ТЗ</option>
-                <option value="DRAFTING">2. Розроблення проєкту</option>
-                <option value="FEEDBACK">3. Відгуки</option>
-                <option value="TECH_REVIEW">4. Технічна перевірка</option>
-                <option value="FINALIZATION">5. Фіналізація</option>
-                <option value="COMPLETED">✓ Завершено</option>
-              </select>
+            {!canChangeStatus && (
+              <span className="text-[11px] text-light italic">
+                Етапи підтверджують секретар / керівник РГ
+              </span>
             )}
           </div>
           <StandardProgress
-            currentStage={standard.currentStage}
             techSpecDueDate={standard.techSpecDueDate}
             draftDueDate={standard.draftDueDate}
             feedbackDueDate={standard.feedbackDueDate}
             techReviewDueDate={standard.techReviewDueDate}
             finalDueDate={standard.finalDueDate}
+            techSpecCompletedAt={standard.techSpecCompletedAt}
+            draftCompletedAt={standard.draftCompletedAt}
+            feedbackCompletedAt={standard.feedbackCompletedAt}
+            techReviewCompletedAt={standard.techReviewCompletedAt}
+            finalCompletedAt={standard.finalCompletedAt}
+            onConfirm={
+              canChangeStatus
+                ? (stage, confirmed) => confirmStage.mutate({ id: standard.id, stage, confirmed })
+                : undefined
+            }
+            isPending={confirmStage.isPending}
           />
         </div>
 
@@ -334,12 +325,20 @@ export function StandardDetail({ id }: { id: string }) {
             )}
             <div className="bg-card rounded-xl border border-hairline p-5">
               <h3 className="font-semibold text-ink mb-3">Учасники РГ</h3>
-              <div className="space-y-2">
+              <div className="space-y-2.5">
                 {standard.workingGroup.members.map((m) => (
                   <div key={m.userId} className="flex items-center gap-3">
                     <Avatar name={m.user.name} avatarUrl={m.user.avatarUrl} size="sm" />
-                    <div>
-                      <p className="text-sm font-medium text-ink">{m.user.name}</p>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm font-medium text-ink flex items-center gap-1.5 flex-wrap">
+                        <RankBadge rank={m.user.rank} variant="icon" />
+                        {m.user.rank && m.user.rank !== 'CIVILIAN' && (
+                          <span className="text-xs text-mid font-normal">
+                            {rankLabel(m.user.rank)}
+                          </span>
+                        )}
+                        <span>{m.user.name}</span>
+                      </p>
                       <p className="text-xs text-light">{m.role}</p>
                     </div>
                   </div>
@@ -632,11 +631,11 @@ export function StandardDetail({ id }: { id: string }) {
                     {i < standard.statusHistory.length - 1 && (
                       <div className="absolute left-3 top-6 bottom-0 w-px bg-pill" />
                     )}
-                    <div className="w-6 h-6 rounded-full bg-blue-100 flex items-center justify-center flex-shrink-0 mt-0.5">
-                      <div className="w-2 h-2 rounded-full bg-blue-500" />
+                    <div className="w-6 h-6 rounded-full bg-brand-soft flex items-center justify-center flex-shrink-0 mt-0.5">
+                      <div className="w-2 h-2 rounded-full bg-brand" />
                     </div>
-                    <div className="pb-4">
-                      <div className="flex items-center gap-2 mb-0.5">
+                    <div className="pb-4 flex-1 min-w-0">
+                      <div className="flex items-center gap-2 mb-0.5 flex-wrap">
                         {h.fromStatus ? (
                           <>
                             <StatusBadge status={h.fromStatus} size="sm" />
@@ -646,7 +645,21 @@ export function StandardDetail({ id }: { id: string }) {
                         <StatusBadge status={h.toStatus} size="sm" />
                       </div>
                       {h.note && <p className="text-sm text-mid mt-1">{h.note}</p>}
-                      <p className="text-xs text-light mt-1">{formatDateTime(h.changedAt)}</p>
+                      <div className="flex items-center gap-2 text-xs text-light mt-1">
+                        {h.changedBy && (
+                          <span className="flex items-center gap-1.5 text-mid">
+                            <Avatar
+                              name={h.changedBy.name}
+                              avatarUrl={h.changedBy.avatarUrl}
+                              size="xs"
+                            />
+                            <RankBadge rank={h.changedBy.rank} variant="icon" />
+                            <span className="font-medium">{h.changedBy.name}</span>
+                          </span>
+                        )}
+                        <span>·</span>
+                        <span>{formatDateTime(h.changedAt)}</span>
+                      </div>
                     </div>
                   </div>
                 ))}

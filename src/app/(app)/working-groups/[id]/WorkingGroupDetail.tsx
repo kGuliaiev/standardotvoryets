@@ -70,7 +70,8 @@ export function WorkingGroupDetail({ id }: Props) {
   const [showAddMember, setShowAddMember] = useState(false);
   const [showEditName, setShowEditName] = useState(false);
   const [addForm, setAddForm] = useState({ email: '', role: 'MEMBER' as WorkingGroupRole });
-  const [editForm, setEditForm] = useState({ name: '', description: '' });
+  const [editForm, setEditForm] = useState({ code: '', name: '', description: '' });
+  const [editError, setEditError] = useState<string | null>(null);
   const [addError, setAddError] = useState('');
 
   const utils = trpc.useUtils();
@@ -188,7 +189,12 @@ export function WorkingGroupDetail({ id }: Props) {
           {canInvite && (
             <button
               onClick={() => {
-                setEditForm({ name: group.name, description: group.description ?? '' });
+                setEditForm({
+                  code: group.code,
+                  name: group.name,
+                  description: group.description ?? '',
+                });
+                setEditError(null);
                 setShowEditName(true);
               }}
               className="text-xs text-light hover:text-mid border border-hairline rounded-lg px-3 py-1.5 hover:bg-page transition-colors"
@@ -730,6 +736,22 @@ export function WorkingGroupDetail({ id }: Props) {
             <h2 className="text-lg font-semibold text-ink mb-4">Редагувати групу</h2>
             <div className="space-y-4">
               <div>
+                <label className="block text-xs font-medium text-mid mb-1">
+                  Код{' '}
+                  {session?.user.globalRole !== 'ADMIN' && (
+                    <span className="text-light">(тільки адмін)</span>
+                  )}
+                </label>
+                <input
+                  type="text"
+                  value={editForm.code}
+                  onChange={(e) => setEditForm((f) => ({ ...f, code: e.target.value }))}
+                  disabled={session?.user.globalRole !== 'ADMIN'}
+                  className="w-full px-3 py-2 text-sm border border-hairline rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-60 disabled:bg-page font-mono"
+                  placeholder="напр. РГ №9"
+                />
+              </div>
+              <div>
                 <label className="block text-xs font-medium text-mid mb-1">Назва</label>
                 <input
                   type="text"
@@ -747,6 +769,11 @@ export function WorkingGroupDetail({ id }: Props) {
                   className="w-full px-3 py-2 text-sm border border-hairline rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
                 />
               </div>
+              {editError && (
+                <p className="text-xs text-red-600 bg-red-50 dark:bg-red-900/30 rounded-md px-2 py-1">
+                  {editError}
+                </p>
+              )}
               <div className="flex gap-3">
                 <button
                   onClick={() => setShowEditName(false)}
@@ -755,13 +782,25 @@ export function WorkingGroupDetail({ id }: Props) {
                   Скасувати
                 </button>
                 <button
-                  onClick={() =>
-                    updateMutation.mutate({
-                      id,
-                      name: editForm.name,
-                      description: editForm.description,
-                    })
-                  }
+                  onClick={() => {
+                    const payload: {
+                      id: string;
+                      code?: string;
+                      name?: string;
+                      description?: string;
+                    } = { id, name: editForm.name, description: editForm.description };
+                    if (
+                      session?.user.globalRole === 'ADMIN' &&
+                      editForm.code.trim() &&
+                      editForm.code.trim() !== group.code
+                    ) {
+                      payload.code = editForm.code.trim();
+                    }
+                    updateMutation.mutate(payload, {
+                      onSuccess: () => setEditError(null),
+                      onError: (e) => setEditError(e.message),
+                    });
+                  }}
                   disabled={updateMutation.isPending}
                   className="flex-1 py-2 text-sm bg-blue-700 text-white rounded-lg hover:bg-blue-800 disabled:opacity-50 transition-colors font-medium"
                 >

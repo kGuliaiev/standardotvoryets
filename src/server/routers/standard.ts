@@ -88,7 +88,11 @@ export const standardRouter = createTRPCRouter({
           workingGroup: {
             include: {
               members: {
-                include: { user: { select: { id: true, name: true, avatarUrl: true } } },
+                include: {
+                  user: {
+                    select: { id: true, name: true, avatarUrl: true, rank: true, position: true },
+                  },
+                },
               },
             },
           },
@@ -115,7 +119,12 @@ export const standardRouter = createTRPCRouter({
             include: { assignee: { select: { id: true, name: true, avatarUrl: true } } },
             orderBy: { createdAt: 'desc' },
           },
-          statusHistory: { orderBy: { changedAt: 'desc' } },
+          statusHistory: {
+            orderBy: { changedAt: 'desc' },
+            include: {
+              changedBy: { select: { id: true, name: true, avatarUrl: true, rank: true } },
+            },
+          },
         },
       });
 
@@ -268,63 +277,76 @@ export const standardRouter = createTRPCRouter({
       return updated;
     }),
 
-  // ── setStage (advance / change the standardization plan stage) ───────
-  setStage: protectedProcedure
+  // ── confirmStage (secretary/leader marks a stage as actually completed)
+  //   Toggling: pass confirmed=true to set timestamp, false to clear it.
+  //   currentStage is auto-recomputed as the first unconfirmed stage.
+  confirmStage: protectedProcedure
     .input(
       z.object({
         id: z.string().cuid(),
-        stage: z.enum([
-          'TECH_SPEC',
-          'DRAFTING',
-          'FEEDBACK',
-          'TECH_REVIEW',
-          'FINALIZATION',
-          'COMPLETED',
-        ]),
+        stage: z.enum(['TECH_SPEC', 'DRAFTING', 'FEEDBACK', 'TECH_REVIEW', 'FINALIZATION']),
+        confirmed: z.boolean(),
       }),
     )
     .mutation(async ({ ctx, input }) => {
       const standard = await ctx.db.standard.findUniqueOrThrow({ where: { id: input.id } });
-      if (!can(userCtx(ctx.session), 'standard:editMeta', standard.workingGroupId)) {
-        throw new TRPCError({ code: 'FORBIDDEN' });
+      // Only secretary, leader, deputy, or admin can confirm stages
+      const uctx = userCtx(ctx.session);
+      const m = uctx.memberships.find((mb) => mb.workingGroupId === standard.workingGroupId);
+      const isAdmin = ctx.session.user.globalRole === 'ADMIN';
+      const canConfirm =
+        isAdmin || m?.role === 'SECRETARY' || m?.role === 'LEADER' || m?.role === 'DEPUTY';
+      if (!canConfirm) {
+        throw new TRPCError({
+          code: 'FORBIDDEN',
+          message: 'Лише секретар, керівник або заступник РГ можуть підтверджувати етапи',
+        });
       }
 
-      const now = new Date();
-      // Mark completion timestamps for stages that are passed by the new stage
+      const STAGE_KEY: Record<typeof input.stage, keyof typeof standard> = {
+        TECH_SPEC: 'techSpecCompletedAt',
+        DRAFTING: 'draftCompletedAt',
+        FEEDBACK: 'feedbackCompletedAt',
+        TECH_REVIEW: 'techReviewCompletedAt',
+        FINALIZATION: 'finalCompletedAt',
+      } as const;
+
+      const key = STAGE_KEY[input.stage];
+      const updateData: Record<string, Date | null | string> = {
+        [key]: input.confirmed ? new Date() : null,
+      };
+
+      // Recompute currentStage = first unconfirmed stage (or COMPLETED if all set)
+      const merged = { ...standard, [key]: input.confirmed ? new Date() : null };
       const order = ['TECH_SPEC', 'DRAFTING', 'FEEDBACK', 'TECH_REVIEW', 'FINALIZATION'] as const;
-      const newIdx = input.stage === 'COMPLETED' ? order.length : order.indexOf(input.stage);
-      const stamp: Record<string, Date | null> = {};
-      for (let i = 0; i < order.length; i++) {
-        const key = `${
-          order[i] === 'TECH_SPEC'
-            ? 'techSpec'
-            : order[i] === 'DRAFTING'
-              ? 'draft'
-              : order[i] === 'FEEDBACK'
-                ? 'feedback'
-                : order[i] === 'TECH_REVIEW'
-                  ? 'techReview'
-                  : 'final'
-        }CompletedAt`;
-        if (i < newIdx) {
-          stamp[key] = now;
-        } else {
-          // Clear future stages (in case of going back)
-          stamp[key] = null;
+      let next = 'COMPLETED' as
+        | 'TECH_SPEC'
+        | 'DRAFTING'
+        | 'FEEDBACK'
+        | 'TECH_REVIEW'
+        | 'FINALIZATION'
+        | 'COMPLETED';
+      for (const s of order) {
+        if (!merged[STAGE_KEY[s]]) {
+          next = s;
+          break;
         }
       }
+      updateData.currentStage = next;
+
       const updated = await ctx.db.standard.update({
         where: { id: input.id },
-        data: { currentStage: input.stage, ...stamp },
+        data: updateData,
       });
+
       await logActivity(ctx.db, {
         userId: ctx.session.user.id,
         action: 'STATUS_CHANGE',
         entity: 'Standard',
         entityId: input.id,
-        before: { currentStage: standard.currentStage },
-        after: { currentStage: input.stage },
-        note: `Етап: ${standard.currentStage} → ${input.stage}`,
+        before: { [String(key)]: standard[key] },
+        after: { [String(key)]: updateData[key] },
+        note: `Етап ${input.stage}: ${input.confirmed ? 'підтверджено виконання' : 'знято підтвердження'}`,
       });
       return updated;
     }),

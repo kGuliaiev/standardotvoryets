@@ -22,6 +22,7 @@ export const dashboardRouter = createTRPCRouter({
       meetingsThisMonth,
       nextMeeting,
       tasksOverdue,
+      standardsOverdueRaw,
     ] = await Promise.all([
       ctx.db.standard.count({
         where: { ...wgFilter, status: { in: ['DRAFT', 'IN_REVIEW', 'VOTING'] } },
@@ -58,6 +59,20 @@ export const dashboardRouter = createTRPCRouter({
           dueDate: { lt: now },
         },
       }),
+      // Standards with any unconfirmed past-due stage (overdue program-plan stage)
+      ctx.db.standard.findMany({
+        where: {
+          ...wgFilter,
+          OR: [
+            { techSpecDueDate: { lt: now }, techSpecCompletedAt: null },
+            { draftDueDate: { lt: now }, draftCompletedAt: null },
+            { feedbackDueDate: { lt: now }, feedbackCompletedAt: null },
+            { techReviewDueDate: { lt: now }, techReviewCompletedAt: null },
+            { finalDueDate: { lt: now }, finalCompletedAt: null },
+          ],
+        },
+        select: { id: true },
+      }),
     ]);
 
     return {
@@ -67,6 +82,7 @@ export const dashboardRouter = createTRPCRouter({
       meetingsThisMonth,
       nextMeetingDate: nextMeeting?.startAt ?? null,
       tasksOverdue,
+      standardsOverdueStages: standardsOverdueRaw.length,
     };
   }),
 

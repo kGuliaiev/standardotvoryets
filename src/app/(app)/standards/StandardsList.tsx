@@ -6,7 +6,8 @@ import { trpc } from '@/lib/trpc/client';
 import Link from 'next/link';
 import { StatusBadge, type StandardStatus } from '@/components/ui/StatusBadge';
 import { Avatar } from '@/components/ui/Avatar';
-import { StandardProgress } from '@/components/standards/StandardProgress';
+import { StandardProgress, hasOverdueStage } from '@/components/standards/StandardProgress';
+import { AlertCircle } from 'lucide-react';
 import { formatDate } from '@/lib/utils';
 
 const STATUS_TABS: { value: StandardStatus | 'ALL'; label: string }[] = [
@@ -147,9 +148,19 @@ export function StandardsList() {
                 <tr key={s.id} className="hover:bg-page transition-colors group">
                   <td className="px-5 py-3.5 max-w-xs">
                     <Link href={`/standards/${s.id}`} className="block">
-                      <span className="font-mono text-xs text-light group-hover:text-blue-500 transition-colors">
-                        {s.code}
-                      </span>
+                      <div className="flex items-center gap-1.5">
+                        <span className="font-mono text-xs text-light group-hover:text-blue-500 transition-colors">
+                          {s.code}
+                        </span>
+                        {hasOverdueStage(s) && (
+                          <span
+                            title="Є прострочений етап без підтвердження"
+                            className="inline-flex items-center gap-0.5 text-red-600 dark:text-red-400 text-[10px] font-bold bg-red-50 dark:bg-red-900/30 rounded px-1 py-0.5"
+                          >
+                            <AlertCircle className="w-3 h-3" /> прострочка
+                          </span>
+                        )}
+                      </div>
                       <p className="font-medium text-ink group-hover:text-blue-700 transition-colors line-clamp-1 mt-0.5">
                         {s.title}
                       </p>
@@ -186,12 +197,16 @@ export function StandardsList() {
                   <td className="px-3 py-3.5">
                     <StandardProgress
                       variant="compact"
-                      currentStage={s.currentStage}
                       techSpecDueDate={s.techSpecDueDate}
                       draftDueDate={s.draftDueDate}
                       feedbackDueDate={s.feedbackDueDate}
                       techReviewDueDate={s.techReviewDueDate}
                       finalDueDate={s.finalDueDate}
+                      techSpecCompletedAt={s.techSpecCompletedAt}
+                      draftCompletedAt={s.draftCompletedAt}
+                      feedbackCompletedAt={s.feedbackCompletedAt}
+                      techReviewCompletedAt={s.techReviewCompletedAt}
+                      finalCompletedAt={s.finalCompletedAt}
                     />
                   </td>
                   <td className="px-3 py-3.5">

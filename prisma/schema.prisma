@@ -157,6 +157,7 @@ model User {
   accounts        Account[]
   standards       Standard[]
   activityLogs    ActivityLog[]
+  statusChanges   StandardStatusHistory[] @relation("StatusChanger")
 
   @@map("users")
 }
@@ -333,7 +334,8 @@ model StandardStatusHistory {
   note        String?
   changedAt   DateTime       @default(now())
 
-  standard Standard @relation(fields: [standardId], references: [id], onDelete: Cascade)
+  standard  Standard @relation(fields: [standardId], references: [id], onDelete: Cascade)
+  changedBy User     @relation("StatusChanger", fields: [changedById], references: [id])
 
   @@map("standard_status_history")
 }
