@@ -96,7 +96,7 @@ export function DashboardContent() {
   const { data: myTasks } = trpc.task.list.useQuery({ assigneeId: userId }, { enabled: !!userId });
   const { data: notifications } = trpc.notification.list.useQuery({ limit: 5 });
   const { data: standardsData } = trpc.standard.list.useQuery({ page: 1, pageSize: 50 });
-  const [stdSort, setStdSort] = useSort<'code' | 'wg' | 'status'>('code', 'asc');
+  const [stdSort, setStdSort] = useSort<'nextDue' | 'code' | 'wg' | 'status'>('nextDue', 'asc');
 
   const utils = trpc.useUtils();
   const toggleTask = trpc.task.changeStatus.useMutation({
@@ -289,7 +289,11 @@ export function DashboardContent() {
                         Статус
                       </SortableHeader>
                     </th>
-                    <th className="px-3 py-3 font-medium">Етапи</th>
+                    <th className="px-3 py-3 font-medium">
+                      <SortableHeader columnKey="nextDue" sort={stdSort} onSort={setStdSort}>
+                        Етапи
+                      </SortableHeader>
+                    </th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-hairline">
@@ -301,6 +305,38 @@ export function DashboardContent() {
                         return s.workingGroup.code;
                       case 'status':
                         return s.status;
+                      case 'nextDue': {
+                        // First unconfirmed stage's due date. asc puts overdue
+                        // (past dates) first, then nearest future date.
+                        // All-confirmed sorts to the bottom via the
+                        // sortedRows null-last rule.
+                        const stages: [Date | null, Date | null][] = [
+                          [
+                            s.techSpecDueDate ? new Date(s.techSpecDueDate) : null,
+                            s.techSpecCompletedAt ? new Date(s.techSpecCompletedAt) : null,
+                          ],
+                          [
+                            s.draftDueDate ? new Date(s.draftDueDate) : null,
+                            s.draftCompletedAt ? new Date(s.draftCompletedAt) : null,
+                          ],
+                          [
+                            s.feedbackDueDate ? new Date(s.feedbackDueDate) : null,
+                            s.feedbackCompletedAt ? new Date(s.feedbackCompletedAt) : null,
+                          ],
+                          [
+                            s.techReviewDueDate ? new Date(s.techReviewDueDate) : null,
+                            s.techReviewCompletedAt ? new Date(s.techReviewCompletedAt) : null,
+                          ],
+                          [
+                            s.finalDueDate ? new Date(s.finalDueDate) : null,
+                            s.finalCompletedAt ? new Date(s.finalCompletedAt) : null,
+                          ],
+                        ];
+                        for (const [due, done] of stages) {
+                          if (!done && due) return due;
+                        }
+                        return null;
+                      }
                       default:
                         return null;
                     }
