@@ -120,6 +120,10 @@ export const userRouter = createTRPCRouter({
         id: true,
         email: true,
         name: true,
+        phone: true,
+        rank: true,
+        position: true,
+        organization: true,
         globalRole: true,
         avatarUrl: true,
         isActive: true,
@@ -381,6 +385,83 @@ export const userRouter = createTRPCRouter({
         before: { isActive: !input.isActive },
         after: { isActive: input.isActive },
         note: input.isActive ? 'Активовано' : 'Деактивовано',
+      });
+      return updated;
+    }),
+
+  // ── adminUpdate (ADMIN only) — edit any user's identity fields ─────
+  adminUpdate: protectedProcedure
+    .input(
+      z.object({
+        userId: z.string().cuid(),
+        name: z.string().min(2).max(100).optional(),
+        email: z.string().email().optional(),
+        phone: z.string().max(40).optional().nullable(),
+        rank: z
+          .enum([
+            'CIVILIAN',
+            'LIEUTENANT',
+            'SENIOR_LIEUTENANT',
+            'CAPTAIN',
+            'MAJOR',
+            'LIEUTENANT_COLONEL',
+            'COLONEL',
+            'BRIGADIER_GENERAL',
+            'MAJOR_GENERAL',
+            'LIEUTENANT_GENERAL',
+            'GENERAL',
+          ])
+          .optional(),
+        position: z.string().max(300).optional().nullable(),
+        organization: z.enum(['DERZH_NDI', 'ADM_DSSZZI', 'OTHER']).optional(),
+      }),
+    )
+    .mutation(async ({ ctx, input }) => {
+      if (ctx.session.user.globalRole !== 'ADMIN') {
+        throw new TRPCError({ code: 'FORBIDDEN' });
+      }
+      if (input.email) {
+        const taken = await ctx.db.user.findFirst({
+          where: { email: input.email, NOT: { id: input.userId } },
+          select: { id: true },
+        });
+        if (taken) {
+          throw new TRPCError({ code: 'CONFLICT', message: 'Цей email вже використовується' });
+        }
+      }
+      const before = await ctx.db.user.findUniqueOrThrow({
+        where: { id: input.userId },
+        select: {
+          name: true,
+          email: true,
+          phone: true,
+          rank: true,
+          position: true,
+          organization: true,
+        },
+      });
+      const { userId, ...data } = input;
+      const updated = await ctx.db.user.update({
+        where: { id: userId },
+        data,
+        select: {
+          id: true,
+          name: true,
+          email: true,
+          phone: true,
+          rank: true,
+          position: true,
+          organization: true,
+        },
+      });
+      await logActivity(ctx.db, {
+        userId: ctx.session.user.id,
+        action: 'UPDATE',
+        entity: 'User',
+        entityId: userId,
+        before,
+        after: updated,
+        note: 'Адмін оновив профіль користувача',
       });
       return updated;
     }),

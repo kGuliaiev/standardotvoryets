@@ -51,7 +51,16 @@ export const workingGroupRouter = createTRPCRouter({
         include: {
           members: {
             include: {
-              user: { select: { id: true, name: true, email: true, avatarUrl: true } },
+              user: {
+                select: {
+                  id: true,
+                  name: true,
+                  email: true,
+                  avatarUrl: true,
+                  rank: true,
+                  position: true,
+                },
+              },
             },
             orderBy: { joinedAt: 'asc' },
           },

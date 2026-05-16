@@ -6,11 +6,20 @@ import { useSession } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
 import { Avatar } from '@/components/ui/Avatar';
 import { Modal } from '@/components/ui/Modal';
+import { RankBadge } from '@/components/ui/RankBadge';
+import { RANK_OPTIONS, rankLabel } from '@/lib/ranks';
 import { formatDate } from '@/lib/utils';
 import { useEscape } from '@/lib/useEscape';
-import { UserX, UserCheck, Pencil, X, Plus } from 'lucide-react';
+import { UserX, UserCheck, Pencil, X, Plus, Save } from 'lucide-react';
+import type { MilitaryRank, Organization } from '@prisma/client';
 
 type WGRole = 'LEADER' | 'DEPUTY' | 'SECRETARY' | 'MEMBER' | 'GUEST';
+
+const ORG_OPTIONS: { value: Organization; label: string }[] = [
+  { value: 'DERZH_NDI', label: 'ДержНДІ технологій кібербезпеки' },
+  { value: 'ADM_DSSZZI', label: "Адміністрація Держспецзв'язку" },
+  { value: 'OTHER', label: 'Інше' },
+];
 
 const GLOBAL_ROLE_LABELS: Record<string, { label: string; cls: string }> = {
   ADMIN: { label: 'Адмін', cls: 'bg-purple-100 text-purple-700' },
@@ -71,6 +80,9 @@ export function UsersAdmin() {
   const changeMemberRoleMutation = trpc.workingGroup.changeMemberRole.useMutation({
     onSuccess: () => void utils.user.list.invalidate(),
   });
+  const adminUpdateMutation = trpc.user.adminUpdate.useMutation({
+    onSuccess: () => void utils.user.list.invalidate(),
+  });
 
   const [editingUser, setEditingUser] = useState<{
     id: string;
@@ -80,6 +92,33 @@ export function UsersAdmin() {
   const [newWgId, setNewWgId] = useState('');
   const [newWgRole, setNewWgRole] = useState<WGRole>('MEMBER');
   const editingUserData = users?.find((u) => u.id === editingUser?.id);
+
+  // Identity form (rank/position/org/name/email/phone) — populated when modal opens
+  const [identityForm, setIdentityForm] = useState<{
+    name: string;
+    email: string;
+    phone: string;
+    rank: MilitaryRank;
+    position: string;
+    organization: Organization;
+  } | null>(null);
+  const [identityError, setIdentityError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (editingUserData) {
+      setIdentityForm({
+        name: editingUserData.name,
+        email: editingUserData.email,
+        phone: editingUserData.phone ?? '',
+        rank: editingUserData.rank,
+        position: editingUserData.position ?? '',
+        organization: editingUserData.organization,
+      });
+      setIdentityError(null);
+    } else {
+      setIdentityForm(null);
+    }
+  }, [editingUserData]);
 
   useEscape(showInvite, () => {
     setShowInvite(false);
@@ -153,9 +192,10 @@ export function UsersAdmin() {
             <thead className="bg-page border-b border-hairline">
               <tr className="text-left text-xs text-mid uppercase tracking-wide">
                 <th className="px-5 py-3 font-medium">Користувач</th>
+                <th className="px-3 py-3 font-medium">Звання</th>
+                <th className="px-3 py-3 font-medium">Посада</th>
                 <th className="px-3 py-3 font-medium">Глобальна роль</th>
                 <th className="px-3 py-3 font-medium">Робочі групи</th>
-                <th className="px-3 py-3 font-medium">Зареєстрований</th>
                 <th className="px-3 py-3 font-medium text-right">Дії</th>
               </tr>
             </thead>
@@ -172,13 +212,29 @@ export function UsersAdmin() {
                       <div className="flex items-center gap-3">
                         <Avatar name={u.name} avatarUrl={u.avatarUrl ?? undefined} size="sm" />
                         <div>
-                          <p className="font-medium text-ink">
-                            {u.name}
-                            {isSelf && <span className="ml-1.5 text-xs text-light">(ви)</span>}
+                          <p className="font-medium text-ink flex items-center gap-1.5">
+                            <RankBadge rank={u.rank} variant="icon" />
+                            <span>{u.name}</span>
+                            {isSelf && <span className="ml-1 text-xs text-light">(ви)</span>}
                           </p>
                           <p className="text-xs text-light">{u.email}</p>
                         </div>
                       </div>
+                    </td>
+                    <td className="px-3 py-3.5">
+                      {u.rank && u.rank !== 'CIVILIAN' ? (
+                        <span className="text-xs text-ink">{rankLabel(u.rank)}</span>
+                      ) : (
+                        <span className="text-xs text-light">—</span>
+                      )}
+                    </td>
+                    <td className="px-3 py-3.5">
+                      <span
+                        className="text-xs text-mid line-clamp-2 max-w-[280px]"
+                        title={u.position ?? ''}
+                      >
+                        {u.position ?? '—'}
+                      </span>
                     </td>
                     <td className="px-3 py-3.5">
                       {isSelf ? (
@@ -383,8 +439,128 @@ export function UsersAdmin() {
         subtitle={editingUser?.email}
         size="md"
       >
-        {editingUserData && (
+        {editingUserData && identityForm && (
           <div className="space-y-4">
+            {/* Identity */}
+            <div className="space-y-3 border border-hairline rounded-xl p-4 bg-page/30">
+              <p className="text-xs font-semibold uppercase tracking-wide text-mid">
+                Профіль користувача
+              </p>
+              <div className="grid grid-cols-2 gap-3">
+                <label className="block col-span-2">
+                  <span className="field-label">ПІБ</span>
+                  <input
+                    className="input"
+                    value={identityForm.name}
+                    onChange={(e) =>
+                      setIdentityForm((f) => (f ? { ...f, name: e.target.value } : f))
+                    }
+                  />
+                </label>
+                <label className="block">
+                  <span className="field-label">Email</span>
+                  <input
+                    className="input"
+                    type="email"
+                    value={identityForm.email}
+                    onChange={(e) =>
+                      setIdentityForm((f) => (f ? { ...f, email: e.target.value } : f))
+                    }
+                  />
+                </label>
+                <label className="block">
+                  <span className="field-label">Телефон</span>
+                  <input
+                    className="input"
+                    type="tel"
+                    value={identityForm.phone}
+                    onChange={(e) =>
+                      setIdentityForm((f) => (f ? { ...f, phone: e.target.value } : f))
+                    }
+                    placeholder="+380 ..."
+                  />
+                </label>
+                <label className="block">
+                  <span className="field-label">Звання</span>
+                  <select
+                    className="select"
+                    value={identityForm.rank}
+                    onChange={(e) =>
+                      setIdentityForm((f) =>
+                        f ? { ...f, rank: e.target.value as MilitaryRank } : f,
+                      )
+                    }
+                  >
+                    {RANK_OPTIONS.map((o) => (
+                      <option key={o.value} value={o.value}>
+                        {o.label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label className="block">
+                  <span className="field-label">Організація</span>
+                  <select
+                    className="select"
+                    value={identityForm.organization}
+                    onChange={(e) =>
+                      setIdentityForm((f) =>
+                        f ? { ...f, organization: e.target.value as Organization } : f,
+                      )
+                    }
+                  >
+                    {ORG_OPTIONS.map((o) => (
+                      <option key={o.value} value={o.value}>
+                        {o.label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label className="block col-span-2">
+                  <span className="field-label">Посада</span>
+                  <textarea
+                    className="input"
+                    rows={2}
+                    value={identityForm.position}
+                    onChange={(e) =>
+                      setIdentityForm((f) => (f ? { ...f, position: e.target.value } : f))
+                    }
+                    placeholder="напр. начальник 1 НДЦ"
+                  />
+                </label>
+              </div>
+              {identityError && (
+                <p className="text-xs text-red-600 bg-red-50 dark:bg-red-900/30 rounded-md px-2 py-1">
+                  {identityError}
+                </p>
+              )}
+              <button
+                className="btn-primary"
+                disabled={adminUpdateMutation.isPending}
+                onClick={() => {
+                  if (!identityForm) return;
+                  adminUpdateMutation.mutate(
+                    {
+                      userId: editingUserData.id,
+                      name: identityForm.name.trim(),
+                      email: identityForm.email.trim(),
+                      phone: identityForm.phone.trim() || null,
+                      rank: identityForm.rank,
+                      position: identityForm.position.trim() || null,
+                      organization: identityForm.organization,
+                    },
+                    {
+                      onSuccess: () => setIdentityError(null),
+                      onError: (e) => setIdentityError(e.message),
+                    },
+                  );
+                }}
+              >
+                <Save className="w-3.5 h-3.5" />
+                {adminUpdateMutation.isPending ? 'Збереження…' : 'Зберегти профіль'}
+              </button>
+            </div>
+
             <div>
               <label className="field-label">Глобальна роль</label>
               <select

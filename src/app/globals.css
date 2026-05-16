@@ -32,19 +32,19 @@
 }
 
 .dark {
-  /* Surface tokens (dark) — high contrast: near-black page,
-     elevated card surface, dim hairlines */
-  --c-page: #06080f; /* almost black background */
-  --c-card: #131820; /* clearly elevated card */
-  --c-hairline: #23293a; /* visible but subtle borders */
-  --c-pill: #1c2230;
-  --c-pill-strong: #2a3142;
-  --c-ink: #e6edf7; /* bright body text */
-  --c-mid: #9aa5b8;
-  --c-light: #5b6478;
-  --c-brand: #6aa3ff;
-  --c-brand-soft: rgba(106, 163, 255, 0.16);
-  --c-navy: #cbd5e1;
+  /* Surface tokens (dark) — deep navy-blue palette matching brand,
+     not a pure black. Page sits below card, card is slightly elevated. */
+  --c-page: #0b1830; /* deep navy-blue page */
+  --c-card: #142540; /* card surface elevated above page */
+  --c-hairline: #2a3a5c; /* subtle blue borders */
+  --c-pill: #1b2c4a;
+  --c-pill-strong: #243759;
+  --c-ink: #e6ecf7; /* bright body text */
+  --c-mid: #a3b1cd;
+  --c-light: #6a7794;
+  --c-brand: #5b8eff;
+  --c-brand-soft: rgba(91, 142, 255, 0.16);
+  --c-navy: #d6ddec;
 
   /* Status (dark — keep readable with translucent bg) */
   --c-status-blue-bg: rgba(59, 130, 246, 0.18);

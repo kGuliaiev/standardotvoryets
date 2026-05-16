@@ -6,6 +6,8 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useSession } from 'next-auth/react';
 import { Avatar } from '@/components/ui/Avatar';
+import { RankBadge } from '@/components/ui/RankBadge';
+import { rankLabel } from '@/lib/ranks';
 import { StatusBadge } from '@/components/ui/StatusBadge';
 import { formatDate } from '@/lib/utils';
 import { can } from '@/lib/rbac';
@@ -309,7 +311,25 @@ export function WorkingGroupDetail({ id }: Props) {
                     <td className="px-5 py-3">
                       <div className="flex items-center gap-2.5">
                         <Avatar name={m.user.name} size="sm" />
-                        <span className="font-medium text-ink">{m.user.name}</span>
+                        <div className="min-w-0">
+                          <p className="font-medium text-ink flex items-center gap-1.5 flex-wrap">
+                            <RankBadge rank={m.user.rank} variant="icon" />
+                            {m.user.rank && m.user.rank !== 'CIVILIAN' && (
+                              <span className="text-xs text-mid font-normal">
+                                {rankLabel(m.user.rank)}
+                              </span>
+                            )}
+                            <span>{m.user.name}</span>
+                          </p>
+                          {m.user.position && (
+                            <p
+                              className="text-[11px] text-light line-clamp-1 mt-0.5"
+                              title={m.user.position}
+                            >
+                              {m.user.position}
+                            </p>
+                          )}
+                        </div>
                       </div>
                     </td>
                     <td className="px-3 py-3 text-mid text-xs">{m.user.email}</td>
