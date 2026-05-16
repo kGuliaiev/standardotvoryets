@@ -11,7 +11,7 @@ export default function LoginPage() {
       {/* Logo */}
       <div className="text-center mb-8">
         <div className="inline-flex items-center gap-2 mb-3">
-          <div className="w-10 h-10 bg-brand-600 rounded-xl flex items-center justify-center">
+          <div className="w-10 h-10 bg-blue-600 rounded-xl flex items-center justify-center">
             <svg
               width="22"
               height="22"
@@ -33,8 +33,8 @@ export default function LoginPage() {
       </div>
 
       {/* Card */}
-      <div className="bg-white rounded-2xl shadow-2xl p-8">
-        <h1 className="text-xl font-semibold text-slate-800 mb-6">Вхід до системи</h1>
+      <div className="bg-slate-800/80 backdrop-blur-md border border-slate-700/60 rounded-2xl shadow-2xl p-8">
+        <h1 className="text-xl font-semibold text-white mb-6">Вхід до системи</h1>
         <LoginForm />
       </div>
 
