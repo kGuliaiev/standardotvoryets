@@ -643,6 +643,10 @@ async function main() {
       }),
     );
 
+    // Invite tokens reference WG directly with no cascade — clean before WG
+    await safeDelete('inviteToken stale', () =>
+      prisma.inviteToken.deleteMany({ where: { workingGroupId: { in: wgIds } } }),
+    );
     await safeDelete('workingGroupMember stale', () =>
       prisma.workingGroupMember.deleteMany({ where: { workingGroupId: { in: wgIds } } }),
     );
