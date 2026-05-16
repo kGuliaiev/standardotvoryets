@@ -11,6 +11,9 @@ import {
   type LucideIcon,
 } from 'lucide-react';
 import { formatDate } from '@/lib/utils';
+import { StandardProgress, hasOverdueStage } from '@/components/standards/StandardProgress';
+import { StatusBadge } from '@/components/ui/StatusBadge';
+import { AlertCircle } from 'lucide-react';
 
 const MONTHS_UA_ACC = [
   'січня',
@@ -87,10 +90,10 @@ export function DashboardContent() {
   const userId = session?.user?.id;
 
   const { data: kpis } = trpc.dashboard.kpis.useQuery();
-  const { data: wgStats } = trpc.workingGroup.stats.useQuery({});
   const { data: upcoming } = trpc.meeting.upcomingForUser.useQuery({ limit: 5 });
   const { data: myTasks } = trpc.task.list.useQuery({ assigneeId: userId }, { enabled: !!userId });
   const { data: notifications } = trpc.notification.list.useQuery({ limit: 5 });
+  const { data: standardsData } = trpc.standard.list.useQuery({ page: 1, pageSize: 50 });
 
   const utils = trpc.useUtils();
   const toggleTask = trpc.task.changeStatus.useMutation({
@@ -177,9 +180,9 @@ export function DashboardContent() {
         />
       </div>
 
-      {/* Two columns */}
+      {/* Two columns — LEFT is wide (tasks + standards statuses), RIGHT is narrow rail (notifications + upcoming meetings) */}
       <div className="grid grid-cols-1 lg:grid-cols-[1fr_316px] gap-5 items-start">
-        {/* Left column */}
+        {/* Left column (wide) */}
         <div className="space-y-5">
           {/* My tasks */}
           <div className="card overflow-hidden">
@@ -254,69 +257,85 @@ export function DashboardContent() {
             )}
           </div>
 
-          {/* Upcoming meetings */}
+          {/* Standards statuses — wide table identical to /standards */}
           <div className="card overflow-hidden">
             <div className="card-head">
-              <h2 className="font-bold text-ink">Найближчі засідання</h2>
-              <Link
-                href="/meetings/new"
-                className="text-xs font-semibold text-brand hover:underline"
-              >
-                + Додати
+              <h2 className="font-bold text-ink">Статуси стандартів</h2>
+              <Link href="/standards" className="text-xs font-semibold text-brand hover:underline">
+                Усі →
               </Link>
             </div>
-            {!upcoming || upcoming.length === 0 ? (
-              <div className="py-10 text-center text-light text-sm">Засідань не заплановано</div>
+            {!standardsData || standardsData.items.length === 0 ? (
+              <div className="py-10 text-center text-light text-sm">Стандартів немає</div>
             ) : (
-              <ul className="divide-y divide-hairline">
-                {upcoming.map((m) => {
-                  const d = new Date(m.startAt);
-                  return (
-                    <li key={m.id} className="flex items-center gap-4 px-5 py-3.5">
-                      <div
-                        className="w-12 h-12 rounded-[10px] flex flex-col items-center justify-center text-white shrink-0"
-                        style={{ backgroundColor: m.workingGroup.color }}
-                      >
-                        <span className="text-[16px] font-extrabold leading-none">
-                          {d.getDate()}
-                        </span>
-                        <span className="text-[9px] font-bold uppercase tracking-wider mt-0.5">
-                          {MONTHS_UA_SHORT[d.getMonth()]}
-                        </span>
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <Link
-                          href={`/meetings/${m.id}`}
-                          className="font-semibold text-ink hover:text-brand block truncate"
-                        >
-                          {m.title}
-                        </Link>
-                        <p className="text-[11px] text-light mt-0.5">
-                          {d.toLocaleTimeString('uk-UA', {
-                            hour: '2-digit',
-                            minute: '2-digit',
-                          })}
-                          {' · '}
-                          {m.format === 'ONLINE'
-                            ? 'Онлайн'
-                            : m.format === 'OFFLINE'
-                              ? 'Офлайн'
-                              : 'Гібрид'}
-                          {' · '}
-                          {m.workingGroup.code}
-                        </p>
-                      </div>
-                      <span className="text-[10px] font-bold rounded-full px-2 py-0.5 bg-[#EEF4FF] text-[#1A3A8F] shrink-0">
-                        {m.status === 'PLANNED'
-                          ? 'Підготовка'
-                          : m.status === 'IN_PROGRESS'
-                            ? 'Триває'
-                            : 'Завершено'}
-                      </span>
-                    </li>
-                  );
-                })}
-              </ul>
+              <table className="w-full text-sm">
+                <thead className="bg-page border-b border-hairline">
+                  <tr className="text-left text-xs text-mid uppercase tracking-wide">
+                    <th className="px-5 py-3 font-medium">Код / Назва</th>
+                    <th className="px-3 py-3 font-medium">РГ</th>
+                    <th className="px-3 py-3 font-medium">Статус</th>
+                    <th className="px-3 py-3 font-medium">Етапи</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-hairline">
+                  {standardsData.items.map((s) => {
+                    const overdue = hasOverdueStage(s);
+                    return (
+                      <tr key={s.id} className="hover:bg-page transition-colors group">
+                        <td className="px-5 py-3 max-w-xs">
+                          <Link href={`/standards/${s.id}`} className="block">
+                            <div className="flex items-center gap-1.5">
+                              <span className="font-mono text-xs text-light group-hover:text-brand transition-colors">
+                                {s.code}
+                              </span>
+                              {overdue && (
+                                <span
+                                  title="Є прострочений етап без підтвердження"
+                                  className="inline-flex items-center gap-0.5 text-red-600 dark:text-red-400 text-[10px] font-bold bg-red-50 dark:bg-red-900/30 rounded px-1 py-0.5"
+                                >
+                                  <AlertCircle className="w-3 h-3" /> прострочка
+                                </span>
+                              )}
+                            </div>
+                            <p className="font-medium text-ink text-sm mt-0.5 line-clamp-1">
+                              {s.title}
+                            </p>
+                          </Link>
+                        </td>
+                        <td className="px-3 py-3">
+                          <span className="flex items-center gap-1.5">
+                            <span
+                              className="w-2 h-2 rounded-full shrink-0"
+                              style={{ backgroundColor: s.workingGroup.color }}
+                            />
+                            <span className="text-xs text-mid font-medium">
+                              {s.workingGroup.code}
+                            </span>
+                          </span>
+                        </td>
+                        <td className="px-3 py-3">
+                          <StatusBadge status={s.status} size="sm" />
+                        </td>
+                        <td className="px-3 py-3 w-[200px]">
+                          <StandardProgress
+                            variant="compact"
+                            techSpecDueDate={s.techSpecDueDate}
+                            draftDueDate={s.draftDueDate}
+                            feedbackDueDate={s.feedbackDueDate}
+                            techReviewDueDate={s.techReviewDueDate}
+                            finalDueDate={s.finalDueDate}
+                            techSpecCompletedAt={s.techSpecCompletedAt}
+                            draftCompletedAt={s.draftCompletedAt}
+                            feedbackCompletedAt={s.feedbackCompletedAt}
+                            techReviewCompletedAt={s.techReviewCompletedAt}
+                            finalCompletedAt={s.finalCompletedAt}
+                          />
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
             )}
           </div>
         </div>
@@ -354,65 +373,57 @@ export function DashboardContent() {
             )}
           </div>
 
-          {/* Meetings by RG */}
+          {/* Upcoming meetings (was on the left, now in the right rail) */}
           <div className="card overflow-hidden">
             <div className="card-head">
-              <h2 className="font-bold text-ink">Засідання по РГ</h2>
-              <Link href="/meetings" className="text-xs font-semibold text-brand hover:underline">
-                Календар →
+              <h2 className="font-bold text-ink">Найближчі засідання</h2>
+              <Link
+                href="/meetings/new"
+                className="text-xs font-semibold text-brand hover:underline"
+              >
+                + Додати
               </Link>
             </div>
-            <table className="w-full text-xs">
-              <thead className="bg-[#FAFBFD]">
-                <tr className="text-left text-[10px] text-light uppercase tracking-wide">
-                  <th className="px-4 py-2.5 font-bold">Група</th>
-                  <th className="px-2 py-2.5 font-bold text-center">Запл.</th>
-                  <th className="px-2 py-2.5 font-bold text-center">Провед.</th>
-                  <th className="px-4 py-2.5 font-bold w-24">Виконання</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-hairline">
-                {(wgStats ?? []).map((g) => {
-                  const total = g.meetingsPlanned + g.meetingsDone;
-                  const pct = total > 0 ? Math.round((g.meetingsDone / total) * 100) : 0;
+            {!upcoming || upcoming.length === 0 ? (
+              <div className="py-10 text-center text-light text-sm">Засідань не заплановано</div>
+            ) : (
+              <ul className="divide-y divide-hairline">
+                {upcoming.map((m) => {
+                  const d = new Date(m.startAt);
                   return (
-                    <tr key={g.id}>
-                      <td className="px-4 py-2.5">
-                        <div className="inline-flex items-center gap-1.5">
-                          <span
-                            className="w-1.5 h-1.5 rounded-full shrink-0"
-                            style={{ backgroundColor: g.color }}
-                          />
-                          <span className="font-mono text-[11px] font-bold text-ink">{g.code}</span>
-                        </div>
-                      </td>
-                      <td className="px-2 py-2.5 text-center font-bold text-ink">
-                        {g.meetingsPlanned + g.meetingsDone}
-                      </td>
-                      <td className="px-2 py-2.5 text-center font-bold text-ink">
-                        {g.meetingsDone}
-                      </td>
-                      <td className="px-4 py-2.5">
-                        <div className="flex items-center gap-2">
-                          <div className="flex-1 h-1.5 bg-hairline rounded-full overflow-hidden">
-                            <div
-                              className="h-full rounded-full"
-                              style={{
-                                width: `${pct}%`,
-                                backgroundColor: g.color,
-                              }}
-                            />
-                          </div>
-                          <span className="text-[10px] font-bold text-mid w-7 text-right">
-                            {pct}%
-                          </span>
-                        </div>
-                      </td>
-                    </tr>
+                    <li key={m.id} className="flex items-center gap-3 px-4 py-3">
+                      <div
+                        className="w-11 h-11 rounded-[10px] flex flex-col items-center justify-center text-white shrink-0"
+                        style={{ backgroundColor: m.workingGroup.color }}
+                      >
+                        <span className="text-[15px] font-extrabold leading-none">
+                          {d.getDate()}
+                        </span>
+                        <span className="text-[9px] font-bold uppercase tracking-wider mt-0.5">
+                          {MONTHS_UA_SHORT[d.getMonth()]}
+                        </span>
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <Link
+                          href={`/meetings/${m.id}`}
+                          className="text-[13px] font-semibold text-ink hover:text-brand block truncate"
+                        >
+                          {m.title}
+                        </Link>
+                        <p className="text-[10px] text-light mt-0.5">
+                          {d.toLocaleTimeString('uk-UA', {
+                            hour: '2-digit',
+                            minute: '2-digit',
+                          })}
+                          {' · '}
+                          {m.workingGroup.code}
+                        </p>
+                      </div>
+                    </li>
                   );
                 })}
-              </tbody>
-            </table>
+              </ul>
+            )}
           </div>
         </div>
       </div>

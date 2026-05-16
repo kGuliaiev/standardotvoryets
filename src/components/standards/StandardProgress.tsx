@@ -32,6 +32,8 @@ export interface StandardProgressProps {
   techReviewCompletedAt?: Date | string | null;
   finalCompletedAt?: Date | string | null;
   variant?: 'full' | 'compact';
+  /** compact variant only: render the current/overdue stage name under the bar */
+  showLabel?: boolean;
   onConfirm?: (stage: StageKey, confirmed: boolean) => void;
   isPending?: boolean;
   className?: string;
@@ -141,24 +143,70 @@ export function StandardProgress(props: StandardProgressProps) {
   const allDone = currentIndex === stages.length;
 
   if (props.variant === 'compact') {
+    // Find the "headline" stage to show under the bar:
+    // 1) first OVERDUE stage (most important — show in red)
+    // 2) otherwise the current stage
+    // 3) if all done — "Усі етапи підтверджено"
+    let headlineStage: Stage | null = null;
+    let headlineState: State = 'current';
+    if (allDone) {
+      headlineStage = stages[stages.length - 1] ?? null;
+      headlineState = 'completed';
+    } else {
+      const overdueStage = stages.find((s, i) => stageState(s, currentIndex, i) === 'overdue');
+      if (overdueStage) {
+        headlineStage = overdueStage;
+        headlineState = 'overdue';
+      } else {
+        headlineStage = stages[currentIndex] ?? null;
+        headlineState = 'current';
+      }
+    }
+
     return (
-      <div className={cn('flex items-center gap-1', props.className)}>
-        {stages.map((s, i) => {
-          const state = stageState(s, currentIndex, i);
-          return (
-            <div
-              key={s.key}
-              title={`${i + 1}. ${s.full} — до ${fmt(s.dueDate)}${s.completedAt ? ` ✓ ${fmt(s.completedAt)}` : ''}`}
-              className={cn(
-                'h-1.5 flex-1 rounded-full transition-colors',
-                state === 'completed' && 'bg-emerald-500',
-                state === 'current' && 'bg-brand',
-                state === 'overdue' && 'bg-red-500',
-                state === 'upcoming' && 'bg-hairline',
-              )}
-            />
-          );
-        })}
+      <div className={cn('flex flex-col gap-1', props.className)}>
+        <div className="flex items-center gap-1">
+          {stages.map((s, i) => {
+            const state = stageState(s, currentIndex, i);
+            return (
+              <div
+                key={s.key}
+                title={`${i + 1}. ${s.full} — до ${fmt(s.dueDate)}${s.completedAt ? ` ✓ ${fmt(s.completedAt)}` : ''}`}
+                className={cn(
+                  'h-1.5 flex-1 rounded-full transition-colors',
+                  state === 'completed' && 'bg-emerald-500',
+                  state === 'current' && 'bg-brand',
+                  state === 'overdue' && 'bg-red-500',
+                  state === 'upcoming' && 'bg-hairline',
+                )}
+              />
+            );
+          })}
+        </div>
+        {props.showLabel !== false && headlineStage && (
+          <p
+            className={cn(
+              'text-[11px] leading-tight truncate font-medium',
+              headlineState === 'overdue'
+                ? 'text-red-600 dark:text-red-400 font-semibold'
+                : headlineState === 'completed'
+                  ? 'text-emerald-600 dark:text-emerald-400 font-semibold'
+                  : 'text-mid',
+            )}
+            title={headlineStage.full}
+          >
+            {allDone ? (
+              '✓ Усі етапи підтверджено'
+            ) : (
+              <>
+                {headlineStage.full}
+                {headlineStage.dueDate && (
+                  <span className="text-light font-normal"> · до {fmt(headlineStage.dueDate)}</span>
+                )}
+              </>
+            )}
+          </p>
+        )}
       </div>
     );
   }
