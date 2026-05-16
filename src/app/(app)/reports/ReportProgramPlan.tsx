@@ -3,7 +3,7 @@
 import { trpc } from '@/lib/trpc/client';
 import { useSort, sortedRows } from '@/lib/useSort';
 import { SortableHeader } from '@/components/ui/SortableHeader';
-import { Check } from 'lucide-react';
+import { Check, FileText, FileDown } from 'lucide-react';
 
 interface CellProps {
   due?: Date | string | null;
@@ -122,8 +122,31 @@ export function ReportProgramPlan() {
             Поетапний план виконання програми стандартизації на 2026 рік
           </p>
         </div>
-        <div className="text-xs text-mid">
-          ТЗ виконано: <span className="font-bold text-ink">{totalDone}</span> / {planItems.length}
+        <div className="flex items-center gap-3 flex-wrap">
+          <div className="text-xs text-mid">
+            ТЗ виконано: <span className="font-bold text-ink">{totalDone}</span> /{' '}
+            {planItems.length}
+          </div>
+          <div className="flex items-center gap-2">
+            <a
+              href="/api/reports/plan.docx"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg border border-hairline text-ink hover:bg-pill transition-colors"
+              title="Завантажити як Word"
+            >
+              <FileText className="w-3.5 h-3.5" />
+              Word
+            </a>
+            <a
+              href="/api/reports/plan.pdf"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg border border-hairline text-ink hover:bg-pill transition-colors"
+              title="Відкрити PDF"
+            >
+              <FileDown className="w-3.5 h-3.5" />
+              PDF
+            </a>
+          </div>
         </div>
       </div>
 
