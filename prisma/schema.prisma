@@ -295,6 +295,12 @@ model Standard {
   techReviewDueDate DateTime?    // Технічна перевірка проєкту стандарту
   finalDueDate      DateTime?    // Остаточний термін виконання
 
+  // Метадані з Програми (для звіту)
+  partProgram   String?  // "Частина 1" / "Частина 2"
+  programNumber Int?     // № в Програмі
+  indeks        String?  // "СТД-100-200-001-2026-В"
+  oldTitle      String?  // Стара назва стандарту
+
   techSpecCompletedAt   DateTime?
   draftCompletedAt      DateTime?
   feedbackCompletedAt   DateTime?

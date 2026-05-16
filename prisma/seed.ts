@@ -723,11 +723,16 @@ async function main() {
   // Dates are ALL 2026 per the plan header.
   const D = (m: number, d: number) => new Date(Date.UTC(2026, m - 1, d));
   interface PlanStd {
-    code: string; // unique per WG
+    code: string;
     wgCode: string;
     title: string;
+    oldTitle?: string;
     description?: string;
+    partProgram: string;
+    programNumber: number;
+    indeks: string;
     techSpec: Date;
+    techSpecDone?: Date; // confirmed completion date per v4 plan
     draft: Date;
     feedback: Date;
     techReview: Date;
@@ -737,10 +742,16 @@ async function main() {
     {
       code: 'РГ1-РГ2-01',
       wgCode: 'РГ №1',
+      partProgram: 'Частина 1',
+      programNumber: 1,
+      indeks: 'СТД-100-200-001-2026-В',
       title:
         'Захист інформації. Засоби криптографічного та технічного захисту інформації. Порядок експертних досліджень',
+      oldTitle:
+        'Порядок експертних досліджень засобів криптографічного та технічного захисту інформації',
       description: 'Спільне з РГ №2 (технічний захист)',
       techSpec: D(5, 14),
+      techSpecDone: D(5, 13),
       draft: D(6, 15),
       feedback: D(7, 31),
       techReview: D(8, 11),
@@ -749,8 +760,13 @@ async function main() {
     {
       code: 'РГ1-02',
       wgCode: 'РГ №1',
+      partProgram: 'Частина 1',
+      programNumber: 4,
+      indeks: 'СТД-100-002-2026-В',
       title: 'Захист інформації. Засоби криптографічного захисту інформації. Загальні вимоги',
+      oldTitle: 'Базові вимоги до засобів криптографічного захисту інформації',
       techSpec: D(5, 14),
+      techSpecDone: D(5, 13),
       draft: D(8, 14),
       feedback: D(9, 28),
       techReview: D(10, 12),
@@ -759,9 +775,15 @@ async function main() {
     {
       code: 'РГ1-03',
       wgCode: 'РГ №1',
+      partProgram: 'Частина 2',
+      programNumber: 5,
+      indeks: 'СТД-100-003-2026-Р (ДСК)',
       title:
         'Захист інформації. Засоби криптографічного захисту інформації. Вимоги до засобів криптографічного захисту службової інформації та інформації, що становить державну таємницю',
+      oldTitle:
+        'Вимоги до засобів криптографічного захисту службової інформації та інформації, що становить державну таємницю',
       techSpec: D(5, 14),
+      techSpecDone: D(5, 13),
       draft: D(9, 16),
       feedback: D(10, 30),
       techReview: D(11, 13),
@@ -770,10 +792,16 @@ async function main() {
     {
       code: 'РГ2-04',
       wgCode: 'РГ №2',
+      partProgram: 'Частина 2',
+      programNumber: 6,
+      indeks: 'СТД-200-001-2026-Р (ДСК)',
       title:
         'Захист інформації. Технічний захист інформації. Класифікація методів аналізу програмного забезпечення за рівнем перевірки та методика оцінки рівня гарантій (рівня впевненості) відсутності недокументованих функцій у програмному забезпеченні',
+      oldTitle:
+        'Класифікація методів аналізу програмного забезпечення за рівнем перевірки та методика оцінки рівня гарантій (рівня впевненості) відсутності недокументованих функцій у програмному забезпеченні',
       description: 'Підгрупа ТЗІ державних інформаційних ресурсів',
       techSpec: D(5, 14),
+      techSpecDone: D(5, 13),
       draft: D(7, 15),
       feedback: D(8, 31),
       techReview: D(9, 11),
@@ -782,8 +810,13 @@ async function main() {
     {
       code: 'РГ2-05',
       wgCode: 'РГ №2',
+      partProgram: 'Частина 1',
+      programNumber: 3,
+      indeks: 'СТД-200-002-2026-В',
       title:
         'Захист інформації. Технічний захист інформації. Порядок виконання вимог з безпеки в інформаційних, електронних комунікаційних, інформаційно-комунікаційних, технологічних системах',
+      oldTitle:
+        'Порядок впровадження системи безпеки інформації в державних органах, на підприємствах, організаціях, в інформаційно-комунікаційних системах в яких обробляється інформація, вимога щодо захисту якої встановлена законом та не становить державної таємниці',
       description: 'Підгрупа ТЗІ державних інформаційних ресурсів',
       techSpec: D(5, 14),
       draft: D(8, 14),
@@ -794,8 +827,13 @@ async function main() {
     {
       code: 'РГ2-06',
       wgCode: 'РГ №2',
+      partProgram: 'Частина 2',
+      programNumber: 1,
+      indeks: 'СТД-200-003-2026-Р (ЦТ)',
       title:
         'Захист інформації. Технічний захист інформації. Захист інформації від витоку каналами побічних електромагнітних випромінювань та наведень',
+      oldTitle:
+        'Стандарт захисту інформації від витоку каналами побічних електромагнітних випромінювань та наведень',
       techSpec: D(6, 10),
       draft: D(8, 14),
       feedback: D(9, 28),
@@ -805,8 +843,13 @@ async function main() {
     {
       code: 'РГ2-07',
       wgCode: 'РГ №2',
+      partProgram: 'Частина 2',
+      programNumber: 2,
+      indeks: 'СТД-200-004-2026-Р (ЦТ)',
       title:
         'Захист інформації. Технічний захист інформації. Захист інформації щодо витоку мовної інформації акустоелектричними каналами',
+      oldTitle:
+        'Стандарт захисту інформації щодо витоку мовної інформації акустоелектричними каналами',
       techSpec: D(6, 10),
       draft: D(8, 14),
       feedback: D(9, 28),
@@ -816,9 +859,15 @@ async function main() {
     {
       code: 'РГ3-08',
       wgCode: 'РГ №3',
+      partProgram: 'Частина 1',
+      programNumber: 7,
+      indeks: 'СТД-300-001-2026-В',
       title:
         'Модель зрілості організаційно-технічної спроможності команд реагування на кіберінциденти, кібератаки, кіберзагрози (CSIRT)',
+      oldTitle:
+        'Модель зрілості організаційно-технічної спроможності команд реагування на кіберінциденти, кібератаки, кіберзагрози (CSIRT)',
       techSpec: D(5, 14),
+      techSpecDone: D(4, 28),
       draft: D(7, 15),
       feedback: D(8, 31),
       techReview: D(9, 11),
@@ -827,19 +876,28 @@ async function main() {
     {
       code: 'РГ3-09',
       wgCode: 'РГ №3',
+      partProgram: 'Частина 1',
+      programNumber: 8,
+      indeks: 'СТД-300-002-2026-В',
       title: 'Заходи з кіберзахисту. Загальні положення та настанови',
+      oldTitle: 'Заходи з кіберзахисту. Загальні положення та настанови',
       techSpec: D(5, 14),
+      techSpecDone: D(5, 11),
       draft: D(9, 16),
       feedback: D(10, 30),
       techReview: D(11, 13),
       final: D(11, 30),
     },
-    // Items 10 and 11: anonymized per user request
     {
       code: 'РГ4-10',
       wgCode: 'РГ №4',
+      partProgram: 'Частина 2',
+      programNumber: 3,
+      indeks: 'СТД-400-001-2026-Р (Т)',
       title: 'Стандарт 1 РГ4',
+      oldTitle: 'Стандарт 1 РГ4',
       techSpec: D(5, 14),
+      techSpecDone: D(5, 12),
       draft: D(7, 15),
       feedback: D(8, 31),
       techReview: D(9, 11),
@@ -848,8 +906,13 @@ async function main() {
     {
       code: 'РГ4-11',
       wgCode: 'РГ №4',
+      partProgram: 'Частина 2',
+      programNumber: 4,
+      indeks: 'СТД-400-002-2026-Р (Т)',
       title: 'Стандарт 2 РГ4',
+      oldTitle: 'Стандарт 2 РГ4',
       techSpec: D(5, 14),
+      techSpecDone: D(5, 12),
       draft: D(8, 14),
       feedback: D(9, 28),
       techReview: D(10, 12),
@@ -858,9 +921,15 @@ async function main() {
     {
       code: 'РГ9-12',
       wgCode: 'РГ №9',
+      partProgram: 'Частина 1',
+      programNumber: 6,
+      indeks: 'СТД-900-002-2026-В',
       title:
         'Стандартизація криптографічного та технічного захисту інформації, кіберзахисту, протидії технічним розвідкам. Процедури створення, діяльності та припинення діяльності робочих груп із стандартизації',
+      oldTitle:
+        'Стандартизація криптографічного та технічного захисту інформації, кіберзахисту, протидії технічним розвідкам. Процедури створення, діяльності та припинення діяльності робочих груп із стандартизації',
       techSpec: D(5, 14),
+      techSpecDone: D(5, 8),
       draft: D(8, 14),
       feedback: D(9, 28),
       techReview: D(10, 12),
@@ -883,28 +952,25 @@ async function main() {
         stdFail++;
         continue;
       }
-      // Determine current stage: first stage whose due date is in the future
-      let stage:
-        | 'TECH_SPEC'
-        | 'DRAFTING'
-        | 'FEEDBACK'
-        | 'TECH_REVIEW'
-        | 'FINALIZATION'
-        | 'COMPLETED' = 'TECH_SPEC';
-      if (today > s.final) stage = 'COMPLETED';
-      else if (today > s.techReview) stage = 'FINALIZATION';
-      else if (today > s.feedback) stage = 'TECH_REVIEW';
-      else if (today > s.draft) stage = 'FEEDBACK';
-      else if (today > s.techSpec) stage = 'DRAFTING';
-      else stage = 'TECH_SPEC';
+      // currentStage = first stage WITHOUT a CompletedAt (so techSpecDone
+      // immediately advances the canonical stage to DRAFTING). If everything
+      // is past today and no confirmation, we still keep TECH_SPEC as current
+      // — that surfaces as overdue red in the stepper.
+      const hasTechSpecDone = !!s.techSpecDone;
+      const stage: 'TECH_SPEC' | 'DRAFTING' = hasTechSpecDone ? 'DRAFTING' : 'TECH_SPEC';
 
       await prisma.standard.upsert({
         where: { workingGroupId_code: { workingGroupId: wgId, code: s.code } },
         update: {
           title: s.title,
+          oldTitle: s.oldTitle ?? null,
           description: s.description,
+          partProgram: s.partProgram,
+          programNumber: s.programNumber,
+          indeks: s.indeks,
           deadline: s.final,
           techSpecDueDate: s.techSpec,
+          techSpecCompletedAt: s.techSpecDone ?? null,
           draftDueDate: s.draft,
           feedbackDueDate: s.feedback,
           techReviewDueDate: s.techReview,
@@ -915,9 +981,14 @@ async function main() {
           workingGroupId: wgId,
           code: s.code,
           title: s.title,
+          oldTitle: s.oldTitle ?? null,
           description: s.description,
+          partProgram: s.partProgram,
+          programNumber: s.programNumber,
+          indeks: s.indeks,
           deadline: s.final,
           techSpecDueDate: s.techSpec,
+          techSpecCompletedAt: s.techSpecDone ?? null,
           draftDueDate: s.draft,
           feedbackDueDate: s.feedback,
           techReviewDueDate: s.techReview,

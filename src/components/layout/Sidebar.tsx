@@ -106,7 +106,7 @@ export function Sidebar({ session }: SidebarProps) {
           badgeTone: counts?.tasksOpenForMe ? 'rose' : 'gray',
         },
         { href: '/discussions', label: 'Обговорення', icon: MessageSquare },
-        { href: '/reports', label: 'Звіти', icon: BarChart3 },
+        { href: '/reports', label: 'Звіт', icon: BarChart3 },
       ],
     },
   ];
