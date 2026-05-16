@@ -52,8 +52,10 @@ export async function logActivity(
     note?: string;
   },
 ) {
+  // Compute a diff whenever we have both snapshots — useful for STATUS_CHANGE,
+  // ARCHIVE/RESTORE, etc. too, not just plain UPDATE.
   const diff =
-    params.action === 'UPDATE' ? computeDiff(params.before ?? null, params.after ?? null) : null;
+    params.before || params.after ? computeDiff(params.before ?? null, params.after ?? null) : null;
 
   try {
     await db.activityLog.create({

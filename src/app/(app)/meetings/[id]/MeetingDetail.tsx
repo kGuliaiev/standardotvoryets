@@ -120,9 +120,9 @@ export function MeetingDetail({ id }: Props) {
 
   return (
     <div className="space-y-5">
-      {/* Breadcrumb + header */}
-      <div className="flex items-start justify-between">
-        <div className="space-y-1">
+      {/* Breadcrumb + header — title on the left, status + action buttons on the right */}
+      <div className="flex items-start justify-between gap-4 flex-wrap">
+        <div className="space-y-1 min-w-0">
           <div className="flex items-center gap-2 text-sm text-light">
             <Link href="/meetings" className="hover:text-mid transition-colors">
               ← Засідання
@@ -140,9 +140,64 @@ export function MeetingDetail({ id }: Props) {
           </div>
           <h1 className="text-xl font-bold text-ink">{meeting.title}</h1>
         </div>
-        <span className={`text-xs px-3 py-1.5 rounded-full font-medium ${statusInfo.cls}`}>
-          {statusInfo.label}
-        </span>
+        <div className="flex items-center gap-2 flex-wrap shrink-0">
+          <span className={`text-xs px-3 py-1.5 rounded-full font-medium ${statusInfo.cls}`}>
+            {statusInfo.label}
+          </span>
+          {canManage && meeting.status !== 'CANCELLED' && (
+            <>
+              <button
+                onClick={() => {
+                  setEditForm({
+                    title: meeting.title,
+                    format: meeting.format,
+                    location: meeting.location ?? '',
+                    startAt: new Date(meeting.startAt).toISOString().slice(0, 16),
+                    durationMins: meeting.durationMins,
+                    agendaText: meeting.agendaText ?? '',
+                  });
+                  setEditError(null);
+                  setEditOpen(true);
+                }}
+                className="text-xs px-3 py-1.5 rounded-lg border-[1.5px] border-hairline hover:border-brand hover:text-brand text-mid transition-colors font-semibold inline-flex items-center gap-1.5"
+              >
+                <Pencil className="w-3.5 h-3.5" />
+                Редагувати
+              </button>
+              {meeting.status === 'PLANNED' && (
+                <button
+                  onClick={() =>
+                    changeStatusMutation.mutate({ meetingId: id, status: 'IN_PROGRESS' })
+                  }
+                  className="text-xs bg-amber-100 text-amber-700 hover:bg-amber-200 dark:bg-amber-900/30 dark:text-amber-300 dark:hover:bg-amber-900/50 px-3 py-1.5 rounded-lg transition-colors font-medium"
+                >
+                  Розпочати
+                </button>
+              )}
+              {(meeting.status === 'PLANNED' || meeting.status === 'IN_PROGRESS') && (
+                <button
+                  onClick={() =>
+                    changeStatusMutation.mutate({ meetingId: id, status: 'COMPLETED' })
+                  }
+                  className="text-xs bg-green-100 text-green-700 hover:bg-green-200 dark:bg-green-900/30 dark:text-green-300 dark:hover:bg-green-900/50 px-3 py-1.5 rounded-lg transition-colors font-medium"
+                >
+                  Завершити
+                </button>
+              )}
+              {canCancel && meeting.status === 'PLANNED' && (
+                <button
+                  onClick={() => {
+                    if (confirm('Скасувати засідання?'))
+                      changeStatusMutation.mutate({ meetingId: id, status: 'CANCELLED' });
+                  }}
+                  className="text-xs bg-red-50 text-red-600 hover:bg-red-100 dark:bg-red-900/30 dark:text-red-300 dark:hover:bg-red-900/50 px-3 py-1.5 rounded-lg transition-colors font-medium"
+                >
+                  Скасувати
+                </button>
+              )}
+            </>
+          )}
+        </div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
@@ -227,64 +282,6 @@ export function MeetingDetail({ id }: Props) {
               ) : (
                 <p className="text-sm text-light">Протокол ще не додано</p>
               )}
-            </div>
-          )}
-
-          {/* Status controls */}
-          {canManage && meeting.status !== 'CANCELLED' && (
-            <div className="bg-card rounded-xl border border-hairline p-5">
-              <h3 className="text-sm font-semibold text-ink mb-3">Управління статусом</h3>
-              <div className="flex gap-2 flex-wrap">
-                <button
-                  onClick={() => {
-                    setEditForm({
-                      title: meeting.title,
-                      format: meeting.format,
-                      location: meeting.location ?? '',
-                      startAt: new Date(meeting.startAt).toISOString().slice(0, 16),
-                      durationMins: meeting.durationMins,
-                      agendaText: meeting.agendaText ?? '',
-                    });
-                    setEditError(null);
-                    setEditOpen(true);
-                  }}
-                  className="text-xs px-3 py-1.5 rounded-lg border-[1.5px] border-hairline hover:border-brand hover:text-brand text-mid transition-colors font-semibold inline-flex items-center gap-1.5"
-                >
-                  <Pencil className="w-3.5 h-3.5" />
-                  Редагувати
-                </button>
-                {meeting.status === 'PLANNED' && (
-                  <button
-                    onClick={() =>
-                      changeStatusMutation.mutate({ meetingId: id, status: 'IN_PROGRESS' })
-                    }
-                    className="text-xs bg-amber-100 text-amber-700 hover:bg-amber-200 px-3 py-1.5 rounded-lg transition-colors font-medium"
-                  >
-                    Розпочати
-                  </button>
-                )}
-                {(meeting.status === 'PLANNED' || meeting.status === 'IN_PROGRESS') && (
-                  <button
-                    onClick={() =>
-                      changeStatusMutation.mutate({ meetingId: id, status: 'COMPLETED' })
-                    }
-                    className="text-xs bg-green-100 text-green-700 hover:bg-green-200 px-3 py-1.5 rounded-lg transition-colors font-medium"
-                  >
-                    Завершити
-                  </button>
-                )}
-                {canCancel && meeting.status === 'PLANNED' && (
-                  <button
-                    onClick={() => {
-                      if (confirm('Скасувати засідання?'))
-                        changeStatusMutation.mutate({ meetingId: id, status: 'CANCELLED' });
-                    }}
-                    className="text-xs bg-red-50 text-red-600 hover:bg-red-100 px-3 py-1.5 rounded-lg transition-colors font-medium"
-                  >
-                    Скасувати
-                  </button>
-                )}
-              </div>
             </div>
           )}
         </div>

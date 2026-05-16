@@ -62,6 +62,32 @@ function fmtValue(v: unknown): string {
   return JSON.stringify(v);
 }
 
+/**
+ * Fallback diff: compute before/after diff client-side when the stored
+ * `diff` JSON field is empty (older entries written before audit.ts started
+ * computing diffs for STATUS_CHANGE etc.).
+ */
+function computeDiffClient(
+  before: unknown,
+  after: unknown,
+): Record<string, { before: unknown; after: unknown }> | null {
+  if (!before && !after) return null;
+  if (typeof before !== 'object' && typeof after !== 'object') return null;
+  const beforeObj = (before ?? {}) as Record<string, unknown>;
+  const afterObj = (after ?? {}) as Record<string, unknown>;
+  const keys = Array.from(new Set([...Object.keys(beforeObj), ...Object.keys(afterObj)]));
+  const result: Record<string, { before: unknown; after: unknown }> = {};
+  for (const k of keys) {
+    if (k === 'createdAt' || k === 'updatedAt') continue;
+    const a: unknown = beforeObj[k];
+    const b: unknown = afterObj[k];
+    if (JSON.stringify(a) !== JSON.stringify(b)) {
+      result[k] = { before: a, after: b };
+    }
+  }
+  return Object.keys(result).length > 0 ? result : null;
+}
+
 export function ActivityFeed({
   entity,
   entityId,
@@ -124,7 +150,8 @@ export function ActivityFeed({
               cls: 'bg-pill text-mid',
             };
             const Icon = meta.icon;
-            const diff = e.diff as Record<string, { before: unknown; after: unknown }> | null;
+            const storedDiff = e.diff as Record<string, { before: unknown; after: unknown }> | null;
+            const diff = storedDiff ?? computeDiffClient(e.before, e.after);
             const canUndo =
               REVERSIBLE_ACTIONS.has(e.action) &&
               REVERSIBLE_ENTITIES.has(e.entity) &&
@@ -178,7 +205,7 @@ export function ActivityFeed({
                     {diff && Object.keys(diff).length > 0 && (
                       <div className="mt-2.5 border border-hairline rounded-[10px] overflow-hidden">
                         <table className="w-full text-[11px]">
-                          <thead className="bg-[#FAFBFD]">
+                          <thead className="bg-page">
                             <tr className="text-left text-light uppercase tracking-wide">
                               <th className="px-3 py-1.5 font-bold w-1/4">Поле</th>
                               <th className="px-3 py-1.5 font-bold w-3/8">Було</th>
@@ -188,13 +215,13 @@ export function ActivityFeed({
                           <tbody className="divide-y divide-hairline">
                             {Object.entries(diff).map(([field, val]) => (
                               <tr key={field}>
-                                <td className="px-3 py-1.5 font-semibold text-ink">
+                                <td className="px-3 py-1.5 font-semibold text-ink align-top">
                                   {FIELD_LABELS[field] ?? field}
                                 </td>
-                                <td className="px-3 py-1.5 text-mid line-through bg-red-50/40">
+                                <td className="px-3 py-1.5 text-mid line-through bg-red-50 dark:bg-red-900/20 align-top break-words">
                                   {fmtValue(val.before)}
                                 </td>
-                                <td className="px-3 py-1.5 text-ink bg-emerald-50/40">
+                                <td className="px-3 py-1.5 text-ink bg-emerald-50 dark:bg-emerald-900/20 align-top break-words">
                                   {fmtValue(val.after)}
                                 </td>
                               </tr>
