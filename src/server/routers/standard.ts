@@ -4,7 +4,7 @@ import { createTRPCRouter, protectedProcedure } from '@/server/trpc';
 import { can } from '@/lib/rbac';
 import { logActivity } from '@/server/audit';
 import { seesAllWorkingGroups } from '@/server/permissions';
-import { notifyStandardStatusChanged } from '@/server/notify';
+import { notifyStandardStatusChanged, notifyStageCompleted, type StageKey } from '@/server/notify';
 import type { GlobalRole, WorkingGroupRole } from '@prisma/client';
 
 function userCtx(session: {
@@ -372,6 +372,24 @@ export const standardRouter = createTRPCRouter({
           ? `Етап ${input.stage}: підтверджено виконання ${stampedAt ? new Date(stampedAt).toLocaleDateString('uk-UA') : ''}`.trim()
           : `Етап ${input.stage}: знято підтвердження`,
       });
+
+      // Notify leadership when a stage is freshly confirmed
+      if (input.confirmed && !standard[key]) {
+        const STAGE_NOTIFY_KEY: Record<typeof input.stage, StageKey> = {
+          TECH_SPEC: 'techSpec',
+          DRAFTING: 'draft',
+          FEEDBACK: 'feedback',
+          TECH_REVIEW: 'techReview',
+          FINALIZATION: 'final',
+        };
+        await notifyStageCompleted(
+          ctx.db,
+          input.id,
+          STAGE_NOTIFY_KEY[input.stage],
+          ctx.session.user.id,
+        );
+      }
+
       return updated;
     }),
 

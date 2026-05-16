@@ -21,6 +21,9 @@ import {
   notifyTaskDeadlineSoon,
   notifyTaskOverdue,
   notifyVoteClosingSoon,
+  notifyStageDueSoon,
+  notifyStageOverdue,
+  type StageKey,
 } from '@/server/notify';
 
 export const dynamic = 'force-dynamic';
@@ -47,6 +50,8 @@ export async function GET(req: Request) {
     taskDeadlineReminders: 0,
     taskOverdueReminders: 0,
     voteClosingReminders: 0,
+    stageDueReminders: 0,
+    stageOverdueReminders: 0,
     skippedDuplicates: 0,
   };
 
@@ -188,5 +193,115 @@ export async function GET(req: Request) {
     }
   }
 
-  return NextResponse.json({ ok: true, ...stats, ranAt: now.toISOString() });
+  /* ── Stage deadline reminders + overdue ──────────────────────────────── */
+  // Stage notifications are date-based (not hour-based). To avoid spamming
+  // every hour, only fire them around 09:00 Kyiv local time.
+  const kyivHour = Number(
+    new Intl.DateTimeFormat('en-US', {
+      timeZone: 'Europe/Kyiv',
+      hour: '2-digit',
+      hour12: false,
+    }).format(now),
+  );
+  const isMorningTick = kyivHour === 9;
+
+  if (isMorningTick && settings.stageDueSoonNotify) {
+    const STAGES: { key: StageKey; due: string; done: string }[] = [
+      { key: 'techSpec', due: 'techSpecDueDate', done: 'techSpecCompletedAt' },
+      { key: 'draft', due: 'draftDueDate', done: 'draftCompletedAt' },
+      { key: 'feedback', due: 'feedbackDueDate', done: 'feedbackCompletedAt' },
+      { key: 'techReview', due: 'techReviewDueDate', done: 'techReviewCompletedAt' },
+      { key: 'final', due: 'finalDueDate', done: 'finalCompletedAt' },
+    ];
+    const leads = Array.from(
+      new Set(
+        [settings.stageDueLeadDays1, settings.stageDueLeadDays2].filter(
+          (n): n is number => typeof n === 'number' && n > 0,
+        ),
+      ),
+    );
+    const dayMs = 24 * oneHourMs;
+    const sevenDays = 7 * dayMs;
+
+    for (const lead of leads) {
+      // Match standards whose due-date falls on the day exactly `lead` days
+      // from now (compare by calendar day, not millisecond range).
+      const target = new Date(now.getTime() + lead * dayMs);
+      const lo = new Date(target.getFullYear(), target.getMonth(), target.getDate());
+      const hi = new Date(target.getFullYear(), target.getMonth(), target.getDate() + 1);
+
+      for (const stg of STAGES) {
+        const standards = await db.standard.findMany({
+          where: {
+            [stg.due]: { gte: lo, lt: hi },
+            [stg.done]: null,
+            indeks: { not: null }, // program-plan items only
+          },
+          select: { id: true },
+        });
+        for (const s of standards) {
+          const dup = await db.notification.findFirst({
+            where: {
+              link: `/standards/${s.id}`,
+              type: 'STAGE_DUE_SOON',
+              title: { contains: `за ${lead} днів` },
+              createdAt: { gte: new Date(now.getTime() - sevenDays) },
+            },
+            select: { id: true },
+          });
+          if (dup) {
+            stats.skippedDuplicates++;
+            continue;
+          }
+          await notifyStageDueSoon(db, s.id, stg.key, lead);
+          stats.stageDueReminders++;
+        }
+      }
+    }
+  }
+
+  if (isMorningTick && settings.stageOverdueNotify) {
+    const STAGES: { key: StageKey; due: string; done: string }[] = [
+      { key: 'techSpec', due: 'techSpecDueDate', done: 'techSpecCompletedAt' },
+      { key: 'draft', due: 'draftDueDate', done: 'draftCompletedAt' },
+      { key: 'feedback', due: 'feedbackDueDate', done: 'feedbackCompletedAt' },
+      { key: 'techReview', due: 'techReviewDueDate', done: 'techReviewCompletedAt' },
+      { key: 'final', due: 'finalDueDate', done: 'finalCompletedAt' },
+    ];
+    const dayMs = 24 * oneHourMs;
+    const yesterday = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1);
+    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+
+    for (const stg of STAGES) {
+      // Catches stages that JUST crossed the deadline (their due date was
+      // yesterday). One-shot — won't repeat on subsequent days; the weekly
+      // digest takes over after.
+      const standards = await db.standard.findMany({
+        where: {
+          [stg.due]: { gte: yesterday, lt: today },
+          [stg.done]: null,
+          indeks: { not: null },
+        },
+        select: { id: true },
+      });
+      for (const s of standards) {
+        const dup = await db.notification.findFirst({
+          where: {
+            link: `/standards/${s.id}`,
+            type: 'STAGE_OVERDUE',
+            createdAt: { gte: new Date(now.getTime() - 30 * dayMs) },
+          },
+          select: { id: true },
+        });
+        if (dup) {
+          stats.skippedDuplicates++;
+          continue;
+        }
+        await notifyStageOverdue(db, s.id, stg.key);
+        stats.stageOverdueReminders++;
+      }
+    }
+  }
+
+  return NextResponse.json({ ok: true, ...stats, ranAt: now.toISOString(), kyivHour });
 }

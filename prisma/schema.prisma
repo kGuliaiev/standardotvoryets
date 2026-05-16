@@ -95,6 +95,10 @@ enum NotificationType {
   TASK_ASSIGNED
   TASK_OVERDUE
   STANDARD_STATUS_CHANGED
+  STAGE_DUE_SOON
+  STAGE_OVERDUE
+  STAGE_COMPLETED
+  WEEKLY_DIGEST
 }
 
 enum MilitaryRank {
@@ -578,6 +582,14 @@ model SystemSettings {
   standardStatusNotify      Boolean  @default(true)
   commentMentionNotify      Boolean  @default(true)
   documentUploadNotify      Boolean  @default(false)
+
+  // ── Stages of program-plan standards ──
+  stageDueSoonNotify        Boolean  @default(true)  // remind before stage deadline
+  stageDueLeadDays1         Int      @default(7)     // first reminder (in-app only)
+  stageDueLeadDays2         Int      @default(1)     // second reminder (in-app + email to leads)
+  stageOverdueNotify        Boolean  @default(true)  // one-shot when stage misses deadline
+  stageCompletedNotify      Boolean  @default(true)  // notify leadership when stage confirmed
+  weeklyDigestEnabled       Boolean  @default(true)  // Monday 09:00 Kyiv digest to leadership
 
   // ── Channels (system defaults; user can override per-user) ──
   channelEmail              Boolean  @default(true)
