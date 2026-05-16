@@ -24,9 +24,14 @@ export const standardRouter = createTRPCRouter({
   list: protectedProcedure
     .input(
       z.object({
+        // Single id (legacy) OR array of ids (multi-select). Array wins if both.
         workingGroupId: z.string().cuid().optional(),
+        workingGroupIds: z.array(z.string().cuid()).optional(),
         status: z
           .enum(['DRAFT', 'IN_REVIEW', 'VOTING', 'ADOPTED', 'REJECTED', 'ARCHIVED'])
+          .optional(),
+        statuses: z
+          .array(z.enum(['DRAFT', 'IN_REVIEW', 'VOTING', 'ADOPTED', 'REJECTED', 'ARCHIVED']))
           .optional(),
         search: z.string().optional(),
         page: z.number().min(1).default(1),
@@ -37,13 +42,26 @@ export const standardRouter = createTRPCRouter({
       const seesAll = seesAllWorkingGroups(ctx.session.user);
       const memberGroupIds = ctx.session.user.memberships?.map((m) => m.workingGroupId) ?? [];
 
+      // Resolve WG filter — multi (workingGroupIds) takes precedence over single
+      const wgFilter =
+        input.workingGroupIds && input.workingGroupIds.length > 0
+          ? { workingGroupId: { in: input.workingGroupIds } }
+          : input.workingGroupId
+            ? { workingGroupId: input.workingGroupId }
+            : seesAll
+              ? {}
+              : { workingGroupId: { in: memberGroupIds } };
+
+      const statusFilter =
+        input.statuses && input.statuses.length > 0
+          ? { status: { in: input.statuses } }
+          : input.status
+            ? { status: input.status }
+            : {};
+
       const where = {
-        ...(input.workingGroupId
-          ? { workingGroupId: input.workingGroupId }
-          : seesAll
-            ? {}
-            : { workingGroupId: { in: memberGroupIds } }),
-        ...(input.status ? { status: input.status } : {}),
+        ...wgFilter,
+        ...statusFilter,
         ...(input.search
           ? {
               OR: [

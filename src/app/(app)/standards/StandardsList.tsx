@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { keepPreviousData } from '@tanstack/react-query';
 import { trpc } from '@/lib/trpc/client';
 import Link from 'next/link';
@@ -9,11 +9,11 @@ import { Avatar } from '@/components/ui/Avatar';
 import { StandardProgress, hasOverdueStage } from '@/components/standards/StandardProgress';
 import { SortableHeader } from '@/components/ui/SortableHeader';
 import { useSort, sortedRows } from '@/lib/useSort';
-import { AlertCircle } from 'lucide-react';
+import { useLocalStorageState } from '@/lib/useLocalStorageState';
+import { AlertCircle, ChevronDown, Check } from 'lucide-react';
 import { formatDate } from '@/lib/utils';
 
-const STATUS_TABS: { value: StandardStatus | 'ALL'; label: string }[] = [
-  { value: 'ALL', label: 'Всі' },
+const STATUS_TABS: { value: StandardStatus; label: string }[] = [
   { value: 'DRAFT', label: 'Чернетки' },
   { value: 'IN_REVIEW', label: 'На розгляді' },
   { value: 'VOTING', label: 'Голосування' },
@@ -22,38 +22,86 @@ const STATUS_TABS: { value: StandardStatus | 'ALL'; label: string }[] = [
   { value: 'ARCHIVED', label: 'Архів' },
 ];
 
+const STORAGE_KEY = 'standards.filters.v1';
+
+interface StoredFilters {
+  search: string;
+  statuses: StandardStatus[]; // empty = all
+  wgIds: string[]; // empty = all
+}
+
+const DEFAULT_FILTERS: StoredFilters = { search: '', statuses: [], wgIds: [] };
+
 export function StandardsList() {
-  const [search, setSearch] = useState('');
-  const [activeStatus, setActiveStatus] = useState<StandardStatus | 'ALL'>('ALL');
-  const [wgFilter, setWgFilter] = useState('');
+  const [filters, setFilters] = useLocalStorageState<StoredFilters>(STORAGE_KEY, DEFAULT_FILTERS);
   const [page, setPage] = useState(1);
+  const [wgPickerOpen, setWgPickerOpen] = useState(false);
+  const wgPickerRef = useRef<HTMLDivElement>(null);
   const [sort, setSort] = useSort<'code' | 'wg' | 'status' | 'responsible' | 'deadline' | 'stage'>(
     'code',
     'asc',
   );
 
+  // Close WG picker on outside click
+  useEffect(() => {
+    if (!wgPickerOpen) return;
+    const onClick = (e: MouseEvent) => {
+      if (wgPickerRef.current && !wgPickerRef.current.contains(e.target as Node)) {
+        setWgPickerOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', onClick);
+    return () => document.removeEventListener('mousedown', onClick);
+  }, [wgPickerOpen]);
+
   const { data: groups } = trpc.workingGroup.list.useQuery();
 
   const { data, isLoading } = trpc.standard.list.useQuery(
     {
-      search: search.length >= 2 ? search : undefined,
-      status: activeStatus !== 'ALL' ? activeStatus : undefined,
-      workingGroupId: wgFilter || undefined,
+      search: filters.search.length >= 2 ? filters.search : undefined,
+      statuses: filters.statuses.length > 0 ? filters.statuses : undefined,
+      workingGroupIds: filters.wgIds.length > 0 ? filters.wgIds : undefined,
       page,
       pageSize: 20,
     },
     { placeholderData: keepPreviousData },
   );
 
-  function handleSearch(val: string) {
-    setSearch(val);
+  function setSearch(val: string) {
+    setFilters((prev) => ({ ...prev, search: val }));
     setPage(1);
   }
 
-  function handleStatus(val: StandardStatus | 'ALL') {
-    setActiveStatus(val);
+  function toggleStatus(s: StandardStatus) {
+    setFilters((prev) => {
+      const has = prev.statuses.includes(s);
+      return {
+        ...prev,
+        statuses: has ? prev.statuses.filter((x) => x !== s) : [...prev.statuses, s],
+      };
+    });
     setPage(1);
   }
+
+  function clearStatuses() {
+    setFilters((prev) => ({ ...prev, statuses: [] }));
+    setPage(1);
+  }
+
+  function toggleWg(id: string) {
+    setFilters((prev) => {
+      const has = prev.wgIds.includes(id);
+      return { ...prev, wgIds: has ? prev.wgIds.filter((x) => x !== id) : [...prev.wgIds, id] };
+    });
+    setPage(1);
+  }
+
+  function clearWgs() {
+    setFilters((prev) => ({ ...prev, wgIds: [] }));
+    setPage(1);
+  }
+
+  const selectedWgs = groups?.filter((g) => filters.wgIds.includes(g.id)) ?? [];
 
   return (
     <div className="space-y-5">
@@ -70,7 +118,7 @@ export function StandardsList() {
 
       {/* Filters */}
       <div className="bg-card rounded-xl border border-hairline p-4 space-y-3">
-        <div className="flex gap-3 flex-wrap">
+        <div className="flex gap-3 flex-wrap items-start">
           {/* Search */}
           <div className="relative flex-1 min-w-[220px]">
             <svg
@@ -89,42 +137,110 @@ export function StandardsList() {
             <input
               type="text"
               placeholder="Пошук за кодом або назвою…"
-              value={search}
-              onChange={(e) => handleSearch(e.target.value)}
+              value={filters.search}
+              onChange={(e) => setSearch(e.target.value)}
               className="w-full pl-9 pr-3 py-2 text-sm border border-hairline rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
             />
           </div>
-          {/* WG filter */}
-          <select
-            value={wgFilter}
-            onChange={(e) => {
-              setWgFilter(e.target.value);
-              setPage(1);
-            }}
-            className="text-sm border border-hairline rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-          >
-            <option value="">Всі РГ</option>
-            {groups?.map((g) => (
-              <option key={g.id} value={g.id}>
-                {g.code}
-              </option>
-            ))}
-          </select>
+
+          {/* WG multi-select picker */}
+          <div ref={wgPickerRef} className="relative">
+            <button
+              type="button"
+              onClick={() => setWgPickerOpen((o) => !o)}
+              className="flex items-center gap-2 text-sm border border-hairline rounded-lg px-3 py-2 hover:bg-pill focus:outline-none focus:ring-2 focus:ring-blue-500 min-w-[180px]"
+            >
+              <span className="flex-1 text-left truncate">
+                {selectedWgs.length === 0
+                  ? 'Всі РГ'
+                  : selectedWgs.length === 1
+                    ? selectedWgs[0]?.code
+                    : `${selectedWgs.length} РГ обрано`}
+              </span>
+              <ChevronDown
+                size={14}
+                className={`text-mid transition-transform ${wgPickerOpen ? 'rotate-180' : ''}`}
+              />
+            </button>
+            {wgPickerOpen && (
+              <div className="absolute z-20 mt-1 w-64 bg-card border border-hairline rounded-lg shadow-lg p-2 max-h-80 overflow-y-auto">
+                <button
+                  type="button"
+                  onClick={clearWgs}
+                  className={`flex items-center gap-2 w-full px-2 py-1.5 rounded-md text-xs font-medium hover:bg-pill ${
+                    filters.wgIds.length === 0 ? 'text-brand' : 'text-mid'
+                  }`}
+                >
+                  <span
+                    className={`w-4 h-4 rounded border-[1.5px] inline-flex items-center justify-center ${
+                      filters.wgIds.length === 0
+                        ? 'border-brand bg-brand text-white'
+                        : 'border-hairline'
+                    }`}
+                  >
+                    {filters.wgIds.length === 0 && <Check size={10} strokeWidth={3} />}
+                  </span>
+                  Всі РГ
+                </button>
+                <div className="my-1 h-px bg-hairline" />
+                {groups?.map((g) => {
+                  const checked = filters.wgIds.includes(g.id);
+                  return (
+                    <label
+                      key={g.id}
+                      className="flex items-center gap-2 w-full px-2 py-1.5 rounded-md text-xs hover:bg-pill cursor-pointer"
+                    >
+                      <input
+                        type="checkbox"
+                        checked={checked}
+                        onChange={() => toggleWg(g.id)}
+                        className="sr-only"
+                      />
+                      <span
+                        className={`w-4 h-4 rounded border-[1.5px] inline-flex items-center justify-center shrink-0 ${
+                          checked ? 'border-brand bg-brand text-white' : 'border-hairline'
+                        }`}
+                      >
+                        {checked && <Check size={10} strokeWidth={3} />}
+                      </span>
+                      <span
+                        className="w-2 h-2 rounded-full shrink-0"
+                        style={{ backgroundColor: g.color }}
+                      />
+                      <span className="font-mono text-mid font-semibold">{g.code}</span>
+                      <span className="text-light truncate">{g.name}</span>
+                    </label>
+                  );
+                })}
+              </div>
+            )}
+          </div>
         </div>
 
-        {/* Status tabs */}
+        {/* Status tabs (multi-select) — "Всі" clears the rest */}
         <div className="flex gap-1 flex-wrap">
-          {STATUS_TABS.map((tab) => (
-            <button
-              key={tab.value}
-              onClick={() => handleStatus(tab.value)}
-              className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
-                activeStatus === tab.value ? 'bg-blue-700 text-white' : 'text-mid hover:bg-pill'
-              }`}
-            >
-              {tab.label}
-            </button>
-          ))}
+          <button
+            onClick={clearStatuses}
+            className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+              filters.statuses.length === 0 ? 'bg-blue-700 text-white' : 'text-mid hover:bg-pill'
+            }`}
+          >
+            Всі
+          </button>
+          {STATUS_TABS.map((tab) => {
+            const active = filters.statuses.includes(tab.value);
+            return (
+              <button
+                key={tab.value}
+                onClick={() => toggleStatus(tab.value)}
+                className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+                  active ? 'bg-blue-700 text-white' : 'text-mid hover:bg-pill'
+                }`}
+              >
+                {tab.label}
+              </button>
+            );
+          })}
         </div>
       </div>
 
