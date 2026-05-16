@@ -11,11 +11,16 @@
  *
  * Variants:
  *   - "full" (default): wide labeled stepper for the standard detail page;
- *     when an onConfirm callback is passed, each stage gets a tiny toggle
- *     button (Підтвердити / Скасувати) for secretary / leader / admin.
+ *     when an onConfirm callback is passed, each stage gets a date-picker
+ *     popover so the secretary can record the REAL completion date (not
+ *     just "now"). Confirmed stages display "✏ <date>" — clicking opens
+ *     the editor pre-filled.
  *   - "compact": thin 5-segment bar for table rows.
  */
-import { Check, AlertCircle } from 'lucide-react';
+'use client';
+
+import { useState } from 'react';
+import { Check, AlertCircle, Pencil } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 export type StageKey = 'TECH_SPEC' | 'DRAFTING' | 'FEEDBACK' | 'TECH_REVIEW' | 'FINALIZATION';
@@ -34,7 +39,10 @@ export interface StandardProgressProps {
   variant?: 'full' | 'compact';
   /** compact variant only: render the current/overdue stage name under the bar */
   showLabel?: boolean;
-  onConfirm?: (stage: StageKey, confirmed: boolean) => void;
+  /** Confirm / re-confirm / un-confirm a stage. completedAt is the actual
+   *  completion date the user picked (may be earlier than today). Omitted on
+   *  un-confirm. If omitted on confirm, server falls back to now(). */
+  onConfirm?: (stage: StageKey, confirmed: boolean, completedAt?: Date) => void;
   isPending?: boolean;
   className?: string;
 }
@@ -119,7 +127,39 @@ export function hasOverdueStage(p: {
   return pairs.some(([due, done]) => !done && due !== null && due.getTime() < now);
 }
 
+function toInputDate(d: Date | null): string {
+  if (!d) return '';
+  // YYYY-MM-DD in local time (the <input type="date"> expects this format)
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+
 export function StandardProgress(props: StandardProgressProps) {
+  const [editing, setEditing] = useState<StageKey | null>(null);
+  const [pickedDate, setPickedDate] = useState<string>('');
+
+  function openEditor(stage: StageKey, currentCompletedAt: Date | null) {
+    setPickedDate(toInputDate(currentCompletedAt ?? new Date()));
+    setEditing(stage);
+  }
+  function saveEditor(stage: StageKey) {
+    if (!props.onConfirm) return;
+    const parts = pickedDate.split('-').map((x) => Number(x));
+    const yy = parts[0] ?? new Date().getFullYear();
+    const mm = parts[1] ?? 1;
+    const dd = parts[2] ?? 1;
+    const date = pickedDate ? new Date(yy, mm - 1, dd, 12, 0, 0) : new Date();
+    props.onConfirm(stage, true, date);
+    setEditing(null);
+  }
+  function clearEditor(stage: StageKey) {
+    if (!props.onConfirm) return;
+    props.onConfirm(stage, false);
+    setEditing(null);
+  }
+
   const stages: Stage[] = STAGE_ORDER.map((key) => ({
     key,
     short: STAGE_LABELS[key].short,
@@ -365,29 +405,80 @@ export function StandardProgress(props: StandardProgressProps) {
                   >
                     до {fmt(s.dueDate)}
                   </p>
-                  {s.completedAt && (
+                  {s.completedAt && editing !== s.key && (
                     <p className="text-[10px] mt-0.5 text-emerald-600 dark:text-emerald-400 font-semibold">
                       ✓ {fmt(s.completedAt)}
                     </p>
                   )}
-                  {props.onConfirm && (
-                    <button
-                      type="button"
-                      disabled={props.isPending}
-                      onClick={() => props.onConfirm?.(s.key, !s.completedAt)}
-                      className={cn(
-                        'mt-1.5 text-[10px] font-semibold rounded px-2 py-0.5 transition-colors border',
-                        s.completedAt
-                          ? 'border-emerald-300 text-emerald-700 hover:bg-emerald-50 dark:border-emerald-700 dark:text-emerald-300 dark:hover:bg-emerald-900/30'
-                          : showOverdue
-                            ? 'border-red-300 text-red-700 hover:bg-red-50 dark:border-red-700 dark:text-red-300 dark:hover:bg-red-900/30'
-                            : 'border-hairline text-mid hover:bg-pill',
-                        props.isPending && 'opacity-50 cursor-wait',
-                      )}
-                    >
-                      {s.completedAt ? 'Скасувати' : 'Підтвердити'}
-                    </button>
-                  )}
+                  {props.onConfirm &&
+                    (editing === s.key ? (
+                      <div className="mt-1.5 flex flex-col gap-1 items-stretch bg-card border border-hairline rounded-md p-1.5 shadow-md">
+                        <input
+                          type="date"
+                          value={pickedDate}
+                          onChange={(e) => setPickedDate(e.target.value)}
+                          className="text-[10px] border border-hairline rounded px-1.5 py-0.5 bg-card text-ink w-full"
+                          autoFocus
+                        />
+                        <div className="flex gap-1">
+                          <button
+                            type="button"
+                            onClick={() => saveEditor(s.key)}
+                            disabled={props.isPending}
+                            className="flex-1 text-[10px] font-semibold rounded px-1.5 py-0.5 bg-brand text-white hover:opacity-90 disabled:opacity-50"
+                          >
+                            ✓ ОК
+                          </button>
+                          {s.completedAt && (
+                            <button
+                              type="button"
+                              onClick={() => clearEditor(s.key)}
+                              disabled={props.isPending}
+                              title="Зняти підтвердження"
+                              className="text-[10px] rounded px-1.5 py-0.5 border border-red-300 text-red-600 hover:bg-red-50 dark:border-red-700 dark:text-red-300 dark:hover:bg-red-900/30 disabled:opacity-50"
+                            >
+                              ✕
+                            </button>
+                          )}
+                          <button
+                            type="button"
+                            onClick={() => setEditing(null)}
+                            className="text-[10px] rounded px-1.5 py-0.5 border border-hairline text-mid hover:bg-pill"
+                          >
+                            ↺
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <button
+                        type="button"
+                        disabled={props.isPending}
+                        onClick={() => openEditor(s.key, s.completedAt)}
+                        title={
+                          s.completedAt
+                            ? 'Змінити дату виконання / зняти підтвердження'
+                            : 'Підтвердити виконання — оберіть дату'
+                        }
+                        className={cn(
+                          'mt-1.5 inline-flex items-center gap-1 text-[10px] font-semibold rounded px-2 py-0.5 transition-colors border',
+                          s.completedAt
+                            ? 'border-emerald-300 text-emerald-700 hover:bg-emerald-50 dark:border-emerald-700 dark:text-emerald-300 dark:hover:bg-emerald-900/30'
+                            : showOverdue
+                              ? 'border-red-300 text-red-700 hover:bg-red-50 dark:border-red-700 dark:text-red-300 dark:hover:bg-red-900/30'
+                              : 'border-hairline text-mid hover:bg-pill',
+                          props.isPending && 'opacity-50 cursor-wait',
+                        )}
+                      >
+                        {s.completedAt ? (
+                          <>
+                            <Pencil className="w-2.5 h-2.5" />
+                            Редагувати
+                          </>
+                        ) : (
+                          'Підтвердити'
+                        )}
+                      </button>
+                    ))}
                 </div>
               </div>
             </div>

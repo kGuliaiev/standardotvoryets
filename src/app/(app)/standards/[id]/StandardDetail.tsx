@@ -265,8 +265,13 @@ export function StandardDetail({ id }: { id: string }) {
                 finalCompletedAt={standard.finalCompletedAt}
                 onConfirm={
                   canChangeStatus
-                    ? (stage, confirmed) =>
-                        confirmStage.mutate({ id: standard.id, stage, confirmed })
+                    ? (stage, confirmed, completedAt) =>
+                        confirmStage.mutate({
+                          id: standard.id,
+                          stage,
+                          confirmed,
+                          completedAt,
+                        })
                     : undefined
                 }
                 isPending={confirmStage.isPending}

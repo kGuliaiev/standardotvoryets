@@ -297,6 +297,8 @@ export const standardRouter = createTRPCRouter({
 
   // ── confirmStage (secretary/leader marks a stage as actually completed)
   //   Toggling: pass confirmed=true to set timestamp, false to clear it.
+  //   Optional `completedAt` lets the secretary record the REAL completion
+  //   date (which can be earlier than today's click); falls back to now().
   //   currentStage is auto-recomputed as the first unconfirmed stage.
   confirmStage: protectedProcedure
     .input(
@@ -304,6 +306,7 @@ export const standardRouter = createTRPCRouter({
         id: z.string().cuid(),
         stage: z.enum(['TECH_SPEC', 'DRAFTING', 'FEEDBACK', 'TECH_REVIEW', 'FINALIZATION']),
         confirmed: z.boolean(),
+        completedAt: z.date().optional(),
       }),
     )
     .mutation(async ({ ctx, input }) => {
@@ -330,12 +333,13 @@ export const standardRouter = createTRPCRouter({
       } as const;
 
       const key = STAGE_KEY[input.stage];
+      const stampedAt = input.confirmed ? (input.completedAt ?? new Date()) : null;
       const updateData: Record<string, Date | null | string> = {
-        [key]: input.confirmed ? new Date() : null,
+        [key]: stampedAt,
       };
 
       // Recompute currentStage = first unconfirmed stage (or COMPLETED if all set)
-      const merged = { ...standard, [key]: input.confirmed ? new Date() : null };
+      const merged = { ...standard, [key]: stampedAt };
       const order = ['TECH_SPEC', 'DRAFTING', 'FEEDBACK', 'TECH_REVIEW', 'FINALIZATION'] as const;
       let next = 'COMPLETED' as
         | 'TECH_SPEC'
@@ -364,7 +368,9 @@ export const standardRouter = createTRPCRouter({
         entityId: input.id,
         before: { [String(key)]: standard[key] },
         after: { [String(key)]: updateData[key] },
-        note: `Етап ${input.stage}: ${input.confirmed ? 'підтверджено виконання' : 'знято підтвердження'}`,
+        note: input.confirmed
+          ? `Етап ${input.stage}: підтверджено виконання ${stampedAt ? new Date(stampedAt).toLocaleDateString('uk-UA') : ''}`.trim()
+          : `Етап ${input.stage}: знято підтвердження`,
       });
       return updated;
     }),
