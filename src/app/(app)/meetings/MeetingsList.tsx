@@ -53,6 +53,8 @@ const STATUS_TONE: Record<string, { label: string; cls: string }> = {
   CANCELLED: { label: 'Скасовано', cls: 'bg-pill text-light' },
 };
 
+type AttStatus = 'PENDING' | 'CONFIRMED' | 'DECLINED';
+
 interface MeetingItem {
   id: string;
   title: string;
@@ -61,9 +63,23 @@ interface MeetingItem {
   status: 'PLANNED' | 'IN_PROGRESS' | 'COMPLETED' | 'CANCELLED';
   format: 'ONLINE' | 'OFFLINE' | 'HYBRID';
   location: string | null;
-  workingGroup: { id: string; code: string; color: string };
+  workingGroup: { id: string; code: string; name?: string; color: string };
+  attendances?: { status: AttStatus }[];
   _count?: { attendances: number };
-  attendances?: { length?: number };
+}
+
+function attCounts(m: MeetingItem) {
+  const list = m.attendances ?? [];
+  const total = m._count?.attendances ?? list.length;
+  let confirmed = 0;
+  let declined = 0;
+  let pending = 0;
+  for (const a of list) {
+    if (a.status === 'CONFIRMED') confirmed += 1;
+    else if (a.status === 'DECLINED') declined += 1;
+    else pending += 1;
+  }
+  return { total, confirmed, declined, pending };
 }
 
 function buildMonthGrid(year: number, month: number) {
@@ -358,8 +374,12 @@ export function MeetingsList() {
                   {meetings.map((m) => {
                     const d = new Date(m.startAt);
                     const s = STATUS_TONE[m.status] ?? { label: m.status, cls: '' };
+                    const att = attCounts(m);
                     return (
-                      <li key={m.id} className="flex items-center gap-4 px-5 py-3.5">
+                      <li
+                        key={m.id}
+                        className="flex items-center gap-4 px-5 py-3.5 hover:bg-pill/40 transition-colors"
+                      >
                         <div
                           className="w-12 h-12 rounded-[10px] flex flex-col items-center justify-center text-white shrink-0"
                           style={{ backgroundColor: m.workingGroup.color }}
@@ -372,13 +392,29 @@ export function MeetingsList() {
                           </span>
                         </div>
                         <div className="flex-1 min-w-0">
-                          <Link
-                            href={`/meetings/${m.id}`}
-                            className="font-semibold text-ink hover:text-brand block truncate"
-                          >
-                            {m.title}
-                          </Link>
-                          <p className="text-[11px] text-light mt-0.5">
+                          <div className="flex items-center gap-2 mb-0.5 flex-wrap">
+                            <span
+                              className="inline-flex items-center gap-1 text-[10px] font-bold rounded-full px-2 py-0.5 shrink-0"
+                              style={{
+                                backgroundColor: m.workingGroup.color + '22',
+                                color: m.workingGroup.color,
+                              }}
+                              title={m.workingGroup.name ?? m.workingGroup.code}
+                            >
+                              <span
+                                className="w-1 h-1 rounded-full"
+                                style={{ backgroundColor: m.workingGroup.color }}
+                              />
+                              {m.workingGroup.code}
+                            </span>
+                            <Link
+                              href={`/meetings/${m.id}`}
+                              className="font-semibold text-ink hover:text-brand truncate min-w-0"
+                            >
+                              {m.title}
+                            </Link>
+                          </div>
+                          <p className="text-[11px] text-light">
                             {d.toLocaleTimeString('uk-UA', {
                               hour: '2-digit',
                               minute: '2-digit',
@@ -388,11 +424,14 @@ export function MeetingsList() {
                             {m.location ? ` · ${m.location}` : ''}
                           </p>
                         </div>
-                        <span
-                          className={`text-[10px] font-bold rounded-full px-2 py-0.5 shrink-0 ${s.cls}`}
-                        >
-                          {s.label}
-                        </span>
+                        <div className="flex items-center gap-2 shrink-0">
+                          <AttendanceChips att={att} />
+                          <span
+                            className={`text-[10px] font-bold rounded-full px-2 py-0.5 ${s.cls}`}
+                          >
+                            {s.label}
+                          </span>
+                        </div>
                       </li>
                     );
                   })}
@@ -466,6 +505,7 @@ export function MeetingsList() {
               <ul className="divide-y divide-hairline">
                 {selectedDayMeetings.map((m) => {
                   const d = new Date(m.startAt);
+                  const att = attCounts(m);
                   return (
                     <li key={m.id} className="px-5 py-3">
                       <div className="flex items-center justify-between gap-3 mb-1">
@@ -493,9 +533,12 @@ export function MeetingsList() {
                       >
                         {m.title}
                       </Link>
-                      <p className="text-[11px] text-light mt-1">
-                        {m.location ?? FORMAT_LABELS[m.format] ?? m.format}
-                      </p>
+                      <div className="flex items-center justify-between gap-3 mt-1">
+                        <p className="text-[11px] text-light truncate min-w-0">
+                          {m.location ?? FORMAT_LABELS[m.format] ?? m.format}
+                        </p>
+                        <AttendanceChips att={att} />
+                      </div>
                     </li>
                   );
                 })}
@@ -505,6 +548,36 @@ export function MeetingsList() {
         </div>
       </div>
     </div>
+  );
+}
+
+function AttendanceChips({
+  att,
+}: {
+  att: { total: number; confirmed: number; declined: number; pending: number };
+}) {
+  if (att.total === 0) {
+    return <span className="text-[10px] text-light">—</span>;
+  }
+  return (
+    <span
+      className="inline-flex items-center gap-1 text-[10px] font-semibold tabular-nums"
+      title={`Підтвердили: ${att.confirmed} · Відмовили: ${att.declined} · Очікують: ${att.pending}`}
+    >
+      <span className="inline-flex items-center gap-0.5 text-green-600 dark:text-green-400">
+        <span className="w-1.5 h-1.5 rounded-full bg-green-500" />
+        {att.confirmed}
+      </span>
+      <span className="inline-flex items-center gap-0.5 text-red-600 dark:text-red-400">
+        <span className="w-1.5 h-1.5 rounded-full bg-red-500" />
+        {att.declined}
+      </span>
+      <span className="inline-flex items-center gap-0.5 text-light">
+        <span className="w-1.5 h-1.5 rounded-full bg-light" />
+        {att.pending}
+      </span>
+      <span className="text-light ml-0.5">/{att.total}</span>
+    </span>
   );
 }
 

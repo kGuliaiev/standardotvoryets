@@ -52,7 +52,8 @@ export const meetingRouter = createTRPCRouter({
           status: { not: 'CANCELLED' },
         },
         include: {
-          workingGroup: { select: { id: true, code: true, color: true } },
+          workingGroup: { select: { id: true, code: true, name: true, color: true } },
+          attendances: { select: { status: true } },
           _count: { select: { attendances: true } },
         },
         orderBy: { startAt: 'asc' },
