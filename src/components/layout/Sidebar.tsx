@@ -15,7 +15,6 @@ import {
   Users,
   FolderKanban,
   FileText,
-  Paperclip,
   MessageSquare,
   BarChart3,
   ChevronsLeft,
@@ -92,7 +91,6 @@ export function Sidebar({ session }: SidebarProps) {
           badge: counts?.minutesPending ?? null,
           badgeTone: counts?.minutesPending ? 'amber' : 'gray',
         },
-        { href: '/documents', label: 'Документи', icon: Paperclip },
       ],
     },
     {
