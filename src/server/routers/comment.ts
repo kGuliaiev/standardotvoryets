@@ -3,6 +3,7 @@ import { TRPCError } from '@trpc/server';
 import { createTRPCRouter, protectedProcedure } from '@/server/trpc';
 import { can } from '@/lib/rbac';
 import { logActivity } from '@/server/audit';
+import { seesAllWorkingGroups } from '@/server/permissions';
 import type { GlobalRole, WorkingGroupRole } from '@prisma/client';
 
 function userCtx(session: {
@@ -159,5 +160,52 @@ export const commentRouter = createTRPCRouter({
         note: 'Видалено коментар',
       });
       return deleted;
+    }),
+
+  // ── feedForUser: global comment feed across all WGs the user can access ─
+  feedForUser: protectedProcedure
+    .input(z.object({ limit: z.number().min(1).max(200).default(80) }).optional())
+    .query(async ({ ctx, input }) => {
+      const limit = input?.limit ?? 80;
+      const memberGroupIds = ctx.session.user.memberships?.map((m) => m.workingGroupId) ?? [];
+      const seesAll = seesAllWorkingGroups(ctx.session.user);
+
+      return ctx.db.comment.findMany({
+        where: seesAll ? {} : { standard: { workingGroupId: { in: memberGroupIds } } },
+        include: {
+          author: { select: { id: true, name: true, avatarUrl: true, rank: true } },
+          standard: {
+            select: {
+              id: true,
+              code: true,
+              title: true,
+              workingGroup: { select: { id: true, code: true, name: true, color: true } },
+            },
+          },
+        },
+        orderBy: { createdAt: 'desc' },
+        take: limit,
+      });
+    }),
+
+  // ── unreadCountForUser: count of comments newer than given timestamp ──
+  unreadCountForUser: protectedProcedure
+    .input(z.object({ since: z.date().nullable().optional() }).optional())
+    .query(async ({ ctx, input }) => {
+      const since = input?.since ?? null;
+      if (!since) {
+        // No reference point — treat all as unread, but cap the answer.
+        return { count: 0 };
+      }
+      const memberGroupIds = ctx.session.user.memberships?.map((m) => m.workingGroupId) ?? [];
+      const seesAll = seesAllWorkingGroups(ctx.session.user);
+      const count = await ctx.db.comment.count({
+        where: {
+          createdAt: { gt: since },
+          authorId: { not: ctx.session.user.id }, // own comments don't count as unread
+          ...(seesAll ? {} : { standard: { workingGroupId: { in: memberGroupIds } } }),
+        },
+      });
+      return { count };
     }),
 });

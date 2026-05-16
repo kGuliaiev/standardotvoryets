@@ -58,6 +58,16 @@ export function Sidebar({ session }: SidebarProps) {
   const { data: counts } = trpc.dashboard.navCounts.useQuery(undefined, {
     refetchInterval: 60_000,
   });
+  // Unread discussions = comments newer than the timestamp written when the
+  // user last opened /discussions. Falls back to "no badge" if never visited.
+  const [discussionsLastVisit] = useLocalStorageState<string | null>(
+    'discussions.lastVisit.v1',
+    null,
+  );
+  const { data: discussionsUnread } = trpc.comment.unreadCountForUser.useQuery(
+    { since: discussionsLastVisit ? new Date(discussionsLastVisit) : null },
+    { refetchInterval: 60_000, enabled: !!discussionsLastVisit },
+  );
 
   const sections: NavSection[] = [
     {
@@ -103,7 +113,13 @@ export function Sidebar({ session }: SidebarProps) {
           badge: counts?.tasksOpenForMe ?? null,
           badgeTone: counts?.tasksOpenForMe ? 'rose' : 'gray',
         },
-        { href: '/discussions', label: 'Обговорення', icon: MessageSquare },
+        {
+          href: '/discussions',
+          label: 'Обговорення',
+          icon: MessageSquare,
+          badge: discussionsUnread?.count ?? null,
+          badgeTone: discussionsUnread?.count ? 'rose' : 'gray',
+        },
         { href: '/reports', label: 'Звіт', icon: BarChart3 },
       ],
     },
