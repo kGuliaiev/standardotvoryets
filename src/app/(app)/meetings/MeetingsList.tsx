@@ -264,7 +264,7 @@ export function MeetingsList() {
         <div className="card overflow-hidden">
           {view === 'month' && (
             <>
-              <div className="grid grid-cols-7 bg-[#FAFBFD] border-b border-hairline">
+              <div className="grid grid-cols-7 bg-page border-b border-hairline">
                 {DOW_UA.map((d, i) => (
                   <div
                     key={d}
@@ -288,7 +288,7 @@ export function MeetingsList() {
                       key={k}
                       onClick={() => setSelectedDayKey(k)}
                       className={`min-h-[88px] border-t border-l border-hairline -ml-px -mt-px text-left p-1.5 align-top flex flex-col gap-1 transition-colors ${
-                        isCurrentMonth ? 'bg-white' : 'bg-[#FAFBFD]'
+                        isCurrentMonth ? 'bg-card' : 'bg-page'
                       } ${isSelected ? 'ring-2 ring-brand-soft ring-inset' : ''} hover:bg-brand-soft/30`}
                     >
                       <span
@@ -415,7 +415,7 @@ export function MeetingsList() {
               <div className="py-8 text-center text-light text-sm">Засідань немає</div>
             ) : (
               <table className="w-full text-xs">
-                <thead className="bg-[#FAFBFD]">
+                <thead className="bg-page">
                   <tr className="text-left text-[10px] text-light uppercase tracking-wide">
                     <th className="px-4 py-2.5 font-bold">Група</th>
                     <th className="px-2 py-2.5 font-bold text-center">Заплан.</th>
@@ -553,7 +553,7 @@ function WeekView({
             key={k}
             onClick={() => onSelectDay(k)}
             className={`min-h-[260px] border-t border-l border-hairline -ml-px -mt-px text-left p-2 align-top flex flex-col gap-1 transition-colors ${
-              isSelected ? 'bg-brand-soft/30' : 'bg-white'
+              isSelected ? 'bg-brand-soft/30' : 'bg-card'
             } hover:bg-brand-soft/40`}
           >
             <div className="flex items-center justify-between">
