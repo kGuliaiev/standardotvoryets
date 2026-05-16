@@ -66,6 +66,9 @@ export function MeetingDetail({ id }: Props) {
   const confirmMutation = trpc.meeting.confirmAttendance.useMutation({
     onSuccess: invalidateMeetings,
   });
+  const setAttendanceMutation = trpc.meeting.setAttendance.useMutation({
+    onSuccess: invalidateMeetings,
+  });
   const uploadMinutesMutation = trpc.meeting.uploadMinutes.useMutation({
     onSuccess: () => {
       invalidateMeetings();
@@ -100,9 +103,17 @@ export function MeetingDetail({ id }: Props) {
       }
     : null;
   const isAdmin = session?.user.globalRole === 'ADMIN';
+  const isDirector = session?.user.globalRole === 'DIRECTOR';
   const wgId = meeting.workingGroup.id;
   const canManage = userCtx && (isAdmin || can(userCtx, 'meeting:uploadMinutes', wgId));
   const canCancel = userCtx && (isAdmin || can(userCtx, 'meeting:cancel', wgId));
+  const myRoleHere = userCtx?.memberships.find((m) => m.workingGroupId === wgId)?.role;
+  const canManageAttendance =
+    isAdmin ||
+    isDirector ||
+    myRoleHere === 'LEADER' ||
+    myRoleHere === 'DEPUTY' ||
+    myRoleHere === 'SECRETARY';
 
   const myAttendance = meeting.attendances.find((a) => a.user.id === session?.user.id);
   const statusInfo = STATUS_LABELS[meeting.status] ?? { label: meeting.status, cls: '' };
@@ -310,27 +321,97 @@ export function MeetingDetail({ id }: Props) {
           )}
 
           {/* Attendees list */}
-          <div className="bg-card rounded-xl border border-hairline overflow-hidden">
-            <div className="px-5 py-3.5 border-b border-hairline">
-              <h3 className="text-sm font-semibold text-ink">
-                Учасники ({meeting.attendances.length})
-              </h3>
-            </div>
-            <div className="divide-y divide-hairline">
-              {meeting.attendances.map((a) => {
-                const att = ATTENDANCE_LABELS[a.status] ?? { label: a.status, cls: '' };
-                return (
-                  <div key={a.user.id} className="flex items-center justify-between px-5 py-2.5">
-                    <div className="flex items-center gap-2">
-                      <Avatar name={a.user.name} size="xs" />
-                      <span className="text-sm text-ink">{a.user.name}</span>
-                    </div>
-                    <span className={`text-xs ${att.cls}`}>{att.label}</span>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
+          {(() => {
+            // Build the full roster = all WG members, with attendance status if
+            // a row exists. Privileged users (LEADER/DEPUTY/SECRETARY of this
+            // WG + DIRECTOR + ADMIN) can edit each member's status — even for
+            // members who don't have an attendance row yet (upsert on the server).
+            const attByUser = new Map(meeting.attendances.map((a) => [a.user.id, a]));
+            const roster = meeting.workingGroup.members.map((m) => ({
+              user: m.user,
+              role: m.role,
+              status: attByUser.get(m.user.id)?.status ?? null,
+            }));
+            const confirmedCount = roster.filter((r) => r.status === 'CONFIRMED').length;
+            return (
+              <div className="bg-card rounded-xl border border-hairline overflow-hidden">
+                <div className="px-5 py-3.5 border-b border-hairline flex items-center justify-between">
+                  <h3 className="text-sm font-semibold text-ink">Учасники ({roster.length})</h3>
+                  <span className="text-[11px] text-light">
+                    Підтверджено:{' '}
+                    <span className="font-bold text-emerald-600">{confirmedCount}</span>
+                  </span>
+                </div>
+                <div className="divide-y divide-hairline">
+                  {roster.map((r) => {
+                    const att = r.status
+                      ? (ATTENDANCE_LABELS[r.status] ?? { label: r.status, cls: '' })
+                      : null;
+                    return (
+                      <div key={r.user.id} className="px-5 py-2.5">
+                        <div className="flex items-center justify-between gap-3">
+                          <div className="flex items-center gap-2 min-w-0">
+                            <Avatar name={r.user.name} size="xs" />
+                            <div className="min-w-0">
+                              <p className="text-sm text-ink truncate">{r.user.name}</p>
+                              <p className="text-[10px] text-light uppercase">{r.role}</p>
+                            </div>
+                          </div>
+                          {!canManageAttendance && (
+                            <span
+                              className={`text-xs whitespace-nowrap ${att?.cls ?? 'text-light'}`}
+                            >
+                              {att?.label ?? '—'}
+                            </span>
+                          )}
+                        </div>
+                        {canManageAttendance && (
+                          <div className="flex gap-1 mt-2">
+                            {(['CONFIRMED', 'DECLINED', 'PENDING'] as const).map((s) => {
+                              const active = r.status === s;
+                              const cls =
+                                s === 'CONFIRMED'
+                                  ? active
+                                    ? 'bg-emerald-500 border-emerald-500 text-white'
+                                    : 'border-hairline text-mid hover:bg-emerald-50 hover:text-emerald-700 hover:border-emerald-300 dark:hover:bg-emerald-900/30'
+                                  : s === 'DECLINED'
+                                    ? active
+                                      ? 'bg-red-500 border-red-500 text-white'
+                                      : 'border-hairline text-mid hover:bg-red-50 hover:text-red-600 hover:border-red-300 dark:hover:bg-red-900/30'
+                                    : active
+                                      ? 'bg-mid border-mid text-white'
+                                      : 'border-hairline text-mid hover:bg-pill';
+                              return (
+                                <button
+                                  key={s}
+                                  type="button"
+                                  disabled={setAttendanceMutation.isPending}
+                                  onClick={() =>
+                                    setAttendanceMutation.mutate({
+                                      meetingId: id,
+                                      userId: r.user.id,
+                                      status: s,
+                                    })
+                                  }
+                                  className={`flex-1 text-[10px] font-semibold border rounded px-2 py-1 transition-colors disabled:opacity-50 ${cls}`}
+                                >
+                                  {s === 'CONFIRMED'
+                                    ? '✓ Присутній'
+                                    : s === 'DECLINED'
+                                      ? '✗ Відсутній'
+                                      : '— Очікується'}
+                                </button>
+                              );
+                            })}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            );
+          })()}
         </div>
       </div>
 
