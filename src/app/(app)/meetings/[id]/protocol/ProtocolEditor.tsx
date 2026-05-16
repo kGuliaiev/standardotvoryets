@@ -4,19 +4,11 @@ import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { trpc } from '@/lib/trpc/client';
 import { useSession } from 'next-auth/react';
-import {
-  Plus,
-  Trash2,
-  Save,
-  Download,
-  FileText,
-  Loader2,
-  ChevronDown,
-  ChevronUp,
-} from 'lucide-react';
+import { Download, FileText } from 'lucide-react';
 import { Avatar } from '@/components/ui/Avatar';
 import { can } from '@/lib/rbac';
 import type { GlobalRole, WorkingGroupRole } from '@prisma/client';
+import { ProtocolTabs } from './ProtocolTabs';
 
 const RANK_LABELS: Record<string, string> = {
   CIVILIAN: '',
@@ -346,205 +338,24 @@ export function ProtocolEditor({ meetingId }: { meetingId: string }) {
         </div>
       </div>
 
-      {/* Agenda items */}
-      <div className="card overflow-hidden">
-        <div className="card-head">
-          <h2 className="font-bold text-ink">Порядок денний / Пункти протоколу</h2>
-          {canEdit && (
-            <button onClick={addItem} className="btn-add">
-              <Plus className="w-3.5 h-3.5" />
-              Пункт
-            </button>
-          )}
-        </div>
-        {items.length === 0 ? (
-          <div className="py-12 text-center text-light text-sm">
-            Пункти не додано — натисніть «+ Пункт»
-          </div>
-        ) : (
-          <div className="divide-y divide-hairline">
-            {items.map((it, idx) => (
-              <div key={it.id ?? `new-${idx}`} className="px-5 py-4 space-y-3">
-                <div className="flex items-center gap-3">
-                  <span className="text-[13px] font-bold text-mid w-6 text-center font-mono">
-                    {idx + 1}.
-                  </span>
-                  <input
-                    className="input flex-1"
-                    placeholder="Тема пункту…"
-                    value={it.title}
-                    disabled={!canEdit}
-                    onChange={(e) =>
-                      setItems((prev) =>
-                        prev.map((p, i) => (i === idx ? { ...p, title: e.target.value } : p)),
-                      )
-                    }
-                  />
-                  <button
-                    onClick={() =>
-                      setItems((prev) =>
-                        prev.map((p, i) => (i === idx ? { ...p, open: !p.open } : p)),
-                      )
-                    }
-                    className="p-1.5 rounded text-mid hover:bg-pill"
-                    title={it.open ? 'Згорнути' : 'Розгорнути'}
-                  >
-                    {it.open ? (
-                      <ChevronUp className="w-4 h-4" />
-                    ) : (
-                      <ChevronDown className="w-4 h-4" />
-                    )}
-                  </button>
-                  {canEdit && (
-                    <>
-                      <button
-                        onClick={() => saveItem(idx)}
-                        disabled={upsertItemMutation.isPending}
-                        className="btn-secondary text-xs px-2.5 py-1.5"
-                      >
-                        {savingId === (it.id ?? `new-${idx}`) ? (
-                          <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                        ) : (
-                          <Save className="w-3.5 h-3.5" />
-                        )}
-                        {it.id ? 'Зберегти' : 'Створити'}
-                      </button>
-                      <button
-                        onClick={() => removeItem(idx)}
-                        className="p-1.5 rounded hover:bg-red-50 text-mid hover:text-red-600"
-                        title="Видалити"
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
-                    </>
-                  )}
-                </div>
-
-                {it.open && (
-                  <div className="space-y-3 pl-9">
-                    <div>
-                      <label className="field-label">Доповідач</label>
-                      <select
-                        className="select"
-                        value={it.speakerId}
-                        disabled={!canEdit}
-                        onChange={(e) =>
-                          setItems((prev) =>
-                            prev.map((p, i) =>
-                              i === idx ? { ...p, speakerId: e.target.value } : p,
-                            ),
-                          )
-                        }
-                      >
-                        <option value="">— не вказано —</option>
-                        {members.map((m) => (
-                          <option key={m.userId} value={m.userId}>
-                            {rankPrefix(m.user.rank)}
-                            {m.user.name}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-
-                    <div>
-                      <label className="field-label">СЛУХАЛИ (доповідь)</label>
-                      <textarea
-                        rows={3}
-                        className="textarea resize-none"
-                        disabled={!canEdit}
-                        value={it.heardText}
-                        onChange={(e) =>
-                          setItems((prev) =>
-                            prev.map((p, i) =>
-                              i === idx ? { ...p, heardText: e.target.value } : p,
-                            ),
-                          )
-                        }
-                      />
-                    </div>
-
-                    <div>
-                      <label className="field-label">ВИСТУПИЛИ (обговорення)</label>
-                      <textarea
-                        rows={3}
-                        className="textarea resize-none"
-                        disabled={!canEdit}
-                        value={it.discussionText}
-                        onChange={(e) =>
-                          setItems((prev) =>
-                            prev.map((p, i) =>
-                              i === idx ? { ...p, discussionText: e.target.value } : p,
-                            ),
-                          )
-                        }
-                      />
-                    </div>
-
-                    <div>
-                      <label className="field-label">ВИРІШИЛИ</label>
-                      <textarea
-                        rows={3}
-                        className="textarea resize-none"
-                        disabled={!canEdit}
-                        value={it.decisionText}
-                        onChange={(e) =>
-                          setItems((prev) =>
-                            prev.map((p, i) =>
-                              i === idx ? { ...p, decisionText: e.target.value } : p,
-                            ),
-                          )
-                        }
-                      />
-                    </div>
-
-                    <div className="grid grid-cols-2 gap-3">
-                      <div>
-                        <label className="field-label">Термін</label>
-                        <input
-                          type="date"
-                          className="input"
-                          disabled={!canEdit}
-                          value={it.deadline}
-                          onChange={(e) =>
-                            setItems((prev) =>
-                              prev.map((p, i) =>
-                                i === idx ? { ...p, deadline: e.target.value } : p,
-                              ),
-                            )
-                          }
-                        />
-                      </div>
-                      <div>
-                        <label className="field-label">Відповідальний</label>
-                        <select
-                          className="select"
-                          disabled={!canEdit}
-                          value={it.responsibleId}
-                          onChange={(e) =>
-                            setItems((prev) =>
-                              prev.map((p, i) =>
-                                i === idx ? { ...p, responsibleId: e.target.value } : p,
-                              ),
-                            )
-                          }
-                        >
-                          <option value="">— не вказано —</option>
-                          {members.map((m) => (
-                            <option key={m.userId} value={m.userId}>
-                              {rankPrefix(m.user.rank)}
-                              {m.user.name}
-                            </option>
-                          ))}
-                        </select>
-                      </div>
-                    </div>
-                  </div>
-                )}
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
+      {/* Agenda items — tabbed: overview / агенда / слухали / вирішили */}
+      <ProtocolTabs
+        items={items}
+        members={members}
+        chairman={meeting.chairman}
+        secretary={meeting.workingGroup.members.find((m) => m.role === 'SECRETARY')?.user ?? null}
+        meetingTitle={meeting.title}
+        meetingStartAt={meeting.startAt}
+        wgCode={meeting.workingGroup.code}
+        protocolNumber={meeting.protocolNumber ?? null}
+        canEdit={canEdit}
+        savingId={savingId}
+        upsertPending={upsertItemMutation.isPending}
+        onChange={setItems}
+        onAdd={addItem}
+        onSave={saveItem}
+        onRemove={removeItem}
+      />
     </div>
   );
 }
