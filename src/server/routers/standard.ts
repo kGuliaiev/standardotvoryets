@@ -4,6 +4,7 @@ import { createTRPCRouter, protectedProcedure } from '@/server/trpc';
 import { can } from '@/lib/rbac';
 import { logActivity } from '@/server/audit';
 import { seesAllWorkingGroups } from '@/server/permissions';
+import { notifyStandardStatusChanged } from '@/server/notify';
 import type { GlobalRole, WorkingGroupRole } from '@prisma/client';
 
 function userCtx(session: {
@@ -247,6 +248,14 @@ export const standardRouter = createTRPCRouter({
         after: { status: input.status },
         note: input.note,
       });
+
+      await notifyStandardStatusChanged(
+        ctx.db,
+        input.id,
+        standard.status,
+        input.status,
+        ctx.session.user.id,
+      );
 
       return updated;
     }),

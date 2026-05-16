@@ -93,7 +93,11 @@ The current implementation has the tree + grouped lists, but the user attached t
 
 - **Mobile version** — adaptive layout for phones/tablets: hamburger menu instead of fixed 228px sidebar; vertical-stack tables; touch-friendly tap targets (44px); responsive Modal that becomes a bottom-sheet on <768px. Likely a 2-3 week separate effort.
 - **Bug-found-to-task flow** — when QA / users find a bug they should be able to file it inline (button "Повідомити про помилку") that opens a TaskFormModal pre-filled with screenshot + URL + browser info, auto-assigned to admin or a "QA" working group. Saves manual copy-paste between chat and the task tracker.
-- **Notification delivery worker** — currently `notification` rows are created in some routers but nothing actually delivers email reminders on schedule. Need a cron route (`/api/cron/notifications`) reading `SystemSettings`, scanning meetings/tasks/votes within the lead-time window, and emitting in-app + email per `User.notifyEmail/notifyInApp`. Use Railway cron schedule.
+- **Notification delivery worker** — wired 2026-05-16:
+  - `src/server/notify.ts` central dispatcher reads `SystemSettings` + per-user `notifyEmail/notifyInApp` toggles, writes Notification rows and best-effort sends email via Resend.
+  - Event-driven calls wired in: `meeting.create/update`, `task.create/update/changeStatus(DONE)`, `vote.openVoting/closeVoting`, `standard.changeStatus`.
+  - Cron route `GET /api/cron/notifications?secret=$CRON_SECRET` handles scheduled reminders (meeting lead 1 & 2, task deadline lead, task overdue one-shot, vote closing). Disabled (503) unless `CRON_SECRET` env is set. Dedup via Notification table lookups.
+  - **TODO**: configure Railway cron to hit `/api/cron/notifications?secret=…` every hour. Set `CRON_SECRET` in Railway env first.
 
 ## 5. How to find your way around
 

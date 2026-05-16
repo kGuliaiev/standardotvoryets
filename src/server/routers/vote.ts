@@ -2,6 +2,7 @@ import { z } from 'zod';
 import { TRPCError } from '@trpc/server';
 import { createTRPCRouter, protectedProcedure } from '@/server/trpc';
 import { can } from '@/lib/rbac';
+import { notifyVoteOpened, notifyVoteClosed } from '@/server/notify';
 import type { GlobalRole, WorkingGroupRole } from '@prisma/client';
 
 function userCtx(session: {
@@ -76,7 +77,7 @@ export const voteRouter = createTRPCRouter({
         }),
       ]);
 
-      // TODO: Notify all RG members (TASK-018)
+      await notifyVoteOpened(ctx.db, voting.id, ctx.session.user.id);
 
       return voting;
     }),
@@ -162,6 +163,13 @@ export const voteRouter = createTRPCRouter({
           },
         }),
       ]);
+
+      await notifyVoteClosed(
+        ctx.db,
+        input.votingId,
+        adopted ? 'прийнято' : 'відхилено',
+        ctx.session.user.id,
+      );
 
       return { status: newStatus, forVotes, againstVotes, total };
     }),

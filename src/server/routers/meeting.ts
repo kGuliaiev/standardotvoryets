@@ -4,6 +4,7 @@ import { createTRPCRouter, protectedProcedure } from '@/server/trpc';
 import { can } from '@/lib/rbac';
 import { logActivity } from '@/server/audit';
 import { seesAllWorkingGroups } from '@/server/permissions';
+import { notifyMeetingCreated, notifyMeetingChanged } from '@/server/notify';
 import type { GlobalRole, WorkingGroupRole } from '@prisma/client';
 
 function userCtx(session: {
@@ -141,7 +142,7 @@ export const meetingRouter = createTRPCRouter({
         },
       });
 
-      // TODO: Enqueue email invites (TASK-015)
+      await notifyMeetingCreated(ctx.db, meeting.id, ctx.session.user.id);
 
       return meeting;
     }),
@@ -176,6 +177,17 @@ export const meetingRouter = createTRPCRouter({
         before: meeting,
         after: updated,
       });
+
+      const changeBits: string[] = [];
+      if (data.startAt && new Date(data.startAt).getTime() !== new Date(meeting.startAt).getTime())
+        changeBits.push('перенесено');
+      if (data.title && data.title !== meeting.title) changeBits.push('змінено назву');
+      if (data.agendaText !== undefined && data.agendaText !== meeting.agendaText)
+        changeBits.push('оновлено порядок денний');
+      if (changeBits.length > 0) {
+        await notifyMeetingChanged(ctx.db, id, ctx.session.user.id, changeBits.join(', '));
+      }
+
       return updated;
     }),
 

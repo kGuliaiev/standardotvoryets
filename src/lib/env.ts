@@ -21,6 +21,9 @@ const envSchema = z.object({
   // ── Email — optional, notifications disabled if not set ─────────────────
   EMAIL_FROM: z.string().default('noreply@example.com'),
   RESEND_API_KEY: z.string().optional(),
+
+  // ── Cron — shared secret guards /api/cron/* against public traffic ───────
+  CRON_SECRET: z.string().optional(),
 });
 
 export const env = envSchema.parse(process.env);

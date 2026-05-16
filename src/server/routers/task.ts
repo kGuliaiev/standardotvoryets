@@ -4,6 +4,7 @@ import { createTRPCRouter, protectedProcedure } from '@/server/trpc';
 import { can } from '@/lib/rbac';
 import { logActivity } from '@/server/audit';
 import { seesAllWorkingGroups } from '@/server/permissions';
+import { notifyTaskAssigned, notifyTaskCompleted } from '@/server/notify';
 import type { GlobalRole, WorkingGroupRole } from '@prisma/client';
 
 function userCtx(session: {
@@ -114,7 +115,9 @@ export const taskRouter = createTRPCRouter({
         },
       });
 
-      // TODO: Notify assignee (TASK-018)
+      if (task.assigneeId) {
+        await notifyTaskAssigned(ctx.db, task.id, ctx.session.user.id);
+      }
 
       return task;
     }),
@@ -156,6 +159,16 @@ export const taskRouter = createTRPCRouter({
         before: task,
         after: updated,
       });
+
+      // Notify new assignee if assignment changed (and is not the actor)
+      if (
+        data.assigneeId &&
+        data.assigneeId !== task.assigneeId &&
+        data.assigneeId !== ctx.session.user.id
+      ) {
+        await notifyTaskAssigned(ctx.db, id, ctx.session.user.id);
+      }
+
       return updated;
     }),
 
@@ -198,6 +211,11 @@ export const taskRouter = createTRPCRouter({
         before: { status: task.status },
         after: { status: input.status },
       });
+
+      if (input.status === 'DONE' && task.status !== 'DONE') {
+        await notifyTaskCompleted(ctx.db, input.id, ctx.session.user.id);
+      }
+
       return updated;
     }),
 
