@@ -9,6 +9,11 @@ export type AuditEntity =
   | 'User'
   | 'Document'
   | 'Vote'
+  | 'Comment'
+  | 'AgendaItem'
+  | 'Attendance'
+  | 'Invite'
+  | 'Notification'
   | 'SystemSettings';
 
 /**

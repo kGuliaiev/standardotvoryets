@@ -142,6 +142,14 @@ export const meetingRouter = createTRPCRouter({
         },
       });
 
+      await logActivity(ctx.db, {
+        userId: ctx.session.user.id,
+        action: 'CREATE',
+        entity: 'Meeting',
+        entityId: meeting.id,
+        after: meeting,
+      });
+
       await notifyMeetingCreated(ctx.db, meeting.id, ctx.session.user.id);
 
       return meeting;
@@ -227,7 +235,12 @@ export const meetingRouter = createTRPCRouter({
       }),
     )
     .mutation(async ({ ctx, input }) => {
-      return ctx.db.attendance.update({
+      const before = await ctx.db.attendance.findUnique({
+        where: {
+          meetingId_userId: { meetingId: input.meetingId, userId: ctx.session.user.id },
+        },
+      });
+      const updated = await ctx.db.attendance.update({
         where: {
           meetingId_userId: {
             meetingId: input.meetingId,
@@ -236,6 +249,16 @@ export const meetingRouter = createTRPCRouter({
         },
         data: { status: input.status, note: input.note },
       });
+      await logActivity(ctx.db, {
+        userId: ctx.session.user.id,
+        action: 'STATUS_CHANGE',
+        entity: 'Attendance',
+        entityId: `${input.meetingId}:${ctx.session.user.id}`,
+        before: before ? { status: before.status, note: before.note } : null,
+        after: { status: input.status, note: input.note },
+        note: 'Підтвердження участі',
+      });
+      return updated;
     }),
 
   // ── setAttendance (secretary / leader / admin can change for anyone) ─
@@ -257,7 +280,10 @@ export const meetingRouter = createTRPCRouter({
       const isPrivileged = isAdmin || can(uctx, 'meeting:uploadMinutes', meeting.workingGroupId);
       if (!isPrivileged) throw new TRPCError({ code: 'FORBIDDEN' });
 
-      return ctx.db.attendance.upsert({
+      const before = await ctx.db.attendance.findUnique({
+        where: { meetingId_userId: { meetingId: input.meetingId, userId: input.userId } },
+      });
+      const updated = await ctx.db.attendance.upsert({
         where: { meetingId_userId: { meetingId: input.meetingId, userId: input.userId } },
         update: { status: input.status, note: input.note },
         create: {
@@ -267,6 +293,16 @@ export const meetingRouter = createTRPCRouter({
           note: input.note,
         },
       });
+      await logActivity(ctx.db, {
+        userId: ctx.session.user.id,
+        action: before ? 'STATUS_CHANGE' : 'CREATE',
+        entity: 'Attendance',
+        entityId: `${input.meetingId}:${input.userId}`,
+        before: before ? { status: before.status, note: before.note } : null,
+        after: { status: input.status, note: input.note },
+        note: 'Зміна явки секретарем',
+      });
+      return updated;
     }),
 
   // ── upsertAgendaItem (secretary / leader / admin) ────────────────────
@@ -304,9 +340,27 @@ export const meetingRouter = createTRPCRouter({
         responsibleId: input.responsibleId ?? null,
       };
       if (input.id) {
-        return ctx.db.agendaItem.update({ where: { id: input.id }, data });
+        const before = await ctx.db.agendaItem.findUnique({ where: { id: input.id } });
+        const updated = await ctx.db.agendaItem.update({ where: { id: input.id }, data });
+        await logActivity(ctx.db, {
+          userId: ctx.session.user.id,
+          action: 'UPDATE',
+          entity: 'AgendaItem',
+          entityId: input.id,
+          before,
+          after: updated,
+        });
+        return updated;
       }
-      return ctx.db.agendaItem.create({ data });
+      const created = await ctx.db.agendaItem.create({ data });
+      await logActivity(ctx.db, {
+        userId: ctx.session.user.id,
+        action: 'CREATE',
+        entity: 'AgendaItem',
+        entityId: created.id,
+        after: created,
+      });
+      return created;
     }),
 
   // ── deleteAgendaItem ─────────────────────────────────────────────────
@@ -320,7 +374,15 @@ export const meetingRouter = createTRPCRouter({
       if (!can(userCtx(ctx.session), 'meeting:uploadMinutes', item.meeting.workingGroupId)) {
         throw new TRPCError({ code: 'FORBIDDEN' });
       }
-      return ctx.db.agendaItem.delete({ where: { id: input.id } });
+      const deleted = await ctx.db.agendaItem.delete({ where: { id: input.id } });
+      await logActivity(ctx.db, {
+        userId: ctx.session.user.id,
+        action: 'DELETE',
+        entity: 'AgendaItem',
+        entityId: input.id,
+        before: item,
+      });
+      return deleted;
     }),
 
   // ── assignProtocolNumber: sequence per WG per year ───────────────────
@@ -346,10 +408,20 @@ export const meetingRouter = createTRPCRouter({
         select: { protocolNumber: true },
       });
       const maxNum = sameWgYear.reduce((m, r) => Math.max(m, r.protocolNumber ?? 0), 0);
-      return ctx.db.meeting.update({
+      const updated = await ctx.db.meeting.update({
         where: { id: input.meetingId },
         data: { protocolNumber: maxNum + 1 },
       });
+      await logActivity(ctx.db, {
+        userId: ctx.session.user.id,
+        action: 'UPDATE',
+        entity: 'Meeting',
+        entityId: input.meetingId,
+        before: { protocolNumber: null },
+        after: { protocolNumber: maxNum + 1 },
+        note: `Присвоєно протокол № ${maxNum + 1}`,
+      });
+      return updated;
     }),
 
   // ── uploadMinutes ─────────────────────────────────────────────────────
@@ -367,10 +439,20 @@ export const meetingRouter = createTRPCRouter({
         throw new TRPCError({ code: 'FORBIDDEN' });
       }
 
-      return ctx.db.meeting.update({
+      const updated = await ctx.db.meeting.update({
         where: { id: input.meetingId },
         data: { minutesText: input.minutesText },
       });
+      await logActivity(ctx.db, {
+        userId: ctx.session.user.id,
+        action: 'UPDATE',
+        entity: 'Meeting',
+        entityId: input.meetingId,
+        before: { minutesText: meeting.minutesText },
+        after: { minutesText: input.minutesText },
+        note: 'Завантажено протокол',
+      });
+      return updated;
     }),
 
   // ── changeStatus ──────────────────────────────────────────────────────
@@ -388,10 +470,19 @@ export const meetingRouter = createTRPCRouter({
         throw new TRPCError({ code: 'FORBIDDEN' });
       }
 
-      return ctx.db.meeting.update({
+      const updated = await ctx.db.meeting.update({
         where: { id: input.meetingId },
         data: { status: input.status },
       });
+      await logActivity(ctx.db, {
+        userId: ctx.session.user.id,
+        action: 'STATUS_CHANGE',
+        entity: 'Meeting',
+        entityId: input.meetingId,
+        before: { status: meeting.status },
+        after: { status: input.status },
+      });
+      return updated;
     }),
 
   // ── upcomingForUser ───────────────────────────────────────────────────

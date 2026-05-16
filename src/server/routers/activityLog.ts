@@ -52,8 +52,22 @@ export const activityLogRouter = createTRPCRouter({
   list: protectedProcedure
     .input(
       z.object({
-        entity: z.enum(['Standard', 'Meeting', 'Task', 'WorkingGroup', 'User', 'Document', 'Vote']),
-        entityId: z.string().cuid(),
+        entity: z.enum([
+          'Standard',
+          'Meeting',
+          'Task',
+          'WorkingGroup',
+          'User',
+          'Document',
+          'Vote',
+          'Comment',
+          'AgendaItem',
+          'Attendance',
+          'Invite',
+          'Notification',
+          'SystemSettings',
+        ]),
+        entityId: z.string(),
         limit: z.number().min(1).max(100).default(30),
       }),
     )

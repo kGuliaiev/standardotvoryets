@@ -89,7 +89,14 @@ User asked for "iteratively fix to achieve maximum result". The framework is in 
 
 The current implementation has the tree + grouped lists, but the user attached two screenshots showing exactly how each row should look (priority dot, assignee chip with name fragment, due-date colored chip). Verify against `прототип.html` lines for Tasks screen.
 
-### F. Future backlog (recorded 2026-05-16)
+### F-Done. Module coverage tests (2026-05-16)
+
+Two scripts ship in `scripts/`:
+
+- `pnpm test:audit-coverage` — static analysis using ts-morph. Scans every tRPC mutation in `src/server/routers/*.ts` and asserts each contains a `logActivity(` call. Current state: 41 covered, 6 exempt (notification UX + S3 plumbing), 0 uncovered. The exempt list is at the top of `scripts/audit-coverage.ts`. Add to CI so future PRs cannot regress audit coverage.
+- `pnpm test:modules` — integration test that walks through full CRUD lifecycles for every domain entity (WorkingGroup, Standard, Task, Meeting, Vote, Comment, User, Admin, Notification, Dashboard, Search, ActivityLog) via `appRouter.createCaller`. For each step it also asserts an ActivityLog row exists. Uses a `TEST_<timestamp>` tag so it isolates and self-cleans. **Requires a reachable DB** at `DATABASE_URL` — run only against dev/test DBs.
+
+### G. Future backlog (recorded 2026-05-16)
 
 - **Mobile version** — adaptive layout for phones/tablets: hamburger menu instead of fixed 228px sidebar; vertical-stack tables; touch-friendly tap targets (44px); responsive Modal that becomes a bottom-sheet on <768px. Likely a 2-3 week separate effort.
 - **Bug-found-to-task flow** — when QA / users find a bug they should be able to file it inline (button "Повідомити про помилку") that opens a TaskFormModal pre-filled with screenshot + URL + browser info, auto-assigned to admin or a "QA" working group. Saves manual copy-paste between chat and the task tracker.

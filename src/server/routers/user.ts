@@ -64,7 +64,18 @@ export const userRouter = createTRPCRouter({
           throw new TRPCError({ code: 'CONFLICT', message: 'Цей email вже використовується' });
         }
       }
-      return ctx.db.user.update({
+      const before = await ctx.db.user.findUniqueOrThrow({
+        where: { id: ctx.session.user.id },
+        select: {
+          name: true,
+          email: true,
+          phone: true,
+          avatarUrl: true,
+          notifyEmail: true,
+          notifyInApp: true,
+        },
+      });
+      const updated = await ctx.db.user.update({
         where: { id: ctx.session.user.id },
         data: input,
         select: {
@@ -77,6 +88,16 @@ export const userRouter = createTRPCRouter({
           notifyInApp: true,
         },
       });
+      await logActivity(ctx.db, {
+        userId: ctx.session.user.id,
+        action: 'UPDATE',
+        entity: 'User',
+        entityId: ctx.session.user.id,
+        before,
+        after: updated,
+        note: 'Оновлено профіль',
+      });
+      return updated;
     }),
 
   // ── list (ADMIN / DIRECTOR) ──────────────────────────────────────────
@@ -188,6 +209,19 @@ export const userRouter = createTRPCRouter({
         }),
       });
 
+      await logActivity(ctx.db, {
+        userId: ctx.session.user.id,
+        action: 'CREATE',
+        entity: 'Invite',
+        entityId: token.id,
+        after: {
+          email: input.email,
+          workingGroupId: input.workingGroupId,
+          role: input.role,
+        },
+        note: `Запрошено ${input.email} як ${input.role} до ${wg.name}`,
+      });
+
       return { token: token.token, inviteUrl, emailSent: emailResult.sent };
     }),
 
@@ -279,6 +313,15 @@ export const userRouter = createTRPCRouter({
       await ctx.db.inviteToken.update({
         where: { id: inviteToken.id },
         data: { usedAt: new Date() },
+      });
+
+      await logActivity(ctx.db, {
+        userId,
+        action: 'UPDATE',
+        entity: 'Invite',
+        entityId: inviteToken.id,
+        after: { usedAt: new Date(), workingGroupId: inviteToken.workingGroupId },
+        note: `Запрошення прийнято; додано до групи ${inviteToken.workingGroupId} як ${inviteToken.role}`,
       });
 
       return { success: true };

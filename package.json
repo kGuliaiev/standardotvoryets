@@ -19,6 +19,8 @@
     "prisma:studio": "prisma studio",
     "prisma:seed": "tsx prisma/seed.ts",
     "prisma:reset": "prisma migrate reset --force && pnpm prisma:seed",
+    "test:audit-coverage": "tsx scripts/audit-coverage.ts",
+    "test:modules": "tsx scripts/test-modules.ts",
     "prepare": "husky"
   },
   "dependencies": {
@@ -82,6 +84,7 @@
     "prettier": "^3.3.3",
     "prisma": "^5.17.0",
     "tailwindcss": "^3.4.7",
+    "ts-morph": "^28.0.0",
     "tsx": "^4.16.2",
     "typescript": "^5.4.5"
   },

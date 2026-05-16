@@ -114,11 +114,20 @@ export const commentRouter = createTRPCRouter({
       if (comment.authorId !== ctx.session.user.id) {
         throw new TRPCError({ code: 'FORBIDDEN' });
       }
-      return ctx.db.comment.update({
+      const updated = await ctx.db.comment.update({
         where: { id: input.id },
         data: { body: input.body.trim() },
         include: { author: { select: { id: true, name: true, avatarUrl: true } } },
       });
+      await logActivity(ctx.db, {
+        userId: ctx.session.user.id,
+        action: 'UPDATE',
+        entity: 'Comment',
+        entityId: input.id,
+        before: { body: comment.body },
+        after: { body: input.body.trim() },
+      });
+      return updated;
     }),
 
   // ── delete (own or LEADER of WG) ───────────────────────────────────────
@@ -140,6 +149,15 @@ export const commentRouter = createTRPCRouter({
       }
       // Cascade: delete replies first
       await ctx.db.comment.deleteMany({ where: { parentId: input.id } });
-      return ctx.db.comment.delete({ where: { id: input.id } });
+      const deleted = await ctx.db.comment.delete({ where: { id: input.id } });
+      await logActivity(ctx.db, {
+        userId: ctx.session.user.id,
+        action: 'DELETE',
+        entity: 'Comment',
+        entityId: input.id,
+        before: comment,
+        note: 'Видалено коментар',
+      });
+      return deleted;
     }),
 });

@@ -115,6 +115,14 @@ export const taskRouter = createTRPCRouter({
         },
       });
 
+      await logActivity(ctx.db, {
+        userId: ctx.session.user.id,
+        action: 'CREATE',
+        entity: 'Task',
+        entityId: task.id,
+        after: task,
+      });
+
       if (task.assigneeId) {
         await notifyTaskAssigned(ctx.db, task.id, ctx.session.user.id);
       }
@@ -237,7 +245,15 @@ export const taskRouter = createTRPCRouter({
 
       if (!canDelete) throw new TRPCError({ code: 'FORBIDDEN' });
 
-      return ctx.db.task.delete({ where: { id: input.id } });
+      const deleted = await ctx.db.task.delete({ where: { id: input.id } });
+      await logActivity(ctx.db, {
+        userId: ctx.session.user.id,
+        action: 'DELETE',
+        entity: 'Task',
+        entityId: input.id,
+        before: task,
+      });
+      return deleted;
     }),
 
   // ── overdue ───────────────────────────────────────────────────────────

@@ -46,6 +46,23 @@ export const notificationRouter = createTRPCRouter({
       data: { read: true },
     });
   }),
+
+  // ── delete a single notification ─────────────────────────────────────
+  delete: protectedProcedure
+    .input(z.object({ id: z.string().cuid() }))
+    .mutation(async ({ ctx, input }) => {
+      // Ownership-scoped delete: notification must belong to caller
+      return ctx.db.notification.deleteMany({
+        where: { id: input.id, userId: ctx.session.user.id },
+      });
+    }),
+
+  // ── deleteAll (for the current user) ─────────────────────────────────
+  deleteAll: protectedProcedure.mutation(async ({ ctx }) => {
+    return ctx.db.notification.deleteMany({
+      where: { userId: ctx.session.user.id },
+    });
+  }),
 });
 
 // ── Helper: create a notification (used by other routers) ─────────────────────

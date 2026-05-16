@@ -169,6 +169,14 @@ export const standardRouter = createTRPCRouter({
         },
       });
 
+      await logActivity(ctx.db, {
+        userId: ctx.session.user.id,
+        action: 'CREATE',
+        entity: 'Standard',
+        entityId: standard.id,
+        after: standard,
+      });
+
       return standard;
     }),
 
@@ -267,6 +275,15 @@ export const standardRouter = createTRPCRouter({
       if (ctx.session.user.globalRole !== 'ADMIN') {
         throw new TRPCError({ code: 'FORBIDDEN' });
       }
-      return ctx.db.standard.delete({ where: { id: input.id } });
+      const before = await ctx.db.standard.findUniqueOrThrow({ where: { id: input.id } });
+      const deleted = await ctx.db.standard.delete({ where: { id: input.id } });
+      await logActivity(ctx.db, {
+        userId: ctx.session.user.id,
+        action: 'DELETE',
+        entity: 'Standard',
+        entityId: input.id,
+        before,
+      });
+      return deleted;
     }),
 });

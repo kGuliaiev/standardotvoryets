@@ -94,7 +94,15 @@ export const workingGroupRouter = createTRPCRouter({
       const existing = await ctx.db.workingGroup.findUnique({ where: { code: input.code } });
       if (existing) throw new TRPCError({ code: 'CONFLICT', message: 'Код вже використовується' });
 
-      return ctx.db.workingGroup.create({ data: input });
+      const created = await ctx.db.workingGroup.create({ data: input });
+      await logActivity(ctx.db, {
+        userId: ctx.session.user.id,
+        action: 'CREATE',
+        entity: 'WorkingGroup',
+        entityId: created.id,
+        after: created,
+      });
+      return created;
     }),
 
   // ── update ────────────────────────────────────────────────────────────
@@ -143,13 +151,30 @@ export const workingGroupRouter = createTRPCRouter({
       if (!can(userCtx(ctx.session), 'wg:invite', input.workingGroupId)) {
         throw new TRPCError({ code: 'FORBIDDEN' });
       }
-      return ctx.db.workingGroupMember.upsert({
+      const before = await ctx.db.workingGroupMember.findUnique({
+        where: {
+          workingGroupId_userId: { workingGroupId: input.workingGroupId, userId: input.userId },
+        },
+      });
+      const result = await ctx.db.workingGroupMember.upsert({
         where: {
           workingGroupId_userId: { workingGroupId: input.workingGroupId, userId: input.userId },
         },
         create: input,
         update: { role: input.role },
       });
+      await logActivity(ctx.db, {
+        userId: ctx.session.user.id,
+        action: before ? 'UPDATE' : 'CREATE',
+        entity: 'WorkingGroup',
+        entityId: input.workingGroupId,
+        before: before ? { userId: input.userId, role: before.role } : null,
+        after: { userId: input.userId, role: input.role },
+        note: before
+          ? `Зміна ролі члена ${input.userId} на ${input.role}`
+          : `Додано члена ${input.userId} як ${input.role}`,
+      });
+      return result;
     }),
 
   // ── removeMember ──────────────────────────────────────────────────────
@@ -164,11 +189,25 @@ export const workingGroupRouter = createTRPCRouter({
       if (!can(userCtx(ctx.session), 'wg:removeMember', input.workingGroupId)) {
         throw new TRPCError({ code: 'FORBIDDEN' });
       }
-      return ctx.db.workingGroupMember.delete({
+      const before = await ctx.db.workingGroupMember.findUnique({
         where: {
           workingGroupId_userId: { workingGroupId: input.workingGroupId, userId: input.userId },
         },
       });
+      const deleted = await ctx.db.workingGroupMember.delete({
+        where: {
+          workingGroupId_userId: { workingGroupId: input.workingGroupId, userId: input.userId },
+        },
+      });
+      await logActivity(ctx.db, {
+        userId: ctx.session.user.id,
+        action: 'DELETE',
+        entity: 'WorkingGroup',
+        entityId: input.workingGroupId,
+        before: before ? { userId: input.userId, role: before.role } : null,
+        note: `Видалено члена ${input.userId}`,
+      });
+      return deleted;
     }),
 
   // ── changeMemberRole ──────────────────────────────────────────────────
@@ -184,12 +223,27 @@ export const workingGroupRouter = createTRPCRouter({
       if (!can(userCtx(ctx.session), 'wg:invite', input.workingGroupId)) {
         throw new TRPCError({ code: 'FORBIDDEN' });
       }
-      return ctx.db.workingGroupMember.update({
+      const before = await ctx.db.workingGroupMember.findUnique({
+        where: {
+          workingGroupId_userId: { workingGroupId: input.workingGroupId, userId: input.userId },
+        },
+      });
+      const updated = await ctx.db.workingGroupMember.update({
         where: {
           workingGroupId_userId: { workingGroupId: input.workingGroupId, userId: input.userId },
         },
         data: { role: input.role },
       });
+      await logActivity(ctx.db, {
+        userId: ctx.session.user.id,
+        action: 'UPDATE',
+        entity: 'WorkingGroup',
+        entityId: input.workingGroupId,
+        before: before ? { userId: input.userId, role: before.role } : null,
+        after: { userId: input.userId, role: input.role },
+        note: `Зміна ролі члена ${input.userId} на ${input.role}`,
+      });
+      return updated;
     }),
 
   // ── setArchived (ADMIN only) ─────────────────────────────────────────

@@ -2,6 +2,7 @@ import { z } from 'zod';
 import { TRPCError } from '@trpc/server';
 import { createTRPCRouter, protectedProcedure } from '@/server/trpc';
 import { can } from '@/lib/rbac';
+import { logActivity } from '@/server/audit';
 import { notifyVoteOpened, notifyVoteClosed } from '@/server/notify';
 import type { GlobalRole, WorkingGroupRole } from '@prisma/client';
 
@@ -77,6 +78,15 @@ export const voteRouter = createTRPCRouter({
         }),
       ]);
 
+      await logActivity(ctx.db, {
+        userId: ctx.session.user.id,
+        action: 'CREATE',
+        entity: 'Vote',
+        entityId: voting.id,
+        after: voting,
+        note: `Відкрито голосування: ${voting.title}`,
+      });
+
       await notifyVoteOpened(ctx.db, voting.id, ctx.session.user.id);
 
       return voting;
@@ -105,7 +115,10 @@ export const voteRouter = createTRPCRouter({
         throw new TRPCError({ code: 'FORBIDDEN' });
       }
 
-      return ctx.db.vote.upsert({
+      const before = await ctx.db.vote.findUnique({
+        where: { votingId_userId: { votingId: input.votingId, userId: ctx.session.user.id } },
+      });
+      const cast = await ctx.db.vote.upsert({
         where: { votingId_userId: { votingId: input.votingId, userId: ctx.session.user.id } },
         create: {
           votingId: input.votingId,
@@ -115,6 +128,16 @@ export const voteRouter = createTRPCRouter({
         },
         update: { choice: input.choice, comment: input.comment },
       });
+      await logActivity(ctx.db, {
+        userId: ctx.session.user.id,
+        action: before ? 'UPDATE' : 'CREATE',
+        entity: 'Vote',
+        entityId: input.votingId,
+        before: before ? { choice: before.choice, comment: before.comment } : null,
+        after: { choice: input.choice, comment: input.comment },
+        note: `Голос: ${input.choice}`,
+      });
+      return cast;
     }),
 
   // ── closeVoting ───────────────────────────────────────────────────────
@@ -163,6 +186,16 @@ export const voteRouter = createTRPCRouter({
           },
         }),
       ]);
+
+      await logActivity(ctx.db, {
+        userId: ctx.session.user.id,
+        action: 'STATUS_CHANGE',
+        entity: 'Vote',
+        entityId: input.votingId,
+        before: { status: 'OPEN' },
+        after: { status: 'CLOSED' },
+        note: `Завершено. За: ${forVotes}, проти: ${againstVotes}. Результат: ${newStatus}`,
+      });
 
       await notifyVoteClosed(
         ctx.db,
