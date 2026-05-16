@@ -73,6 +73,17 @@ function fmt(d: Date | null): string {
   return d.toLocaleDateString('uk-UA', { day: '2-digit', month: 'short' });
 }
 
+function pluralDays(n: number): string {
+  // 1 день, 2-4 дні, 5+ днів (стандартні українські правила, абс. значення)
+  const a = Math.abs(n);
+  const last = a % 10;
+  const last2 = a % 100;
+  if (last2 >= 11 && last2 <= 19) return 'днів';
+  if (last === 1) return 'день';
+  if (last >= 2 && last <= 4) return 'дні';
+  return 'днів';
+}
+
 type State = 'completed' | 'current' | 'overdue' | 'upcoming';
 
 function stageState(s: Stage, currentIndex: number, index: number): State {
@@ -211,24 +222,99 @@ export function StandardProgress(props: StandardProgressProps) {
     );
   }
 
+  // ── Active-segment progress (elapsed days / total days between previous
+  //    anchor and the current stage's due date). Used to render a partial
+  //    brand-color fill on the connector between dot[currentIndex-1] and
+  //    dot[currentIndex], plus a "залишилось N днів" label above it.
+  const activeConnectorIdx = currentIndex - 1; // physical connector index that's "active"
+  let activePct = 0; // 0..1
+  let activeOverdue = false;
+  let activeDaysLabel: string | null = null;
+  if (!allDone && currentIndex > 0) {
+    const prev = stages[currentIndex - 1];
+    const curr = stages[currentIndex];
+    const prevAnchor = prev?.completedAt ?? prev?.dueDate ?? null;
+    const due = curr?.dueDate ?? null;
+    if (due) {
+      const nowMs = Date.now();
+      if (prevAnchor) {
+        const total = due.getTime() - prevAnchor.getTime();
+        const elapsed = nowMs - prevAnchor.getTime();
+        activePct = total > 0 ? Math.max(0, Math.min(1, elapsed / total)) : 1;
+      } else {
+        activePct = nowMs >= due.getTime() ? 1 : 0;
+      }
+      const dayMs = 24 * 3600 * 1000;
+      const daysRemaining = Math.ceil((due.getTime() - nowMs) / dayMs);
+      activeOverdue = daysRemaining < 0;
+      activeDaysLabel =
+        daysRemaining > 0
+          ? `залишилось ${daysRemaining} ${pluralDays(daysRemaining)}`
+          : daysRemaining === 0
+            ? 'сьогодні термін'
+            : `прострочено на ${Math.abs(daysRemaining)} ${pluralDays(Math.abs(daysRemaining))}`;
+    }
+  }
+
+  function connectorFillPct(half: 'left' | 'right', cellIdx: number): number {
+    if (allDone) return 100;
+    const physical = half === 'left' ? cellIdx - 1 : cellIdx;
+    if (physical < activeConnectorIdx) return 100;
+    if (physical === activeConnectorIdx) {
+      return half === 'right' ? Math.min(100, activePct * 200) : Math.max(0, activePct * 200 - 100);
+    }
+    return 0;
+  }
+
+  const activeFillCls = activeOverdue ? 'bg-red-500' : 'bg-brand';
+
   return (
-    <div className={cn('w-full', props.className)}>
+    <div className={cn('w-full pt-5', props.className)}>
       <div className="flex items-start gap-0">
         {stages.map((s, i) => {
           const state = stageState(s, currentIndex, i);
           const isLast = i === stages.length - 1;
           const showOverdue = state === 'overdue';
+          // Should THIS cell show the days-left label above its left-half?
+          // → only on cell[currentIndex] (the active segment's right end).
+          const showActiveLabel = i === currentIndex && currentIndex > 0 && !allDone;
+          const leftFillCls =
+            i - 1 < activeConnectorIdx || allDone
+              ? 'bg-brand'
+              : i - 1 === activeConnectorIdx
+                ? activeFillCls
+                : 'bg-transparent';
+          const rightFillCls =
+            i < activeConnectorIdx || allDone
+              ? 'bg-brand'
+              : i === activeConnectorIdx
+                ? activeFillCls
+                : 'bg-transparent';
           return (
             <div key={s.key} className="flex-1 flex items-start">
               <div className="flex flex-col items-center min-w-0 w-full">
                 <div className="relative w-full flex items-center">
-                  {i > 0 && (
-                    <div
+                  {/* Days-left label above the active connector — anchored on
+                      cell[currentIndex] left side, stretched into prev cell's
+                      right half via -left-1/2 so it sits centered between dots. */}
+                  {showActiveLabel && activeDaysLabel && (
+                    <span
                       className={cn(
-                        'absolute right-1/2 left-0 top-1/2 -translate-y-1/2 h-[3px]',
-                        i <= currentIndex || allDone ? 'bg-brand' : 'bg-hairline',
+                        'absolute -left-1/2 right-1/2 -top-5 text-center text-[10px] font-semibold leading-tight pointer-events-none',
+                        activeOverdue ? 'text-red-600 dark:text-red-400' : 'text-brand',
                       )}
-                    />
+                    >
+                      {activeDaysLabel}
+                    </span>
+                  )}
+                  {/* Left-half connector (incoming from i-1) */}
+                  {i > 0 && (
+                    <div className="absolute right-1/2 left-0 top-1/2 -translate-y-1/2 h-[3px] bg-hairline rounded-l-full overflow-hidden">
+                      <div
+                        className={cn('absolute left-0 top-0 bottom-0 transition-all', leftFillCls)}
+                        style={{ width: `${connectorFillPct('left', i)}%` }}
+                      />
+                    </div>
                   )}
                   <div
                     className={cn(
@@ -248,13 +334,17 @@ export function StandardProgress(props: StandardProgressProps) {
                       i + 1
                     )}
                   </div>
+                  {/* Right-half connector (outgoing to i+1) */}
                   {!isLast && (
-                    <div
-                      className={cn(
-                        'absolute left-1/2 right-0 top-1/2 -translate-y-1/2 h-[3px]',
-                        i < currentIndex || allDone ? 'bg-brand' : 'bg-hairline',
-                      )}
-                    />
+                    <div className="absolute left-1/2 right-0 top-1/2 -translate-y-1/2 h-[3px] bg-hairline rounded-r-full overflow-hidden">
+                      <div
+                        className={cn(
+                          'absolute left-0 top-0 bottom-0 transition-all',
+                          rightFillCls,
+                        )}
+                        style={{ width: `${connectorFillPct('right', i)}%` }}
+                      />
+                    </div>
                   )}
                 </div>
                 <div className="mt-2 text-center px-1 min-w-0 w-full">
