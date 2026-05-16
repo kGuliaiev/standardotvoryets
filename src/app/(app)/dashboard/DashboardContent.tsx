@@ -31,6 +31,21 @@ const MONTHS_UA_ACC = [
   'листопада',
   'грудня',
 ];
+// Locative case ("у січні", "у лютому"…) — used in KPI labels like "ЗАСІДАНЬ У ТРАВНІ"
+const MONTHS_UA_LOC = [
+  'СІЧНІ',
+  'ЛЮТОМУ',
+  'БЕРЕЗНІ',
+  'КВІТНІ',
+  'ТРАВНІ',
+  'ЧЕРВНІ',
+  'ЛИПНІ',
+  'СЕРПНІ',
+  'ВЕРЕСНІ',
+  'ЖОВТНІ',
+  'ЛИСТОПАДІ',
+  'ГРУДНІ',
+];
 const MONTHS_UA_SHORT = [
   'СІЧ',
   'ЛЮТ',
@@ -77,8 +92,8 @@ function KpiCard({
   return (
     <div className="relative card p-5 overflow-hidden">
       <span className={`absolute top-0 left-0 right-0 h-[3px] ${KPI_STRIPE[tone]}`} />
-      <Icon className="absolute right-3 top-3 w-12 h-12 text-slate-100" />
-      <p className="text-[10px] font-bold uppercase tracking-[0.6px] text-light relative">
+      <Icon className="absolute right-3 top-3 w-10 h-10 text-slate-100 opacity-80" />
+      <p className="text-[10px] font-bold uppercase tracking-[0.6px] text-light relative pr-12 leading-tight">
         {label}
       </p>
       <p className="text-[30px] font-extrabold text-navy mt-1 leading-none relative">{value}</p>
@@ -164,7 +179,7 @@ export function DashboardContent() {
           icon={AlertTriangle}
         />
         <KpiCard
-          label={`ЗАСІДАНЬ У ${MONTHS_UA_SHORT[now.getMonth()]}`}
+          label={`ЗАСІДАНЬ У ${MONTHS_UA_LOC[now.getMonth()]}`}
           value={kpis?.meetingsThisMonth ?? '…'}
           sub={
             kpis?.nextMeetingDate
