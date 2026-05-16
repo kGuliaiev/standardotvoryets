@@ -284,6 +284,9 @@ export function MeetingDetail({ id }: Props) {
               )}
             </div>
           )}
+
+          {/* Activity feed — same column width as Інформація / Протокол */}
+          <ActivityFeed entity="Meeting" entityId={id} />
         </div>
 
         {/* Right: attendances */}
@@ -411,8 +414,6 @@ export function MeetingDetail({ id }: Props) {
           })()}
         </div>
       </div>
-
-      <ActivityFeed entity="Meeting" entityId={id} />
 
       {/* Minutes modal */}
       {showMinutes && (
