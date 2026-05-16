@@ -96,7 +96,7 @@ export function DashboardContent() {
   const { data: myTasks } = trpc.task.list.useQuery({ assigneeId: userId }, { enabled: !!userId });
   const { data: notifications } = trpc.notification.list.useQuery({ limit: 5 });
   const { data: standardsData } = trpc.standard.list.useQuery({ page: 1, pageSize: 50 });
-  const [stdSort, setStdSort] = useSort<'nextDue' | 'code' | 'wg' | 'status'>('nextDue', 'asc');
+  const [stdSort, setStdSort] = useSort<'stage' | 'code' | 'wg' | 'status'>('stage', 'asc');
 
   const utils = trpc.useUtils();
   const toggleTask = trpc.task.changeStatus.useMutation({
@@ -290,7 +290,7 @@ export function DashboardContent() {
                       </SortableHeader>
                     </th>
                     <th className="px-3 py-3 font-medium">
-                      <SortableHeader columnKey="nextDue" sort={stdSort} onSort={setStdSort}>
+                      <SortableHeader columnKey="stage" sort={stdSort} onSort={setStdSort}>
                         Етапи
                       </SortableHeader>
                     </th>
@@ -305,11 +305,12 @@ export function DashboardContent() {
                         return s.workingGroup.code;
                       case 'status':
                         return s.status;
-                      case 'nextDue': {
-                        // First unconfirmed stage's due date. asc puts overdue
-                        // (past dates) first, then nearest future date.
-                        // All-confirmed sorts to the bottom via the
-                        // sortedRows null-last rule.
+                      case 'stage': {
+                        // Composite key: primary = stage index (1=TECH_SPEC … 6=COMPLETED),
+                        // secondary = first-unconfirmed-stage due date.
+                        // asc → stage 1 group first, within each group earliest due first
+                        //       (so overdue rows lead each stage group).
+                        // 'COMPLETED' rank 6 → all-finished standards drop to the bottom.
                         const stages: [Date | null, Date | null][] = [
                           [
                             s.techSpecDueDate ? new Date(s.techSpecDueDate) : null,
@@ -332,10 +333,21 @@ export function DashboardContent() {
                             s.finalCompletedAt ? new Date(s.finalCompletedAt) : null,
                           ],
                         ];
-                        for (const [due, done] of stages) {
-                          if (!done && due) return due;
+                        let stageIdx = 6; // all-done sentinel
+                        let nextDueMs = Number.MAX_SAFE_INTEGER;
+                        for (let i = 0; i < stages.length; i++) {
+                          const [due, done] = stages[i] ?? [null, null];
+                          if (!done) {
+                            stageIdx = i + 1;
+                            nextDueMs = due ? due.getTime() : Number.MAX_SAFE_INTEGER;
+                            break;
+                          }
                         }
-                        return null;
+                        // Encode as one number: stage in high digits, normalized
+                        // date in low digits. 1e13 leaves headroom for ms-since-epoch (~1.7e12).
+                        // Normalize date to >= 0 by adding a year offset so very-old past dates
+                        // still come before newer ones (asc within stage = oldest/overdue first).
+                        return stageIdx * 1e13 + Math.max(0, nextDueMs);
                       }
                       default:
                         return null;

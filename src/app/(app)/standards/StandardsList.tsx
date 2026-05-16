@@ -163,7 +163,7 @@ export function StandardsList() {
               />
             </button>
             {wgPickerOpen && (
-              <div className="absolute z-20 mt-1 w-64 bg-card border border-hairline rounded-lg shadow-lg p-2 max-h-80 overflow-y-auto">
+              <div className="absolute z-20 right-0 mt-1 w-72 bg-card border border-hairline rounded-lg shadow-lg p-2 max-h-80 overflow-y-auto">
                 <button
                   type="button"
                   onClick={clearWgs}
@@ -207,8 +207,10 @@ export function StandardsList() {
                         className="w-2 h-2 rounded-full shrink-0"
                         style={{ backgroundColor: g.color }}
                       />
-                      <span className="font-mono text-mid font-semibold">{g.code}</span>
-                      <span className="text-light truncate">{g.name}</span>
+                      <span className="font-mono text-mid font-semibold whitespace-nowrap shrink-0">
+                        {g.code}
+                      </span>
+                      <span className="text-light truncate min-w-0">{g.name}</span>
                     </label>
                   );
                 })}
