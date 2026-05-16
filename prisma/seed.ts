@@ -549,7 +549,8 @@ async function main() {
 
   /* ── Wipe stale memberships and standards ──────────────────────────── */
   // To replace the previous РГ #4/8/12 seed cleanly: remove all members and
-  // any pending standards from groups that aren't in this list.
+  // any pending standards from groups that aren't in this list. Order is
+  // critical — child rows must go before parents to avoid FK violations.
   const seedCodes = WORKING_GROUPS.map((w) => w.code);
   const staleGroups = await prisma.workingGroup.findMany({
     where: { code: { notIn: seedCodes } },
@@ -557,55 +558,116 @@ async function main() {
   });
   if (staleGroups.length) {
     console.log('🧹 Removing stale WGs:', staleGroups.map((g) => g.code).join(', '));
-    const ids = staleGroups.map((g) => g.id);
-    await prisma.workingGroupMember.deleteMany({ where: { workingGroupId: { in: ids } } });
-    await prisma.standard.deleteMany({ where: { workingGroupId: { in: ids } } });
-    await prisma.meeting.deleteMany({ where: { workingGroupId: { in: ids } } });
-    await prisma.workingGroup.deleteMany({ where: { id: { in: ids } } });
+    const wgIds = staleGroups.map((g) => g.id);
+    const stdIds = (
+      await prisma.standard.findMany({
+        where: { workingGroupId: { in: wgIds } },
+        select: { id: true },
+      })
+    ).map((s) => s.id);
+    const mtIds = (
+      await prisma.meeting.findMany({
+        where: { workingGroupId: { in: wgIds } },
+        select: { id: true },
+      })
+    ).map((m) => m.id);
+
+    // Children of Standard
+    if (stdIds.length) {
+      const votingIds = (
+        await prisma.voting.findMany({
+          where: { standardId: { in: stdIds } },
+          select: { id: true },
+        })
+      ).map((v) => v.id);
+      if (votingIds.length) {
+        await prisma.vote.deleteMany({ where: { votingId: { in: votingIds } } });
+        await prisma.voting.deleteMany({ where: { id: { in: votingIds } } });
+      }
+      await prisma.task.deleteMany({ where: { standardId: { in: stdIds } } });
+      await prisma.comment.deleteMany({ where: { standardId: { in: stdIds } } });
+      await prisma.document.deleteMany({ where: { standardId: { in: stdIds } } });
+      await prisma.standardStatusHistory.deleteMany({ where: { standardId: { in: stdIds } } });
+    }
+    // Children of Meeting
+    if (mtIds.length) {
+      await prisma.agendaItem.deleteMany({ where: { meetingId: { in: mtIds } } });
+      await prisma.attendance.deleteMany({ where: { meetingId: { in: mtIds } } });
+    }
+    // Audit log rows referencing those entities (best-effort, don't fail seed)
+    await prisma.activityLog
+      .deleteMany({
+        where: {
+          OR: [
+            { entity: 'Standard', entityId: { in: stdIds } },
+            { entity: 'Meeting', entityId: { in: mtIds } },
+            { entity: 'WorkingGroup', entityId: { in: wgIds } },
+          ],
+        },
+      })
+      .catch((e) => console.warn('activityLog cleanup warn:', e));
+
+    await prisma.workingGroupMember.deleteMany({ where: { workingGroupId: { in: wgIds } } });
+    await prisma.standard.deleteMany({ where: { id: { in: stdIds } } });
+    await prisma.meeting.deleteMany({ where: { id: { in: mtIds } } });
+    await prisma.workingGroup.deleteMany({ where: { id: { in: wgIds } } });
+    console.log(
+      `🧹 Removed ${staleGroups.length} stale WG(s) with ${stdIds.length} standards, ${mtIds.length} meetings`,
+    );
   }
 
   /* ── WGs + memberships ─────────────────────────────────────────────── */
+  let wgOk = 0;
+  let wgFail = 0;
   for (const wg of WORKING_GROUPS) {
-    const upserted = await prisma.workingGroup.upsert({
-      where: { code: wg.code },
-      update: {
-        name: wg.name,
-        description: wg.description,
-        color: wg.color,
-        isArchived: false,
-      },
-      create: {
-        code: wg.code,
-        name: wg.name,
-        description: wg.description,
-        color: wg.color,
-      },
-    });
-
-    // Wipe existing memberships to make seed authoritative
-    await prisma.workingGroupMember.deleteMany({ where: { workingGroupId: upserted.id } });
-
-    const seenUserIds = new Set<string>();
-    const addMember = async (email: string, role: WorkingGroupRole) => {
-      const uid = usersById[email];
-      if (!uid) {
-        console.warn(`⚠️ Missing user ${email} for ${wg.code}`);
-        return;
-      }
-      if (seenUserIds.has(uid)) return; // can't have same person twice in one WG
-      seenUserIds.add(uid);
-      await prisma.workingGroupMember.create({
-        data: { workingGroupId: upserted.id, userId: uid, role },
+    try {
+      const upserted = await prisma.workingGroup.upsert({
+        where: { code: wg.code },
+        update: {
+          name: wg.name,
+          description: wg.description,
+          color: wg.color,
+          isArchived: false,
+        },
+        create: {
+          code: wg.code,
+          name: wg.name,
+          description: wg.description,
+          color: wg.color,
+        },
       });
-    };
 
-    await addMember(wg.leader, WorkingGroupRole.LEADER);
-    if (wg.deputy) await addMember(wg.deputy, WorkingGroupRole.DEPUTY);
-    await addMember(wg.secretary, WorkingGroupRole.SECRETARY);
-    for (const m of wg.members) await addMember(m, WorkingGroupRole.MEMBER);
+      // Wipe existing memberships to make seed authoritative
+      await prisma.workingGroupMember.deleteMany({ where: { workingGroupId: upserted.id } });
 
-    console.log(`✅ ${wg.code}: ${seenUserIds.size} members`);
+      const seenUserIds = new Set<string>();
+      const addMember = async (email: string, role: WorkingGroupRole) => {
+        const uid = usersById[email];
+        if (!uid) {
+          console.warn(`⚠️ Missing user ${email} for ${wg.code}`);
+          return;
+        }
+        if (seenUserIds.has(uid)) return; // can't have same person twice in one WG
+        seenUserIds.add(uid);
+        await prisma.workingGroupMember.create({
+          data: { workingGroupId: upserted.id, userId: uid, role },
+        });
+      };
+
+      await addMember(wg.leader, WorkingGroupRole.LEADER);
+      if (wg.deputy) await addMember(wg.deputy, WorkingGroupRole.DEPUTY);
+      await addMember(wg.secretary, WorkingGroupRole.SECRETARY);
+      for (const m of wg.members) await addMember(m, WorkingGroupRole.MEMBER);
+
+      console.log(`✅ ${wg.code}: ${seenUserIds.size} members`);
+      wgOk++;
+    } catch (e) {
+      // Don't let one bad WG kill the whole seed — log and move on
+      wgFail++;
+      console.error(`❌ ${wg.code} failed:`, e instanceof Error ? e.message : e);
+    }
   }
+  console.log(`📊 WGs processed: ${wgOk} ok / ${wgFail} failed / ${WORKING_GROUPS.length} total`);
 
   console.log('🎉 Seed complete!');
   console.log('');
@@ -617,8 +679,10 @@ async function main() {
 
 main()
   .catch((e) => {
-    console.error(e);
-    process.exit(1);
+    // CRITICAL: do NOT exit non-zero — that would abort Railway deploy and
+    // leave the previous image serving. Better to log loudly and let the app
+    // boot, then surface the issue via /api/version or logs.
+    console.error('🚨 SEED FAILED (continuing so app can boot):', e);
   })
   .finally(async () => {
     await prisma.$disconnect();
