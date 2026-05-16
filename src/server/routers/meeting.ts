@@ -506,4 +506,30 @@ export const meetingRouter = createTRPCRouter({
         take: input.limit,
       });
     }),
+
+  // ── protocolsForUser: meetings with any protocol activity in WGs the user can see
+  protocolsForUser: protectedProcedure.query(async ({ ctx }) => {
+    const memberGroupIds = ctx.session.user.memberships?.map((m) => m.workingGroupId) ?? [];
+    const seesAll = seesAllWorkingGroups(ctx.session.user);
+
+    return ctx.db.meeting.findMany({
+      where: {
+        ...(seesAll ? {} : { workingGroupId: { in: memberGroupIds } }),
+        // "has any protocol activity" = a protocol number assigned, OR minutes
+        // text typed, OR at least one agenda item created.
+        OR: [
+          { protocolNumber: { not: null } },
+          { minutesText: { not: null } },
+          { agendaItems: { some: {} } },
+        ],
+      },
+      include: {
+        workingGroup: { select: { id: true, code: true, name: true, color: true } },
+        chairman: { select: { id: true, name: true, rank: true } },
+        createdBy: { select: { id: true, name: true } },
+        _count: { select: { agendaItems: true, attendances: true } },
+      },
+      orderBy: [{ startAt: 'desc' }],
+    });
+  }),
 });
