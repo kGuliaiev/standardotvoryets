@@ -51,11 +51,12 @@ export function MeetingDetail({ id }: Props) {
   const [editOpen, setEditOpen] = useState(false);
   const [editForm, setEditForm] = useState({
     title: '',
-    format: 'ONLINE' as 'ONLINE' | 'OFFLINE' | 'HYBRID',
+    format: 'OFFLINE' as 'ONLINE' | 'OFFLINE' | 'HYBRID',
     location: '',
     startAt: '',
     durationMins: 60,
     agendaText: '',
+    chairmanId: '',
   });
   const [editError, setEditError] = useState<string | null>(null);
 
@@ -163,6 +164,7 @@ export function MeetingDetail({ id }: Props) {
                     startAt: new Date(meeting.startAt).toISOString().slice(0, 16),
                     durationMins: meeting.durationMins,
                     agendaText: meeting.agendaText ?? '',
+                    chairmanId: meeting.chairmanId ?? '',
                   });
                   setEditError(null);
                   setEditOpen(true);
@@ -556,6 +558,24 @@ export function MeetingDetail({ id }: Props) {
             </div>
           </div>
           <div>
+            <label className="field-label">Головуючий</label>
+            <select
+              className="select"
+              value={editForm.chairmanId}
+              onChange={(e) => setEditForm((f) => ({ ...f, chairmanId: e.target.value }))}
+            >
+              <option value="">— керівник РГ за замовчуванням —</option>
+              {meeting.workingGroup.members.map((m) => (
+                <option key={m.userId} value={m.userId}>
+                  {m.user.name}
+                  {m.role === 'LEADER' ? ' · Керівник' : ''}
+                  {m.role === 'DEPUTY' ? ' · Заступник' : ''}
+                  {m.role === 'SECRETARY' ? ' · Секретар' : ''}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div>
             <label className="field-label">Порядок денний</label>
             <textarea
               rows={5}
@@ -598,6 +618,7 @@ export function MeetingDetail({ id }: Props) {
                   startAt: new Date(editForm.startAt),
                   durationMins: editForm.durationMins,
                   agendaText: trim(editForm.agendaText),
+                  chairmanId: editForm.chairmanId ? editForm.chairmanId : null,
                 });
               }}
               disabled={updateMutation.isPending}

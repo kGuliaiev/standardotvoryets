@@ -110,11 +110,12 @@ export const meetingRouter = createTRPCRouter({
       z.object({
         workingGroupId: z.string().cuid(),
         title: z.string().min(3).max(300),
-        format: z.enum(['ONLINE', 'OFFLINE', 'HYBRID']).default('ONLINE'),
+        format: z.enum(['ONLINE', 'OFFLINE', 'HYBRID']).default('OFFLINE'),
         location: z.string().optional(),
         startAt: z.date(),
         durationMins: z.number().min(15).max(480).default(60),
         agendaText: z.string().optional(),
+        chairmanId: z.string().cuid().optional().nullable(),
       }),
     )
     .mutation(async ({ ctx, input }) => {
@@ -125,12 +126,17 @@ export const meetingRouter = createTRPCRouter({
       // Get all members to auto-create attendance records
       const members = await ctx.db.workingGroupMember.findMany({
         where: { workingGroupId: input.workingGroupId },
-        select: { userId: true },
+        select: { userId: true, role: true },
       });
+
+      // Default chairman = the WG leader, unless caller picked someone explicitly
+      const defaultChairmanId =
+        input.chairmanId ?? members.find((m) => m.role === 'LEADER')?.userId ?? null;
 
       const meeting = await ctx.db.meeting.create({
         data: {
           ...input,
+          chairmanId: defaultChairmanId,
           createdById: ctx.session.user.id,
           attendances: {
             create: members.map((m) => ({ userId: m.userId })),
@@ -166,6 +172,7 @@ export const meetingRouter = createTRPCRouter({
         startAt: z.date().optional(),
         durationMins: z.number().min(15).max(480).optional(),
         agendaText: z.string().optional(),
+        chairmanId: z.string().cuid().optional().nullable(),
       }),
     )
     .mutation(async ({ ctx, input }) => {
@@ -526,7 +533,21 @@ export const meetingRouter = createTRPCRouter({
         ],
       },
       include: {
-        workingGroup: { select: { id: true, code: true, name: true, color: true } },
+        workingGroup: {
+          select: {
+            id: true,
+            code: true,
+            name: true,
+            color: true,
+            members: {
+              where: { role: 'LEADER' },
+              select: {
+                user: { select: { id: true, name: true, rank: true } },
+              },
+              take: 1,
+            },
+          },
+        },
         chairman: { select: { id: true, name: true, rank: true } },
         createdBy: { select: { id: true, name: true } },
         _count: { select: { agendaItems: true, attendances: true } },

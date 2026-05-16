@@ -20,6 +20,7 @@ const schema = z.object({
   startAt: z.string().min(1, 'Оберіть дату та час'),
   durationMins: z.coerce.number().min(15).max(480),
   agendaText: z.string().max(5000).optional().or(z.literal('')),
+  chairmanId: z.string().optional().or(z.literal('')),
 });
 
 type FormData = z.infer<typeof schema>;
@@ -50,19 +51,29 @@ export function MeetingForm({ preselectedWgId }: { preselectedWgId?: string }) {
   const {
     register,
     handleSubmit,
+    watch,
     formState: { errors, isSubmitting },
   } = useForm<FormData>({
     resolver: zodResolver(schema),
     defaultValues: {
       workingGroupId: preselectedWgId ?? '',
       title: '',
-      format: 'ONLINE',
+      format: 'OFFLINE',
       location: '',
       startAt: '',
       durationMins: 60,
       agendaText: '',
+      chairmanId: '',
     },
   });
+
+  const watchedWgId = watch('workingGroupId');
+  const { data: selectedGroup } = trpc.workingGroup.byId.useQuery(
+    { id: watchedWgId },
+    { enabled: !!watchedWgId },
+  );
+  const wgMembers = selectedGroup?.members ?? [];
+  const wgLeader = wgMembers.find((m) => m.role === 'LEADER');
 
   const createMutation = trpc.meeting.create.useMutation({
     onSuccess: (meeting) => {
@@ -86,6 +97,7 @@ export function MeetingForm({ preselectedWgId }: { preselectedWgId?: string }) {
       startAt: new Date(data.startAt),
       durationMins: data.durationMins,
       agendaText: trim(data.agendaText),
+      chairmanId: trim(data.chairmanId),
     });
   }
 
@@ -220,6 +232,35 @@ export function MeetingForm({ preselectedWgId }: { preselectedWgId?: string }) {
               className="w-full px-3 py-2 text-sm border-[1.5px] border-hairline rounded-[10px] focus:outline-none focus:border-brand"
             />
           </div>
+        </div>
+
+        {/* Chairman */}
+        <div>
+          <label className="block text-[11px] font-semibold uppercase tracking-wide text-mid mb-1.5">
+            Головуючий
+          </label>
+          <select
+            {...register('chairmanId')}
+            disabled={!watchedWgId}
+            className="w-full px-3 py-2 text-sm border-[1.5px] border-hairline rounded-[10px] focus:outline-none focus:border-brand disabled:opacity-50"
+          >
+            <option value="">
+              {wgLeader
+                ? `— керівник РГ за замовчуванням (${wgLeader.user.name}) —`
+                : '— керівник РГ за замовчуванням —'}
+            </option>
+            {wgMembers.map((m) => (
+              <option key={m.userId} value={m.userId}>
+                {m.user.name}
+                {m.role === 'LEADER' ? ' · Керівник' : ''}
+                {m.role === 'DEPUTY' ? ' · Заступник' : ''}
+                {m.role === 'SECRETARY' ? ' · Секретар' : ''}
+              </option>
+            ))}
+          </select>
+          <p className="text-[11px] text-light mt-1">
+            За замовчуванням — керівник РГ. Можна обрати іншого, якщо засідання вів хтось інший.
+          </p>
         </div>
 
         {/* Agenda */}

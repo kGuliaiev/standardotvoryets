@@ -270,17 +270,28 @@ export function ProtocolsList() {
                       </span>
                     </td>
                     <td className="px-3 py-3 text-xs">
-                      {m.chairman ? (
-                        <div className="flex items-center gap-1.5">
-                          <Avatar name={m.chairman.name} size="xs" />
-                          <span className="text-mid truncate max-w-[140px]">
-                            {rankPrefix(m.chairman.rank)}
-                            {m.chairman.name}
-                          </span>
-                        </div>
-                      ) : (
-                        <span className="text-light">—</span>
-                      )}
+                      {(() => {
+                        const fallbackLeader = m.workingGroup.members?.[0]?.user;
+                        const person = m.chairman ?? fallbackLeader ?? null;
+                        if (!person) return <span className="text-light">—</span>;
+                        return (
+                          <div className="flex items-center gap-1.5">
+                            <Avatar name={person.name} size="xs" />
+                            <span className="text-mid truncate max-w-[140px]">
+                              {rankPrefix(person.rank)}
+                              {person.name}
+                              {!m.chairman && (
+                                <span
+                                  className="text-light ml-1"
+                                  title="Керівник РГ за замовчуванням"
+                                >
+                                  ·
+                                </span>
+                              )}
+                            </span>
+                          </div>
+                        );
+                      })()}
                     </td>
                     <td className="px-3 py-3 text-center text-xs text-mid">
                       {m._count.agendaItems}
