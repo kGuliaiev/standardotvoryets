@@ -276,27 +276,27 @@ export function ProtocolEditor({ meetingId }: { meetingId: string }) {
               className="select"
               value={chairmanId}
               onChange={(e) => {
-                setChairmanId(e.target.value);
+                const next = e.target.value;
+                setChairmanId(next);
                 if (canEdit) {
                   updateMeetingMutation.mutate({
                     id: meetingId,
-                    title: meeting.title,
+                    chairmanId: next === '' ? null : next,
                   });
-                  // chairman update would need a meeting.setChairman procedure
-                  // For now we just keep the chairman dropdown — Word/PDF look up leader otherwise.
                 }
               }}
               disabled={!canEdit}
             >
               <option value="">(керівник РГ за замовчуванням)</option>
-              {members
-                .filter((m) => m.role === 'LEADER' || m.role === 'DEPUTY')
-                .map((m) => (
-                  <option key={m.userId} value={m.userId}>
-                    {rankPrefix(m.user.rank)}
-                    {m.user.name}
-                  </option>
-                ))}
+              {members.map((m) => (
+                <option key={m.userId} value={m.userId}>
+                  {rankPrefix(m.user.rank)}
+                  {m.user.name}
+                  {m.role === 'LEADER' ? ' · Керівник' : ''}
+                  {m.role === 'DEPUTY' ? ' · Заступник' : ''}
+                  {m.role === 'SECRETARY' ? ' · Секретар' : ''}
+                </option>
+              ))}
             </select>
           </div>
         </div>
