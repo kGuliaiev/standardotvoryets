@@ -63,14 +63,22 @@ function StageCell({ due, completedAt }: CellProps) {
 }
 
 export function ReportProgramPlan() {
-  const { data } = trpc.standard.list.useQuery(
-    { page: 1, pageSize: 200 },
+  const { data, error } = trpc.standard.list.useQuery(
+    { page: 1, pageSize: 100 },
     { refetchOnMount: 'always', staleTime: 0 },
   );
   const [sort, setSort] = useSort<
     'num' | 'part' | 'indeks' | 'title' | 'wg' | 'techSpec' | 'final'
   >('num', 'asc');
 
+  if (error) {
+    return (
+      <div className="bg-red-50 dark:bg-red-900/30 border border-red-300 dark:border-red-700 text-red-700 dark:text-red-300 rounded-xl p-6 text-sm">
+        <p className="font-semibold mb-1">Не вдалось завантажити дані</p>
+        <p className="opacity-80">{error.message}</p>
+      </div>
+    );
+  }
   if (!data) {
     return (
       <div className="bg-card rounded-xl border border-hairline p-12 text-center text-light text-sm">
