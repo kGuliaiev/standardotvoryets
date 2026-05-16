@@ -36,8 +36,11 @@ const ATT_TONE: Record<string, string> = {
   DECLINED: 'pill-rose',
 };
 
-interface AgendaDraft {
+export type ProtocolSection = 'AGENDA' | 'HEARD' | 'DECISION';
+
+export interface AgendaDraft {
   id?: string;
+  section: ProtocolSection;
   order: number;
   title: string;
   speakerId: string;
@@ -46,7 +49,7 @@ interface AgendaDraft {
   decisionText: string;
   deadline: string;
   responsibleId: string;
-  open: boolean; // UI state — expanded
+  dirty: boolean; // unsaved changes flag
 }
 
 function rankPrefix(rank?: string | null) {
@@ -66,7 +69,7 @@ export function ProtocolEditor({ meetingId }: { meetingId: string }) {
 
   const [items, setItems] = useState<AgendaDraft[]>([]);
   const [chairmanId, setChairmanId] = useState('');
-  const [savingId, setSavingId] = useState<string | null>(null);
+  const [savingAll, setSavingAll] = useState(false);
 
   useEffect(() => {
     if (!meeting) return;
@@ -74,6 +77,7 @@ export function ProtocolEditor({ meetingId }: { meetingId: string }) {
     setItems(
       meeting.agendaItems.map((a, idx) => ({
         id: a.id,
+        section: a.section ?? 'AGENDA',
         order: a.order ?? idx + 1,
         title: a.title,
         speakerId: a.speakerId ?? '',
@@ -82,7 +86,7 @@ export function ProtocolEditor({ meetingId }: { meetingId: string }) {
         decisionText: a.decisionText ?? '',
         deadline: a.deadline ? new Date(a.deadline).toISOString().slice(0, 10) : '',
         responsibleId: a.responsibleId ?? '',
-        open: true,
+        dirty: false,
       })),
     );
   }, [meeting]);
@@ -120,28 +124,38 @@ export function ProtocolEditor({ meetingId }: { meetingId: string }) {
     onSuccess: () => void utils.meeting.byId.invalidate({ id: meetingId }),
   });
 
-  function saveItem(idx: number) {
-    const it = items[idx];
-    if (!it || !canEdit) return;
-    setSavingId(it.id ?? `new-${idx}`);
-    const due = it.deadline ? new Date(it.deadline) : null;
-    upsertItemMutation.mutate(
-      {
-        id: it.id,
-        meetingId,
-        order: it.order,
-        title: it.title || `Пункт ${idx + 1}`,
-        speakerId: it.speakerId === '' ? null : it.speakerId,
-        heardText: it.heardText.trim() || null,
-        discussionText: it.discussionText.trim() || null,
-        decisionText: it.decisionText.trim() || null,
-        deadline: due,
-        responsibleId: it.responsibleId === '' ? null : it.responsibleId,
-      },
-      {
-        onSettled: () => setSavingId(null),
-      },
-    );
+  async function saveAll() {
+    if (!canEdit) return;
+    const dirty = items.filter((it) => it.dirty || !it.id);
+    if (dirty.length === 0) return;
+    setSavingAll(true);
+    try {
+      for (const it of dirty) {
+        const due = it.deadline ? new Date(it.deadline) : null;
+        // eslint-disable-next-line no-await-in-loop
+        const saved = await upsertItemMutation.mutateAsync({
+          id: it.id,
+          meetingId,
+          order: it.order,
+          section: it.section,
+          title: it.title || `Пункт ${it.order}`,
+          speakerId: it.speakerId === '' ? null : it.speakerId,
+          heardText: it.heardText.trim() || null,
+          discussionText: it.discussionText.trim() || null,
+          decisionText: it.decisionText.trim() || null,
+          deadline: due,
+          responsibleId: it.responsibleId === '' ? null : it.responsibleId,
+        });
+        // Replace the draft with the saved version (id + reset dirty flag)
+        setItems((prev) =>
+          prev.map((p) =>
+            p === it || (p.id && p.id === it.id) ? { ...p, id: saved.id, dirty: false } : p,
+          ),
+        );
+      }
+    } finally {
+      setSavingAll(false);
+    }
   }
 
   function removeItem(idx: number) {
@@ -156,22 +170,28 @@ export function ProtocolEditor({ meetingId }: { meetingId: string }) {
     }
   }
 
-  function addItem() {
-    setItems((prev) => [
-      ...prev,
-      {
-        order: prev.length + 1,
-        title: '',
-        speakerId: '',
-        heardText: '',
-        discussionText: '',
-        decisionText: '',
-        deadline: '',
-        responsibleId: '',
-        open: true,
-      },
-    ]);
+  function addItem(section: ProtocolSection) {
+    setItems((prev) => {
+      const sameSection = prev.filter((p) => p.section === section);
+      return [
+        ...prev,
+        {
+          section,
+          order: sameSection.length + 1,
+          title: '',
+          speakerId: '',
+          heardText: '',
+          discussionText: '',
+          decisionText: '',
+          deadline: '',
+          responsibleId: '',
+          dirty: true,
+        },
+      ];
+    });
   }
+
+  const dirtyCount = items.filter((it) => it.dirty || !it.id).length;
 
   if (isLoading || !meeting) {
     return <div className="py-16 text-center text-light text-sm">Завантаження…</div>;
@@ -349,11 +369,11 @@ export function ProtocolEditor({ meetingId }: { meetingId: string }) {
         wgCode={meeting.workingGroup.code}
         protocolNumber={meeting.protocolNumber ?? null}
         canEdit={canEdit}
-        savingId={savingId}
-        upsertPending={upsertItemMutation.isPending}
+        savingAll={savingAll}
+        dirtyCount={dirtyCount}
         onChange={setItems}
         onAdd={addItem}
-        onSave={saveItem}
+        onSaveAll={saveAll}
         onRemove={removeItem}
       />
     </div>

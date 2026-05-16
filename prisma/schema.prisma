@@ -463,7 +463,13 @@ model AgendaItem {
   duration  Int? // minutes
   note      String?
 
-  // Protocol fields
+  // Section of the protocol this item belongs to. The protocol has three
+  // independent lists (AGENDA / HEARD / DECISION) — they're not 1:1 mapped
+  // to each other anymore (агенда може мати 2 теми, а виступів — 5).
+  section AgendaItemSection @default(AGENDA)
+
+  // Protocol fields (the editor uses different ones per section, but the
+  // columns stay unified to keep the schema flat).
   speakerId       String?
   heardText       String?  @db.Text // СЛУХАЛИ
   discussionText  String?  @db.Text // ВИСТУПИЛИ
@@ -476,6 +482,12 @@ model AgendaItem {
   responsible User?   @relation("AgendaResponsible", fields: [responsibleId], references: [id])
 
   @@map("agenda_items")
+}
+
+enum AgendaItemSection {
+  AGENDA   // Порядок денний (title + speaker)
+  HEARD    // Слухали / Виступили (heardText + discussionText)
+  DECISION // Вирішили (decisionText + deadline + responsible)
 }
 
 model Attendance {

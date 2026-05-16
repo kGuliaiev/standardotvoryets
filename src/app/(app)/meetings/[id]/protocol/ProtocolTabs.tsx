@@ -2,19 +2,7 @@
 
 import { useState } from 'react';
 import { Plus, Save, Trash2, Loader2 } from 'lucide-react';
-
-interface AgendaDraft {
-  id?: string;
-  order: number;
-  title: string;
-  speakerId: string;
-  heardText: string;
-  discussionText: string;
-  decisionText: string;
-  deadline: string;
-  responsibleId: string;
-  open: boolean;
-}
+import type { AgendaDraft, ProtocolSection } from './ProtocolEditor';
 
 interface MemberLite {
   userId: string;
@@ -77,13 +65,13 @@ function formatDeadline(s: string) {
   return `${d}.${m}.${y}`;
 }
 
-type TabKey = 'overview' | 'agenda' | 'heard' | 'decisions';
+type TabKey = 'overview' | 'AGENDA' | 'HEARD' | 'DECISION';
 
 const TABS: { key: TabKey; label: string }[] = [
   { key: 'overview', label: 'Текст протоколу' },
-  { key: 'agenda', label: 'ПОРЯДОК ДЕННИЙ' },
-  { key: 'heard', label: 'СЛУХАЛИ / ВИСТУПИЛИ' },
-  { key: 'decisions', label: 'ВИРІШИЛИ' },
+  { key: 'AGENDA', label: 'ПОРЯДОК ДЕННИЙ' },
+  { key: 'HEARD', label: 'СЛУХАЛИ / ВИСТУПИЛИ' },
+  { key: 'DECISION', label: 'ВИРІШИЛИ' },
 ];
 
 interface Props {
@@ -96,31 +84,33 @@ interface Props {
   wgCode: string;
   protocolNumber: number | null;
   canEdit: boolean;
-  savingId: string | null;
-  upsertPending: boolean;
+  savingAll: boolean;
+  dirtyCount: number;
   onChange: (next: AgendaDraft[]) => void;
-  onAdd: () => void;
-  onSave: (idx: number) => void;
+  onAdd: (section: ProtocolSection) => void;
+  onSaveAll: () => void;
   onRemove: (idx: number) => void;
 }
 
 export function ProtocolTabs(props: Props) {
-  const { items, members, canEdit, savingId, upsertPending, onChange, onAdd, onSave, onRemove } =
+  const { items, members, canEdit, savingAll, dirtyCount, onChange, onAdd, onSaveAll, onRemove } =
     props;
-  const [tab, setTab] = useState<TabKey>('agenda');
+  const [tab, setTab] = useState<TabKey>('AGENDA');
 
   function patch(idx: number, p: Partial<AgendaDraft>) {
-    onChange(items.map((it, i) => (i === idx ? { ...it, ...p } : it)));
+    onChange(items.map((it, i) => (i === idx ? { ...it, ...p, dirty: true } : it)));
   }
 
-  const memberName = (id: string) => {
-    const m = members.find((x) => x.userId === id);
-    return m ? `${rankPrefix(m.user.rank)}${m.user.name}` : '';
-  };
+  // Find global index for an item (since list views show filtered subset)
+  const indexOf = (it: AgendaDraft) => items.indexOf(it);
+
+  const agendaItems = items.filter((it) => it.section === 'AGENDA');
+  const heardItems = items.filter((it) => it.section === 'HEARD');
+  const decisionItems = items.filter((it) => it.section === 'DECISION');
 
   return (
     <div className="card overflow-hidden">
-      <div className="border-b border-hairline flex items-end justify-between px-5">
+      <div className="border-b border-hairline flex items-end justify-between px-5 gap-3 flex-wrap">
         <nav className="flex -mb-px">
           {TABS.map((t) => (
             <button
@@ -136,141 +126,78 @@ export function ProtocolTabs(props: Props) {
             </button>
           ))}
         </nav>
-        {canEdit && tab !== 'overview' && (
-          <button onClick={onAdd} className="btn-add my-2">
-            <Plus className="w-3.5 h-3.5" /> Пункт
-          </button>
+        {canEdit && (
+          <div className="flex items-center gap-2 my-2">
+            {tab !== 'overview' && (
+              <button
+                onClick={() => onAdd(tab)}
+                className="btn-add"
+                title="Додати пункт у цей розділ"
+              >
+                <Plus className="w-3.5 h-3.5" /> Пункт
+              </button>
+            )}
+            <button
+              onClick={onSaveAll}
+              disabled={savingAll || dirtyCount === 0}
+              className="btn-primary px-3 py-1.5 text-xs disabled:opacity-50"
+              title={
+                dirtyCount === 0
+                  ? 'Немає змін'
+                  : `Зберегти ${dirtyCount} ${dirtyCount === 1 ? 'зміну' : 'зміни'}`
+              }
+            >
+              {savingAll ? (
+                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+              ) : (
+                <Save className="w-3.5 h-3.5" />
+              )}
+              Зберегти все
+              {dirtyCount > 0 && (
+                <span className="ml-1 px-1.5 py-0.5 rounded-full bg-white/20 text-[10px] font-bold">
+                  {dirtyCount}
+                </span>
+              )}
+            </button>
+          </div>
         )}
       </div>
 
       {/* ───────── Overview ───────── */}
-      {tab === 'overview' && <OverviewBlock {...props} />}
-
-      {/* ───────── ПОРЯДОК ДЕННИЙ — title + speaker ───────── */}
-      {tab === 'agenda' && (
-        <ItemList
-          items={items}
-          empty="Пункти не додано — натисніть «+ Пункт»"
-          canEdit={canEdit}
-          savingId={savingId}
-          upsertPending={upsertPending}
-          onSave={onSave}
-          onRemove={onRemove}
-          renderBody={(it, idx) => (
-            <div className="space-y-3">
-              <input
-                className="input"
-                placeholder="Тема пункту…"
-                value={it.title}
-                disabled={!canEdit}
-                onChange={(e) => patch(idx, { title: e.target.value })}
-              />
-              <div>
-                <label className="field-label">Доповідач</label>
-                <select
-                  className="select"
-                  value={it.speakerId}
-                  disabled={!canEdit}
-                  onChange={(e) => patch(idx, { speakerId: e.target.value })}
-                >
-                  <option value="">— не вказано —</option>
-                  {members.map((m) => (
-                    <option key={m.userId} value={m.userId}>
-                      {rankPrefix(m.user.rank)}
-                      {m.user.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            </div>
-          )}
+      {tab === 'overview' && (
+        <OverviewBlock
+          {...props}
+          agendaItems={agendaItems}
+          heardItems={heardItems}
+          decisionItems={decisionItems}
         />
       )}
 
-      {/* ───────── СЛУХАЛИ / ВИСТУПИЛИ — narrative blocks ───────── */}
-      {tab === 'heard' && (
+      {/* ───────── ПОРЯДОК ДЕННИЙ ───────── */}
+      {tab === 'AGENDA' && (
         <ItemList
-          items={items}
-          empty="Спочатку додайте пункти у вкладці «Порядок денний»"
+          items={agendaItems}
+          empty="Розділ порожній — натисніть «+ Пункт»"
           canEdit={canEdit}
-          savingId={savingId}
-          upsertPending={upsertPending}
-          onSave={onSave}
-          onRemove={onRemove}
-          renderBody={(it, idx) => (
-            <div className="space-y-3">
-              <p className="text-xs text-light italic">
-                {it.title || `Пункт ${idx + 1}`}
-                {it.speakerId && (
-                  <span className="ml-2 text-mid">· Доповідач: {memberName(it.speakerId)}</span>
-                )}
-              </p>
-              <div>
-                <label className="field-label">СЛУХАЛИ (доповідь)</label>
-                <textarea
-                  rows={4}
-                  className="textarea resize-y"
+          onRemove={(it) => onRemove(indexOf(it))}
+          renderBody={(it) => {
+            const idx = indexOf(it);
+            return (
+              <div className="space-y-3">
+                <input
+                  className="input"
+                  placeholder="Тема пункту порядку денного…"
+                  value={it.title}
                   disabled={!canEdit}
-                  value={it.heardText}
-                  onChange={(e) => patch(idx, { heardText: e.target.value })}
+                  onChange={(e) => patch(idx, { title: e.target.value })}
                 />
-              </div>
-              <div>
-                <label className="field-label">ВИСТУПИЛИ (обговорення)</label>
-                <textarea
-                  rows={4}
-                  className="textarea resize-y"
-                  disabled={!canEdit}
-                  value={it.discussionText}
-                  onChange={(e) => patch(idx, { discussionText: e.target.value })}
-                />
-              </div>
-            </div>
-          )}
-        />
-      )}
-
-      {/* ───────── ВИРІШИЛИ — decision + term + responsible ───────── */}
-      {tab === 'decisions' && (
-        <ItemList
-          items={items}
-          empty="Спочатку додайте пункти у вкладці «Порядок денний»"
-          canEdit={canEdit}
-          savingId={savingId}
-          upsertPending={upsertPending}
-          onSave={onSave}
-          onRemove={onRemove}
-          renderBody={(it, idx) => (
-            <div className="space-y-3">
-              <p className="text-xs text-light italic">{it.title || `Пункт ${idx + 1}`}</p>
-              <div>
-                <label className="field-label">ВИРІШИЛИ</label>
-                <textarea
-                  rows={4}
-                  className="textarea resize-y"
-                  disabled={!canEdit}
-                  value={it.decisionText}
-                  onChange={(e) => patch(idx, { decisionText: e.target.value })}
-                />
-              </div>
-              <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="field-label">Термін</label>
-                  <input
-                    type="date"
-                    className="input"
-                    disabled={!canEdit}
-                    value={it.deadline}
-                    onChange={(e) => patch(idx, { deadline: e.target.value })}
-                  />
-                </div>
-                <div>
-                  <label className="field-label">Відповідальний</label>
+                  <label className="field-label">Доповідач</label>
                   <select
                     className="select"
+                    value={it.speakerId}
                     disabled={!canEdit}
-                    value={it.responsibleId}
-                    onChange={(e) => patch(idx, { responsibleId: e.target.value })}
+                    onChange={(e) => patch(idx, { speakerId: e.target.value })}
                   >
                     <option value="">— не вказано —</option>
                     {members.map((m) => (
@@ -282,8 +209,132 @@ export function ProtocolTabs(props: Props) {
                   </select>
                 </div>
               </div>
-            </div>
-          )}
+            );
+          }}
+        />
+      )}
+
+      {/* ───────── СЛУХАЛИ / ВИСТУПИЛИ ───────── */}
+      {tab === 'HEARD' && (
+        <ItemList
+          items={heardItems}
+          empty="Розділ порожній — натисніть «+ Пункт»"
+          canEdit={canEdit}
+          onRemove={(it) => onRemove(indexOf(it))}
+          renderBody={(it) => {
+            const idx = indexOf(it);
+            return (
+              <div className="space-y-3">
+                <input
+                  className="input"
+                  placeholder="Тема (напр. «Доповідь Іщука»)…"
+                  value={it.title}
+                  disabled={!canEdit}
+                  onChange={(e) => patch(idx, { title: e.target.value })}
+                />
+                <div>
+                  <label className="field-label">Доповідач (необов&apos;язково)</label>
+                  <select
+                    className="select"
+                    value={it.speakerId}
+                    disabled={!canEdit}
+                    onChange={(e) => patch(idx, { speakerId: e.target.value })}
+                  >
+                    <option value="">— не вказано —</option>
+                    {members.map((m) => (
+                      <option key={m.userId} value={m.userId}>
+                        {rankPrefix(m.user.rank)}
+                        {m.user.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="field-label">СЛУХАЛИ (доповідь)</label>
+                  <textarea
+                    rows={3}
+                    className="textarea resize-y"
+                    disabled={!canEdit}
+                    value={it.heardText}
+                    onChange={(e) => patch(idx, { heardText: e.target.value })}
+                  />
+                </div>
+                <div>
+                  <label className="field-label">ВИСТУПИЛИ (обговорення)</label>
+                  <textarea
+                    rows={3}
+                    className="textarea resize-y"
+                    disabled={!canEdit}
+                    value={it.discussionText}
+                    onChange={(e) => patch(idx, { discussionText: e.target.value })}
+                  />
+                </div>
+              </div>
+            );
+          }}
+        />
+      )}
+
+      {/* ───────── ВИРІШИЛИ ───────── */}
+      {tab === 'DECISION' && (
+        <ItemList
+          items={decisionItems}
+          empty="Розділ порожній — натисніть «+ Пункт»"
+          canEdit={canEdit}
+          onRemove={(it) => onRemove(indexOf(it))}
+          renderBody={(it) => {
+            const idx = indexOf(it);
+            return (
+              <div className="space-y-3">
+                <input
+                  className="input"
+                  placeholder="Заголовок рішення (напр. «Затвердити план»)…"
+                  value={it.title}
+                  disabled={!canEdit}
+                  onChange={(e) => patch(idx, { title: e.target.value })}
+                />
+                <div>
+                  <label className="field-label">ВИРІШИЛИ</label>
+                  <textarea
+                    rows={3}
+                    className="textarea resize-y"
+                    disabled={!canEdit}
+                    value={it.decisionText}
+                    onChange={(e) => patch(idx, { decisionText: e.target.value })}
+                  />
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="field-label">Термін</label>
+                    <input
+                      type="date"
+                      className="input"
+                      disabled={!canEdit}
+                      value={it.deadline}
+                      onChange={(e) => patch(idx, { deadline: e.target.value })}
+                    />
+                  </div>
+                  <div>
+                    <label className="field-label">Відповідальний</label>
+                    <select
+                      className="select"
+                      disabled={!canEdit}
+                      value={it.responsibleId}
+                      onChange={(e) => patch(idx, { responsibleId: e.target.value })}
+                    >
+                      <option value="">— не вказано —</option>
+                      {members.map((m) => (
+                        <option key={m.userId} value={m.userId}>
+                          {rankPrefix(m.user.rank)}
+                          {m.user.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+              </div>
+            );
+          }}
         />
       )}
     </div>
@@ -296,23 +347,11 @@ interface ListProps {
   items: AgendaDraft[];
   empty: string;
   canEdit: boolean;
-  savingId: string | null;
-  upsertPending: boolean;
-  onSave: (idx: number) => void;
-  onRemove: (idx: number) => void;
-  renderBody: (it: AgendaDraft, idx: number) => React.ReactNode;
+  onRemove: (it: AgendaDraft) => void;
+  renderBody: (it: AgendaDraft) => React.ReactNode;
 }
 
-function ItemList({
-  items,
-  empty,
-  canEdit,
-  savingId,
-  upsertPending,
-  onSave,
-  onRemove,
-  renderBody,
-}: ListProps) {
+function ItemList({ items, empty, canEdit, onRemove, renderBody }: ListProps) {
   if (items.length === 0) {
     return <div className="py-12 text-center text-light text-sm">{empty}</div>;
   }
@@ -321,36 +360,30 @@ function ItemList({
       {items.map((it, idx) => {
         const key = it.id ?? `new-${idx}`;
         return (
-          <div key={key} className="px-5 py-4">
+          <div
+            key={key}
+            className={`px-5 py-4 ${it.dirty ? 'bg-amber-50/40 dark:bg-amber-900/10' : ''}`}
+          >
             <div className="flex items-start gap-3">
               <span className="text-[13px] font-bold text-mid w-6 text-center font-mono pt-2">
                 {idx + 1}.
               </span>
-              <div className="flex-1 min-w-0">{renderBody(it, idx)}</div>
+              <div className="flex-1 min-w-0">{renderBody(it)}</div>
               {canEdit && (
-                <div className="flex flex-col gap-1.5 shrink-0">
-                  <button
-                    onClick={() => onSave(idx)}
-                    disabled={upsertPending}
-                    className="btn-secondary text-xs px-2.5 py-1.5"
-                    title={it.id ? 'Зберегти' : 'Створити'}
-                  >
-                    {savingId === key ? (
-                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                    ) : (
-                      <Save className="w-3.5 h-3.5" />
-                    )}
-                  </button>
-                  <button
-                    onClick={() => onRemove(idx)}
-                    className="p-1.5 rounded hover:bg-red-50 dark:hover:bg-red-900/30 text-mid hover:text-red-600"
-                    title="Видалити"
-                  >
-                    <Trash2 className="w-3.5 h-3.5" />
-                  </button>
-                </div>
+                <button
+                  onClick={() => onRemove(it)}
+                  className="p-1.5 rounded hover:bg-red-50 dark:hover:bg-red-900/30 text-mid hover:text-red-600 shrink-0"
+                  title="Видалити"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                </button>
               )}
             </div>
+            {it.dirty && (
+              <p className="ml-9 mt-2 text-[10px] text-amber-700 dark:text-amber-300 italic">
+                Незбережено — натисніть {'«'}Зберегти все{'»'} вгорі
+              </p>
+            )}
           </div>
         );
       })}
@@ -360,8 +393,23 @@ function ItemList({
 
 /* ─────────── Overview — assembled protocol view ─────────── */
 
-function OverviewBlock(props: Props) {
-  const { items, members, chairman, secretary, meetingStartAt, wgCode, protocolNumber } = props;
+interface OverviewProps extends Props {
+  agendaItems: AgendaDraft[];
+  heardItems: AgendaDraft[];
+  decisionItems: AgendaDraft[];
+}
+
+function OverviewBlock({
+  agendaItems,
+  heardItems,
+  decisionItems,
+  members,
+  chairman,
+  secretary,
+  meetingStartAt,
+  wgCode,
+  protocolNumber,
+}: OverviewProps) {
   const date = new Date(meetingStartAt);
   const wgNum = wgNumber(wgCode);
   const year = date.getFullYear();
@@ -374,8 +422,6 @@ function OverviewBlock(props: Props) {
     const m = members.find((x) => x.userId === id);
     return m ? `${rankPrefix(m.user.rank)}${m.user.name}` : '';
   };
-
-  const hasAnyContent = items.some((i) => i.heardText || i.discussionText || i.decisionText);
 
   return (
     <div className="px-8 py-6 bg-page/40 max-h-[70vh] overflow-y-auto">
@@ -408,12 +454,12 @@ function OverviewBlock(props: Props) {
           </p>
         )}
 
-        {items.length > 0 && (
+        {agendaItems.length > 0 && (
           <>
             <p className="text-sm font-bold mt-4 mb-2">ПОРЯДОК ДЕННИЙ:</p>
             <ol className="space-y-2 text-sm">
-              {items.map((it, idx) => (
-                <li key={it.id ?? `o-${idx}`}>
+              {agendaItems.map((it, idx) => (
+                <li key={it.id ?? `oa-${idx}`}>
                   <p>
                     <span className="font-bold">{idx + 1}. </span>
                     {it.title || <span className="text-light italic">(без назви)</span>}
@@ -429,48 +475,56 @@ function OverviewBlock(props: Props) {
           </>
         )}
 
-        {hasAnyContent &&
-          items.map((it, idx) => {
-            if (!it.heardText && !it.discussionText && !it.decisionText) return null;
-            return (
-              <div key={`d-${idx}`} className="mt-5 text-sm">
+        {heardItems.length > 0 && (
+          <div className="mt-5">
+            <p className="text-sm font-bold mb-2">СЛУХАЛИ / ВИСТУПИЛИ:</p>
+            {heardItems.map((it, idx) => (
+              <div key={it.id ?? `oh-${idx}`} className="mb-3 text-sm">
                 <p className="text-xs uppercase text-mid mb-1">
-                  Пункт {idx + 1}: {it.title || '(без назви)'}
+                  {idx + 1}. {it.title || '(без назви)'}
+                  {it.speakerId && <span className="italic"> · {memberName(it.speakerId)}</span>}
                 </p>
                 {it.heardText && (
                   <>
-                    <p className="font-bold mt-2 mb-1">СЛУХАЛИ:</p>
+                    <p className="font-bold mt-1 mb-0.5">СЛУХАЛИ:</p>
                     <p className="whitespace-pre-line">{it.heardText}</p>
                   </>
                 )}
                 {it.discussionText && (
                   <>
-                    <p className="font-bold mt-2 mb-1">ВИСТУПИЛИ:</p>
+                    <p className="font-bold mt-1 mb-0.5">ВИСТУПИЛИ:</p>
                     <p className="whitespace-pre-line">{it.discussionText}</p>
                   </>
                 )}
-                {it.decisionText && (
-                  <>
-                    <p className="font-bold mt-2 mb-1">ВИРІШИЛИ:</p>
-                    <p>
-                      <span className="font-bold">{idx + 1}. </span>
-                      <span className="whitespace-pre-line">{it.decisionText}</span>
-                    </p>
-                    {it.deadline && (
-                      <p className="italic text-xs mt-1">
-                        Термін: до {formatDeadline(it.deadline)}.
-                      </p>
-                    )}
-                    {it.responsibleId && (
-                      <p className="italic text-xs">
-                        Відповідальний: {memberName(it.responsibleId)}.
-                      </p>
-                    )}
-                  </>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {decisionItems.length > 0 && (
+          <div className="mt-5">
+            <p className="text-sm font-bold mb-2">ВИРІШИЛИ:</p>
+            {decisionItems.map((it, idx) => (
+              <div key={it.id ?? `od-${idx}`} className="mb-3 text-sm">
+                <p>
+                  <span className="font-bold">{idx + 1}. </span>
+                  {it.title && <span className="font-semibold">{it.title}. </span>}
+                  <span className="whitespace-pre-line">{it.decisionText}</span>
+                </p>
+                {it.deadline && (
+                  <p className="italic text-xs mt-1 pl-5">
+                    Термін: до {formatDeadline(it.deadline)}.
+                  </p>
+                )}
+                {it.responsibleId && (
+                  <p className="italic text-xs pl-5">
+                    Відповідальний: {memberName(it.responsibleId)}.
+                  </p>
                 )}
               </div>
-            );
-          })}
+            ))}
+          </div>
+        )}
 
         <div className="mt-10 grid grid-cols-2 gap-6 text-sm">
           {chairman && (
