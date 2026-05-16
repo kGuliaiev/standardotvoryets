@@ -551,52 +551,88 @@ async function main() {
   // To replace the previous РГ #4/8/12 seed cleanly: remove all members and
   // any pending standards from groups that aren't in this list. Order is
   // critical — child rows must go before parents to avoid FK violations.
+  // CRITICAL: wrap each delete in try/catch so a single FK error can't
+  // abort the rest of the seed (specifically, can't block the WG
+  // create/upsert loop below).
+  const safeDelete = async <T>(label: string, fn: () => Promise<T>) => {
+    try {
+      return await fn();
+    } catch (e) {
+      console.warn(`⚠️  ${label} skipped: ${e instanceof Error ? e.message : String(e)}`);
+      return undefined;
+    }
+  };
+
   const seedCodes = WORKING_GROUPS.map((w) => w.code);
-  const staleGroups = await prisma.workingGroup.findMany({
-    where: { code: { notIn: seedCodes } },
-    select: { id: true, code: true },
-  });
-  if (staleGroups.length) {
+  const staleGroups = await safeDelete('staleGroups.findMany', () =>
+    prisma.workingGroup.findMany({
+      where: { code: { notIn: seedCodes } },
+      select: { id: true, code: true },
+    }),
+  );
+  if (staleGroups?.length) {
     console.log('🧹 Removing stale WGs:', staleGroups.map((g) => g.code).join(', '));
     const wgIds = staleGroups.map((g) => g.id);
-    const stdIds = (
-      await prisma.standard.findMany({
-        where: { workingGroupId: { in: wgIds } },
-        select: { id: true },
-      })
-    ).map((s) => s.id);
-    const mtIds = (
-      await prisma.meeting.findMany({
-        where: { workingGroupId: { in: wgIds } },
-        select: { id: true },
-      })
-    ).map((m) => m.id);
+    const stdIds =
+      (
+        await safeDelete('stale standards lookup', () =>
+          prisma.standard.findMany({
+            where: { workingGroupId: { in: wgIds } },
+            select: { id: true },
+          }),
+        )
+      )?.map((s) => s.id) ?? [];
+    const mtIds =
+      (
+        await safeDelete('stale meetings lookup', () =>
+          prisma.meeting.findMany({
+            where: { workingGroupId: { in: wgIds } },
+            select: { id: true },
+          }),
+        )
+      )?.map((m) => m.id) ?? [];
 
-    // Children of Standard
     if (stdIds.length) {
-      const votingIds = (
-        await prisma.voting.findMany({
-          where: { standardId: { in: stdIds } },
-          select: { id: true },
-        })
-      ).map((v) => v.id);
+      const votingIds =
+        (
+          await safeDelete('stale votings lookup', () =>
+            prisma.voting.findMany({
+              where: { standardId: { in: stdIds } },
+              select: { id: true },
+            }),
+          )
+        )?.map((v) => v.id) ?? [];
       if (votingIds.length) {
-        await prisma.vote.deleteMany({ where: { votingId: { in: votingIds } } });
-        await prisma.voting.deleteMany({ where: { id: { in: votingIds } } });
+        await safeDelete('vote.deleteMany', () =>
+          prisma.vote.deleteMany({ where: { votingId: { in: votingIds } } }),
+        );
+        await safeDelete('voting.deleteMany', () =>
+          prisma.voting.deleteMany({ where: { id: { in: votingIds } } }),
+        );
       }
-      await prisma.task.deleteMany({ where: { standardId: { in: stdIds } } });
-      await prisma.comment.deleteMany({ where: { standardId: { in: stdIds } } });
-      await prisma.document.deleteMany({ where: { standardId: { in: stdIds } } });
-      await prisma.standardStatusHistory.deleteMany({ where: { standardId: { in: stdIds } } });
+      await safeDelete('task.deleteMany', () =>
+        prisma.task.deleteMany({ where: { standardId: { in: stdIds } } }),
+      );
+      await safeDelete('comment.deleteMany', () =>
+        prisma.comment.deleteMany({ where: { standardId: { in: stdIds } } }),
+      );
+      await safeDelete('document.deleteMany', () =>
+        prisma.document.deleteMany({ where: { standardId: { in: stdIds } } }),
+      );
+      await safeDelete('standardStatusHistory.deleteMany', () =>
+        prisma.standardStatusHistory.deleteMany({ where: { standardId: { in: stdIds } } }),
+      );
     }
-    // Children of Meeting
     if (mtIds.length) {
-      await prisma.agendaItem.deleteMany({ where: { meetingId: { in: mtIds } } });
-      await prisma.attendance.deleteMany({ where: { meetingId: { in: mtIds } } });
+      await safeDelete('agendaItem.deleteMany', () =>
+        prisma.agendaItem.deleteMany({ where: { meetingId: { in: mtIds } } }),
+      );
+      await safeDelete('attendance.deleteMany', () =>
+        prisma.attendance.deleteMany({ where: { meetingId: { in: mtIds } } }),
+      );
     }
-    // Audit log rows referencing those entities (best-effort, don't fail seed)
-    await prisma.activityLog
-      .deleteMany({
+    await safeDelete('activityLog stale cleanup', () =>
+      prisma.activityLog.deleteMany({
         where: {
           OR: [
             { entity: 'Standard', entityId: { in: stdIds } },
@@ -604,13 +640,21 @@ async function main() {
             { entity: 'WorkingGroup', entityId: { in: wgIds } },
           ],
         },
-      })
-      .catch((e) => console.warn('activityLog cleanup warn:', e));
+      }),
+    );
 
-    await prisma.workingGroupMember.deleteMany({ where: { workingGroupId: { in: wgIds } } });
-    await prisma.standard.deleteMany({ where: { id: { in: stdIds } } });
-    await prisma.meeting.deleteMany({ where: { id: { in: mtIds } } });
-    await prisma.workingGroup.deleteMany({ where: { id: { in: wgIds } } });
+    await safeDelete('workingGroupMember stale', () =>
+      prisma.workingGroupMember.deleteMany({ where: { workingGroupId: { in: wgIds } } }),
+    );
+    await safeDelete('standard stale', () =>
+      prisma.standard.deleteMany({ where: { id: { in: stdIds } } }),
+    );
+    await safeDelete('meeting stale', () =>
+      prisma.meeting.deleteMany({ where: { id: { in: mtIds } } }),
+    );
+    await safeDelete('workingGroup stale', () =>
+      prisma.workingGroup.deleteMany({ where: { id: { in: wgIds } } }),
+    );
     console.log(
       `🧹 Removed ${staleGroups.length} stale WG(s) with ${stdIds.length} standards, ${mtIds.length} meetings`,
     );
