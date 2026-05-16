@@ -12,6 +12,7 @@ import { ActivityFeed } from '@/components/ActivityFeed';
 import { TaskFormModal } from '@/components/TaskFormModal';
 import { DocumentUploadModal } from '@/components/DocumentUploadModal';
 import { CommentsThread } from '@/components/CommentsThread';
+import { StandardProgress } from '@/components/standards/StandardProgress';
 import { formatDate, formatDateTime, formatBytes } from '@/lib/utils';
 import { can } from '@/lib/rbac';
 import type { GlobalRole, WorkingGroupRole } from '@prisma/client';
@@ -61,6 +62,13 @@ export function StandardDetail({ id }: { id: string }) {
     void utils.dashboard.kpis.invalidate();
     void utils.dashboard.navCounts.invalidate();
   };
+
+  const setStage = trpc.standard.setStage.useMutation({
+    onSuccess: () => {
+      void refetch();
+      void utils.standard.list.invalidate();
+    },
+  });
 
   const changeStatus = trpc.standard.changeStatus.useMutation({
     onSuccess: invalidateStandardLists,
@@ -208,18 +216,47 @@ export function StandardDetail({ id }: { id: string }) {
           </div>
         </div>
 
-        {/* Progress bar */}
+        {/* Etapnyi plan stepper */}
         <div className="mt-5 pt-4 border-t border-hairline">
-          <div className="flex items-center justify-between mb-1.5">
-            <span className="text-xs text-mid">Прогрес</span>
-            <span className="text-xs font-medium text-ink">{standard.progress}%</span>
+          <div className="flex items-center justify-between mb-3">
+            <span className="text-xs text-mid font-semibold uppercase tracking-wide">
+              Поетапний план виконання
+            </span>
+            {canChangeStatus && (
+              <select
+                className="text-xs border border-hairline rounded-md px-2 py-1 bg-card text-ink focus:outline-none focus:border-brand"
+                value={standard.currentStage}
+                onChange={(e) =>
+                  setStage.mutate({
+                    id: standard.id,
+                    stage: e.target.value as
+                      | 'TECH_SPEC'
+                      | 'DRAFTING'
+                      | 'FEEDBACK'
+                      | 'TECH_REVIEW'
+                      | 'FINALIZATION'
+                      | 'COMPLETED',
+                  })
+                }
+                disabled={setStage.isPending}
+              >
+                <option value="TECH_SPEC">1. ТЗ</option>
+                <option value="DRAFTING">2. Розроблення проєкту</option>
+                <option value="FEEDBACK">3. Відгуки</option>
+                <option value="TECH_REVIEW">4. Технічна перевірка</option>
+                <option value="FINALIZATION">5. Фіналізація</option>
+                <option value="COMPLETED">✓ Завершено</option>
+              </select>
+            )}
           </div>
-          <div className="h-2 bg-pill rounded-full overflow-hidden">
-            <div
-              className="h-full bg-blue-500 rounded-full transition-all"
-              style={{ width: `${standard.progress}%` }}
-            />
-          </div>
+          <StandardProgress
+            currentStage={standard.currentStage}
+            techSpecDueDate={standard.techSpecDueDate}
+            draftDueDate={standard.draftDueDate}
+            feedbackDueDate={standard.feedbackDueDate}
+            techReviewDueDate={standard.techReviewDueDate}
+            finalDueDate={standard.finalDueDate}
+          />
         </div>
 
         {/* Meta row */}

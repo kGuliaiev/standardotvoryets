@@ -285,6 +285,21 @@ model Standard {
   deadline       DateTime?
   responsibleId  String?
   progress       Int            @default(0) // 0–100
+
+  // Поетапний план виконання (Програма стандартизації)
+  currentStage      StandardStage @default(TECH_SPEC)
+  techSpecDueDate   DateTime?    // Розроблення та погодження ТЗ
+  draftDueDate      DateTime?    // Розроблення проєкту стандарту
+  feedbackDueDate   DateTime?    // Отримання та опрацювання відгуків
+  techReviewDueDate DateTime?    // Технічна перевірка проєкту стандарту
+  finalDueDate      DateTime?    // Остаточний термін виконання
+
+  techSpecCompletedAt   DateTime?
+  draftCompletedAt      DateTime?
+  feedbackCompletedAt   DateTime?
+  techReviewCompletedAt DateTime?
+  finalCompletedAt      DateTime?
+
   createdAt      DateTime       @default(now())
   updatedAt      DateTime       @updatedAt
 
@@ -298,6 +313,15 @@ model Standard {
 
   @@unique([workingGroupId, code])
   @@map("standards")
+}
+
+enum StandardStage {
+  TECH_SPEC      // 1. Розроблення та погодження ТЗ
+  DRAFTING       // 2. Розроблення проєкту стандарту
+  FEEDBACK       // 3. Отримання та опрацювання відгуків
+  TECH_REVIEW    // 4. Технічна перевірка проєкту стандарту
+  FINALIZATION   // 5. Остаточний термін виконання
+  COMPLETED      // Завершено
 }
 
 model StandardStatusHistory {

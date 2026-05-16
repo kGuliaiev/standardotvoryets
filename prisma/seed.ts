@@ -717,6 +717,223 @@ async function main() {
   }
   console.log(`📊 WGs processed: ${wgOk} ok / ${wgFail} failed / ${WORKING_GROUPS.length} total`);
 
+  /* ── Standards: Поетапний план виконання програми стандартизації 2026 ─ */
+  // 12 standards from the approved plan. Items 10/11 use anonymized titles.
+  // Dates are ALL 2026 per the plan header.
+  const D = (m: number, d: number) => new Date(Date.UTC(2026, m - 1, d));
+  interface PlanStd {
+    code: string; // unique per WG
+    wgCode: string;
+    title: string;
+    description?: string;
+    techSpec: Date;
+    draft: Date;
+    feedback: Date;
+    techReview: Date;
+    final: Date;
+  }
+  const PLAN_STANDARDS: PlanStd[] = [
+    {
+      code: 'РГ1-РГ2-01',
+      wgCode: 'РГ №1',
+      title:
+        'Захист інформації. Засоби криптографічного та технічного захисту інформації. Порядок експертних досліджень',
+      description: 'Спільне з РГ №2 (технічний захист)',
+      techSpec: D(5, 14),
+      draft: D(6, 15),
+      feedback: D(7, 31),
+      techReview: D(8, 11),
+      final: D(8, 31),
+    },
+    {
+      code: 'РГ1-02',
+      wgCode: 'РГ №1',
+      title: 'Захист інформації. Засоби криптографічного захисту інформації. Загальні вимоги',
+      techSpec: D(5, 14),
+      draft: D(8, 14),
+      feedback: D(9, 28),
+      techReview: D(10, 12),
+      final: D(10, 30),
+    },
+    {
+      code: 'РГ1-03',
+      wgCode: 'РГ №1',
+      title:
+        'Захист інформації. Засоби криптографічного захисту інформації. Вимоги до засобів криптографічного захисту службової інформації та інформації, що становить державну таємницю',
+      techSpec: D(5, 14),
+      draft: D(9, 16),
+      feedback: D(10, 30),
+      techReview: D(11, 13),
+      final: D(11, 30),
+    },
+    {
+      code: 'РГ2-04',
+      wgCode: 'РГ №2',
+      title:
+        'Захист інформації. Технічний захист інформації. Класифікація методів аналізу програмного забезпечення за рівнем перевірки та методика оцінки рівня гарантій (рівня впевненості) відсутності недокументованих функцій у програмному забезпеченні',
+      description: 'Підгрупа ТЗІ державних інформаційних ресурсів',
+      techSpec: D(5, 14),
+      draft: D(7, 15),
+      feedback: D(8, 31),
+      techReview: D(9, 11),
+      final: D(9, 30),
+    },
+    {
+      code: 'РГ2-05',
+      wgCode: 'РГ №2',
+      title:
+        'Захист інформації. Технічний захист інформації. Порядок виконання вимог з безпеки в інформаційних, електронних комунікаційних, інформаційно-комунікаційних, технологічних системах',
+      description: 'Підгрупа ТЗІ державних інформаційних ресурсів',
+      techSpec: D(5, 14),
+      draft: D(8, 14),
+      feedback: D(9, 28),
+      techReview: D(10, 12),
+      final: D(10, 30),
+    },
+    {
+      code: 'РГ2-06',
+      wgCode: 'РГ №2',
+      title:
+        'Захист інформації. Технічний захист інформації. Захист інформації від витоку каналами побічних електромагнітних випромінювань та наведень',
+      techSpec: D(6, 10),
+      draft: D(8, 14),
+      feedback: D(9, 28),
+      techReview: D(10, 12),
+      final: D(10, 30),
+    },
+    {
+      code: 'РГ2-07',
+      wgCode: 'РГ №2',
+      title:
+        'Захист інформації. Технічний захист інформації. Захист інформації щодо витоку мовної інформації акустоелектричними каналами',
+      techSpec: D(6, 10),
+      draft: D(8, 14),
+      feedback: D(9, 28),
+      techReview: D(10, 12),
+      final: D(10, 30),
+    },
+    {
+      code: 'РГ3-08',
+      wgCode: 'РГ №3',
+      title:
+        'Модель зрілості організаційно-технічної спроможності команд реагування на кіберінциденти, кібератаки, кіберзагрози (CSIRT)',
+      techSpec: D(5, 14),
+      draft: D(7, 15),
+      feedback: D(8, 31),
+      techReview: D(9, 11),
+      final: D(9, 30),
+    },
+    {
+      code: 'РГ3-09',
+      wgCode: 'РГ №3',
+      title: 'Заходи з кіберзахисту. Загальні положення та настанови',
+      techSpec: D(5, 14),
+      draft: D(9, 16),
+      feedback: D(10, 30),
+      techReview: D(11, 13),
+      final: D(11, 30),
+    },
+    // Items 10 and 11: anonymized per user request
+    {
+      code: 'РГ4-10',
+      wgCode: 'РГ №4',
+      title: 'Стандарт 1 РГ4',
+      techSpec: D(5, 14),
+      draft: D(7, 15),
+      feedback: D(8, 31),
+      techReview: D(9, 11),
+      final: D(9, 30),
+    },
+    {
+      code: 'РГ4-11',
+      wgCode: 'РГ №4',
+      title: 'Стандарт 2 РГ4',
+      techSpec: D(5, 14),
+      draft: D(8, 14),
+      feedback: D(9, 28),
+      techReview: D(10, 12),
+      final: D(10, 30),
+    },
+    {
+      code: 'РГ5-12',
+      wgCode: 'РГ №5',
+      title:
+        'Стандартизація криптографічного та технічного захисту інформації, кіберзахисту, протидії технічним розвідкам. Процедури створення, діяльності та припинення діяльності робочих груп із стандартизації',
+      description: 'У документі — РГ 9; в системі мапиться на РГ №5 (основоположні стандарти)',
+      techSpec: D(5, 14),
+      draft: D(8, 14),
+      feedback: D(9, 28),
+      techReview: D(10, 12),
+      final: D(10, 30),
+    },
+  ];
+
+  // Map wgCode -> id
+  const wgById = await prisma.workingGroup.findMany({ select: { id: true, code: true } });
+  const wgIdByCode = Object.fromEntries(wgById.map((w) => [w.code, w.id]));
+
+  let stdOk = 0;
+  let stdFail = 0;
+  const today = new Date();
+  for (const s of PLAN_STANDARDS) {
+    try {
+      const wgId = wgIdByCode[s.wgCode];
+      if (!wgId) {
+        console.warn(`⚠️ Skip ${s.code}: WG ${s.wgCode} not found`);
+        stdFail++;
+        continue;
+      }
+      // Determine current stage: first stage whose due date is in the future
+      let stage:
+        | 'TECH_SPEC'
+        | 'DRAFTING'
+        | 'FEEDBACK'
+        | 'TECH_REVIEW'
+        | 'FINALIZATION'
+        | 'COMPLETED' = 'TECH_SPEC';
+      if (today > s.final) stage = 'COMPLETED';
+      else if (today > s.techReview) stage = 'FINALIZATION';
+      else if (today > s.feedback) stage = 'TECH_REVIEW';
+      else if (today > s.draft) stage = 'FEEDBACK';
+      else if (today > s.techSpec) stage = 'DRAFTING';
+      else stage = 'TECH_SPEC';
+
+      await prisma.standard.upsert({
+        where: { workingGroupId_code: { workingGroupId: wgId, code: s.code } },
+        update: {
+          title: s.title,
+          description: s.description,
+          deadline: s.final,
+          techSpecDueDate: s.techSpec,
+          draftDueDate: s.draft,
+          feedbackDueDate: s.feedback,
+          techReviewDueDate: s.techReview,
+          finalDueDate: s.final,
+          currentStage: stage,
+        },
+        create: {
+          workingGroupId: wgId,
+          code: s.code,
+          title: s.title,
+          description: s.description,
+          deadline: s.final,
+          techSpecDueDate: s.techSpec,
+          draftDueDate: s.draft,
+          feedbackDueDate: s.feedback,
+          techReviewDueDate: s.techReview,
+          finalDueDate: s.final,
+          currentStage: stage,
+          status: 'DRAFT',
+        },
+      });
+      stdOk++;
+    } catch (e) {
+      stdFail++;
+      console.error(`❌ Standard ${s.code} failed:`, e instanceof Error ? e.message : e);
+    }
+  }
+  console.log(`📊 Standards processed: ${stdOk} ok / ${stdFail} failed`);
+
   console.log('🎉 Seed complete!');
   console.log('');
   console.log('Logins:');

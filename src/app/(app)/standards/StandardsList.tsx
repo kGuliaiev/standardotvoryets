@@ -6,6 +6,7 @@ import { trpc } from '@/lib/trpc/client';
 import Link from 'next/link';
 import { StatusBadge, type StandardStatus } from '@/components/ui/StatusBadge';
 import { Avatar } from '@/components/ui/Avatar';
+import { StandardProgress } from '@/components/standards/StandardProgress';
 import { formatDate } from '@/lib/utils';
 
 const STATUS_TABS: { value: StandardStatus | 'ALL'; label: string }[] = [
@@ -137,9 +138,8 @@ export function StandardsList() {
                 <th className="px-3 py-3 font-medium">РГ</th>
                 <th className="px-3 py-3 font-medium">Статус</th>
                 <th className="px-3 py-3 font-medium">Відповідальний</th>
-                <th className="px-3 py-3 font-medium">Прогрес</th>
+                <th className="px-3 py-3 font-medium w-[240px]">Етапи</th>
                 <th className="px-3 py-3 font-medium">Дедлайн</th>
-                <th className="px-3 py-3 font-medium">Оновлено</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-hairline">
@@ -184,15 +184,15 @@ export function StandardsList() {
                     )}
                   </td>
                   <td className="px-3 py-3.5">
-                    <div className="flex items-center gap-2">
-                      <div className="w-16 h-1.5 bg-pill rounded-full overflow-hidden">
-                        <div
-                          className="h-full bg-blue-500 rounded-full"
-                          style={{ width: `${s.progress}%` }}
-                        />
-                      </div>
-                      <span className="text-xs text-light">{s.progress}%</span>
-                    </div>
+                    <StandardProgress
+                      variant="compact"
+                      currentStage={s.currentStage}
+                      techSpecDueDate={s.techSpecDueDate}
+                      draftDueDate={s.draftDueDate}
+                      feedbackDueDate={s.feedbackDueDate}
+                      techReviewDueDate={s.techReviewDueDate}
+                      finalDueDate={s.finalDueDate}
+                    />
                   </td>
                   <td className="px-3 py-3.5">
                     {s.deadline ? (
@@ -205,7 +205,6 @@ export function StandardsList() {
                       <span className="text-light text-xs">—</span>
                     )}
                   </td>
-                  <td className="px-3 py-3.5 text-xs text-light">{formatDate(s.updatedAt)}</td>
                 </tr>
               ))}
             </tbody>

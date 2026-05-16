@@ -268,6 +268,67 @@ export const standardRouter = createTRPCRouter({
       return updated;
     }),
 
+  // ── setStage (advance / change the standardization plan stage) ───────
+  setStage: protectedProcedure
+    .input(
+      z.object({
+        id: z.string().cuid(),
+        stage: z.enum([
+          'TECH_SPEC',
+          'DRAFTING',
+          'FEEDBACK',
+          'TECH_REVIEW',
+          'FINALIZATION',
+          'COMPLETED',
+        ]),
+      }),
+    )
+    .mutation(async ({ ctx, input }) => {
+      const standard = await ctx.db.standard.findUniqueOrThrow({ where: { id: input.id } });
+      if (!can(userCtx(ctx.session), 'standard:editMeta', standard.workingGroupId)) {
+        throw new TRPCError({ code: 'FORBIDDEN' });
+      }
+
+      const now = new Date();
+      // Mark completion timestamps for stages that are passed by the new stage
+      const order = ['TECH_SPEC', 'DRAFTING', 'FEEDBACK', 'TECH_REVIEW', 'FINALIZATION'] as const;
+      const newIdx = input.stage === 'COMPLETED' ? order.length : order.indexOf(input.stage);
+      const stamp: Record<string, Date | null> = {};
+      for (let i = 0; i < order.length; i++) {
+        const key = `${
+          order[i] === 'TECH_SPEC'
+            ? 'techSpec'
+            : order[i] === 'DRAFTING'
+              ? 'draft'
+              : order[i] === 'FEEDBACK'
+                ? 'feedback'
+                : order[i] === 'TECH_REVIEW'
+                  ? 'techReview'
+                  : 'final'
+        }CompletedAt`;
+        if (i < newIdx) {
+          stamp[key] = now;
+        } else {
+          // Clear future stages (in case of going back)
+          stamp[key] = null;
+        }
+      }
+      const updated = await ctx.db.standard.update({
+        where: { id: input.id },
+        data: { currentStage: input.stage, ...stamp },
+      });
+      await logActivity(ctx.db, {
+        userId: ctx.session.user.id,
+        action: 'STATUS_CHANGE',
+        entity: 'Standard',
+        entityId: input.id,
+        before: { currentStage: standard.currentStage },
+        after: { currentStage: input.stage },
+        note: `Етап: ${standard.currentStage} → ${input.stage}`,
+      });
+      return updated;
+    }),
+
   // ── delete (ADMIN only) ───────────────────────────────────────────────
   delete: protectedProcedure
     .input(z.object({ id: z.string().cuid() }))
