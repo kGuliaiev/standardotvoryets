@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import { trpc } from '@/lib/trpc/client';
 import { useSession } from 'next-auth/react';
 import Link from 'next/link';
-import { Pencil } from 'lucide-react';
+import { Pencil, ChevronDown } from 'lucide-react';
 import { StatusBadge, type StandardStatus } from '@/components/ui/StatusBadge';
 import { Avatar } from '@/components/ui/Avatar';
 import { Modal } from '@/components/ui/Modal';
@@ -12,7 +12,7 @@ import { ActivityFeed } from '@/components/ActivityFeed';
 import { TaskFormModal } from '@/components/TaskFormModal';
 import { DocumentUploadModal } from '@/components/DocumentUploadModal';
 import { CommentsThread } from '@/components/CommentsThread';
-import { StandardProgress } from '@/components/standards/StandardProgress';
+import { StandardProgress, hasOverdueStage } from '@/components/standards/StandardProgress';
 import { RankBadge } from '@/components/ui/RankBadge';
 import { rankLabel } from '@/lib/ranks';
 import { formatDate, formatDateTime, formatBytes } from '@/lib/utils';
@@ -51,6 +51,7 @@ const STATUS_LABELS: Record<StandardStatus, string> = {
 export function StandardDetail({ id }: { id: string }) {
   const { data: session } = useSession();
   const [activeTab, setActiveTab] = useState<Tab>('overview');
+  const [stepperOpen, setStepperOpen] = useState(false);
 
   const { data: standard, isLoading, refetch } = trpc.standard.byId.useQuery({ id });
   const { data: currentVoting } = trpc.vote.current.useQuery({ standardId: id });
@@ -143,35 +144,30 @@ export function StandardDetail({ id }: { id: string }) {
       </nav>
 
       {/* Header card */}
-      <div className="bg-card rounded-xl border border-hairline p-6">
-        <div className="flex items-start justify-between gap-4 flex-wrap">
-          <div className="min-w-0">
-            <div className="flex items-center gap-3 mb-2">
-              <span
-                className="inline-block w-3 h-3 rounded-full flex-shrink-0"
-                style={{ backgroundColor: standard.workingGroup.color }}
-              />
-              <span className="text-sm font-medium text-mid">{standard.workingGroup.code}</span>
-              <span className="text-light">·</span>
-              <span className="font-mono text-sm text-light">{standard.code}</span>
-            </div>
-            <h1 className="text-xl font-bold text-ink mb-3">{standard.title}</h1>
-            <div className="flex items-center gap-3 flex-wrap">
-              <StatusBadge status={standard.status} />
-              {standard.isoAnalog && (
-                <span className="text-xs text-mid bg-pill px-2 py-1 rounded-md">
-                  ISO: {standard.isoAnalog}
-                </span>
-              )}
-              {standard.category && (
-                <span className="text-xs text-mid bg-pill px-2 py-1 rounded-md">
-                  {standard.category}
-                </span>
-              )}
-            </div>
+      <div className="bg-card rounded-xl border border-hairline p-5">
+        {/* Row 1: meta (WG · code · status · ISO · category) on the left, actions on the right */}
+        <div className="flex items-center justify-between gap-4 flex-wrap">
+          <div className="flex items-center gap-2.5 flex-wrap min-w-0">
+            <span
+              className="inline-block w-3 h-3 rounded-full shrink-0"
+              style={{ backgroundColor: standard.workingGroup.color }}
+            />
+            <span className="text-sm font-medium text-mid">{standard.workingGroup.code}</span>
+            <span className="text-light">·</span>
+            <span className="font-mono text-sm text-light">{standard.code}</span>
+            <span className="text-light">·</span>
+            <StatusBadge status={standard.status} size="sm" />
+            {standard.isoAnalog && (
+              <span className="text-xs text-mid bg-pill px-2 py-0.5 rounded-md">
+                ISO: {standard.isoAnalog}
+              </span>
+            )}
+            {standard.category && (
+              <span className="text-xs text-mid bg-pill px-2 py-0.5 rounded-md">
+                {standard.category}
+              </span>
+            )}
           </div>
-
-          {/* Actions */}
           <div className="flex gap-2 flex-wrap">
             {canEdit && (
               <button
@@ -190,7 +186,7 @@ export function StandardDetail({ id }: { id: string }) {
                   setEditError(null);
                   setEditOpen(true);
                 }}
-                className="px-3 py-2 text-xs font-semibold rounded-[10px] border-[1.5px] border-hairline hover:border-brand hover:text-brand text-mid transition-colors inline-flex items-center gap-1.5"
+                className="px-3 py-1.5 text-xs font-semibold rounded-[10px] border-[1.5px] border-hairline hover:border-brand hover:text-brand text-mid transition-colors inline-flex items-center gap-1.5"
               >
                 <Pencil className="w-3.5 h-3.5" />
                 Редагувати
@@ -202,7 +198,7 @@ export function StandardDetail({ id }: { id: string }) {
                   key={next}
                   onClick={() => changeStatus.mutate({ id, status: next })}
                   disabled={changeStatus.isPending}
-                  className="px-3 py-2 text-xs font-medium rounded-lg border border-hairline hover:bg-page text-ink transition-colors disabled:opacity-50"
+                  className="px-3 py-1.5 text-xs font-medium rounded-lg border border-hairline hover:bg-page text-ink transition-colors disabled:opacity-50"
                 >
                   → {STATUS_LABELS[next]}
                 </button>
@@ -210,7 +206,7 @@ export function StandardDetail({ id }: { id: string }) {
             {canChangeStatus && standard.status === 'IN_REVIEW' && canOpenVoting && (
               <Link
                 href={`/standards/${id}/open-voting`}
-                className="px-3 py-2 text-xs font-medium rounded-lg bg-amber-500 text-white hover:bg-amber-600 transition-colors"
+                className="px-3 py-1.5 text-xs font-medium rounded-lg bg-amber-500 text-white hover:bg-amber-600 transition-colors"
               >
                 Відкрити голосування
               </Link>
@@ -218,36 +214,65 @@ export function StandardDetail({ id }: { id: string }) {
           </div>
         </div>
 
-        {/* Etapnyi plan stepper with per-stage confirm */}
-        <div className="mt-5 pt-4 border-t border-hairline">
-          <div className="flex items-center justify-between mb-3">
-            <span className="text-xs text-mid font-semibold uppercase tracking-wide">
+        {/* Title */}
+        <h1 className="text-xl font-bold text-ink mt-3">{standard.title}</h1>
+
+        {/* Collapsible stepper */}
+        <div className="mt-4 pt-3 border-t border-hairline">
+          <button
+            type="button"
+            onClick={() => setStepperOpen((o) => !o)}
+            className="flex items-center justify-between w-full text-left group"
+          >
+            <span className="text-xs text-mid font-semibold uppercase tracking-wide group-hover:text-ink transition-colors">
               Поетапний план виконання
             </span>
-            {!canChangeStatus && (
-              <span className="text-[11px] text-light italic">
-                Етапи підтверджують секретар / керівник РГ
-              </span>
-            )}
-          </div>
-          <StandardProgress
-            techSpecDueDate={standard.techSpecDueDate}
-            draftDueDate={standard.draftDueDate}
-            feedbackDueDate={standard.feedbackDueDate}
-            techReviewDueDate={standard.techReviewDueDate}
-            finalDueDate={standard.finalDueDate}
-            techSpecCompletedAt={standard.techSpecCompletedAt}
-            draftCompletedAt={standard.draftCompletedAt}
-            feedbackCompletedAt={standard.feedbackCompletedAt}
-            techReviewCompletedAt={standard.techReviewCompletedAt}
-            finalCompletedAt={standard.finalCompletedAt}
-            onConfirm={
-              canChangeStatus
-                ? (stage, confirmed) => confirmStage.mutate({ id: standard.id, stage, confirmed })
-                : undefined
-            }
-            isPending={confirmStage.isPending}
-          />
+            <div className="flex items-center gap-2">
+              {!stepperOpen && (
+                <span className="text-[11px] text-light">
+                  {hasOverdueStage(standard) ? (
+                    <span className="text-red-600 dark:text-red-400 font-semibold">
+                      є прострочений етап
+                    </span>
+                  ) : (
+                    'натисніть, щоб розгорнути'
+                  )}
+                </span>
+              )}
+              <ChevronDown
+                size={16}
+                className={`text-mid transition-transform ${stepperOpen ? 'rotate-180' : ''}`}
+              />
+            </div>
+          </button>
+          {stepperOpen && (
+            <div className="mt-3">
+              {!canChangeStatus && (
+                <p className="text-[11px] text-light italic mb-3">
+                  Етапи підтверджують секретар / керівник РГ
+                </p>
+              )}
+              <StandardProgress
+                techSpecDueDate={standard.techSpecDueDate}
+                draftDueDate={standard.draftDueDate}
+                feedbackDueDate={standard.feedbackDueDate}
+                techReviewDueDate={standard.techReviewDueDate}
+                finalDueDate={standard.finalDueDate}
+                techSpecCompletedAt={standard.techSpecCompletedAt}
+                draftCompletedAt={standard.draftCompletedAt}
+                feedbackCompletedAt={standard.feedbackCompletedAt}
+                techReviewCompletedAt={standard.techReviewCompletedAt}
+                finalCompletedAt={standard.finalCompletedAt}
+                onConfirm={
+                  canChangeStatus
+                    ? (stage, confirmed) =>
+                        confirmStage.mutate({ id: standard.id, stage, confirmed })
+                    : undefined
+                }
+                isPending={confirmStage.isPending}
+              />
+            </div>
+          )}
         </div>
 
         {/* Meta row */}
