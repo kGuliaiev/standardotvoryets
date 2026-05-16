@@ -32,6 +32,14 @@ const ATTENDANCE_LABELS: Record<string, { label: string; cls: string }> = {
   DECLINED: { label: 'Відмовлено', cls: 'text-red-500' },
 };
 
+const WG_ROLE_LABELS_UA: Record<string, string> = {
+  LEADER: 'Керівник РГ',
+  DEPUTY: 'Заступник керівника',
+  SECRETARY: 'Секретар',
+  MEMBER: 'Член РГ',
+  GUEST: 'Гість',
+};
+
 interface Props {
   id: string;
 }
@@ -354,7 +362,9 @@ export function MeetingDetail({ id }: Props) {
                             <Avatar name={r.user.name} size="xs" />
                             <div className="min-w-0">
                               <p className="text-sm text-ink truncate">{r.user.name}</p>
-                              <p className="text-[10px] text-light uppercase">{r.role}</p>
+                              <p className="text-[10px] text-light">
+                                {WG_ROLE_LABELS_UA[r.role] ?? r.role}
+                              </p>
                             </div>
                           </div>
                           {!canManageAttendance && (
