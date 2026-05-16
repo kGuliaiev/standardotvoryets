@@ -257,9 +257,9 @@ export function MeetingsList() {
         <div className="inline-flex rounded-[10px] border border-hairline p-0.5 bg-page">
           {(
             [
-              ['list', 'Список'],
-              ['week', 'Тиждень'],
               ['month', 'Місяць'],
+              ['week', 'Тиждень'],
+              ['list', 'Список'],
             ] as const
           ).map(([v, label]) => (
             <button
