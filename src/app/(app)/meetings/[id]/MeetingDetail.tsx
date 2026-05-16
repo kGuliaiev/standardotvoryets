@@ -251,47 +251,79 @@ export function MeetingDetail({ id }: Props) {
             </div>
           )}
 
-          {/* Minutes */}
-          {(meeting.minutesText != null || canManage) && (
-            <div className="bg-card rounded-xl border border-hairline p-5">
-              <div className="flex items-center justify-between mb-3 gap-2 flex-wrap">
-                <h3 className="text-sm font-semibold text-ink">Протокол</h3>
-                <div className="inline-flex items-center gap-3">
+          {/* Minutes — "started" = at least one agenda item OR legacy minutesText filled */}
+          {(() => {
+            const hasItems = meeting.agendaItems.length > 0;
+            const hasMinutes = !!meeting.minutesText && meeting.minutesText.trim().length > 0;
+            const started = hasItems || hasMinutes;
+            if (!started && !canManage) return null;
+            return (
+              <div className="bg-card rounded-xl border border-hairline p-5">
+                <div className="flex items-center justify-between mb-3 gap-2 flex-wrap">
+                  <h3 className="text-sm font-semibold text-ink">Протокол</h3>
+                  {started && (
+                    <div className="inline-flex items-center gap-3">
+                      <Link
+                        href={`/meetings/${id}/protocol`}
+                        className="text-xs font-bold text-brand hover:underline inline-flex items-center gap-1"
+                      >
+                        📝 Редактор протоколу
+                      </Link>
+                      <a
+                        href={`/api/meetings/${id}/protocol.docx`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-xs text-mid hover:text-brand inline-flex items-center gap-1"
+                        title="Завантажити Word"
+                      >
+                        📄 Word
+                      </a>
+                      <a
+                        href={`/api/meetings/${id}/protocol`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-xs text-mid hover:text-brand inline-flex items-center gap-1"
+                        title="Завантажити PDF"
+                      >
+                        📄 PDF
+                      </a>
+                    </div>
+                  )}
+                </div>
+
+                {!started && canManage && (
                   <Link
                     href={`/meetings/${id}/protocol`}
-                    className="text-xs font-bold text-brand hover:underline inline-flex items-center gap-1"
+                    className="inline-flex items-center gap-1.5 rounded-lg bg-blue-700 px-4 py-2 text-sm font-medium text-white hover:bg-blue-800 transition-colors"
                   >
-                    📝 Редактор протоколу
+                    📝 Розпочати заповнення протоколу
                   </Link>
-                  <a
-                    href={`/api/meetings/${id}/protocol.docx`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-xs text-mid hover:text-brand inline-flex items-center gap-1"
-                    title="Завантажити Word"
-                  >
-                    📄 Word
-                  </a>
-                  <a
-                    href={`/api/meetings/${id}/protocol`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-xs text-mid hover:text-brand inline-flex items-center gap-1"
-                    title="Завантажити PDF"
-                  >
-                    📄 PDF
-                  </a>
-                </div>
+                )}
+
+                {started && hasItems && (
+                  <ol className="space-y-2 text-sm">
+                    {meeting.agendaItems.map((it, idx) => (
+                      <li key={it.id} className="text-mid leading-snug">
+                        <span className="font-bold text-ink">{idx + 1}. </span>
+                        {it.title || <span className="text-light italic">(без назви)</span>}
+                        {it.decisionText && (
+                          <p className="text-xs text-light italic mt-0.5 pl-4 line-clamp-2">
+                            Рішення: {it.decisionText}
+                          </p>
+                        )}
+                      </li>
+                    ))}
+                  </ol>
+                )}
+
+                {started && !hasItems && hasMinutes && (
+                  <pre className="text-sm text-mid leading-relaxed whitespace-pre-wrap font-sans">
+                    {meeting.minutesText}
+                  </pre>
+                )}
               </div>
-              {meeting.minutesText ? (
-                <pre className="text-sm text-mid leading-relaxed whitespace-pre-wrap font-sans">
-                  {meeting.minutesText}
-                </pre>
-              ) : (
-                <p className="text-sm text-light">Протокол ще не додано</p>
-              )}
-            </div>
-          )}
+            );
+          })()}
 
           {/* Activity feed — same column width as Інформація / Протокол.
               Collapsed by default so it doesn't dominate the layout. */}
