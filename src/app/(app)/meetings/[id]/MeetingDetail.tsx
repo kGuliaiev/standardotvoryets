@@ -293,8 +293,9 @@ export function MeetingDetail({ id }: Props) {
             </div>
           )}
 
-          {/* Activity feed — same column width as Інформація / Протокол */}
-          <ActivityFeed entity="Meeting" entityId={id} />
+          {/* Activity feed — same column width as Інформація / Протокол.
+              Collapsed by default so it doesn't dominate the layout. */}
+          <ActivityFeed entity="Meeting" entityId={id} collapsible defaultOpen={false} />
         </div>
 
         {/* Right: attendances */}

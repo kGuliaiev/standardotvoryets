@@ -3,7 +3,17 @@
 import { trpc } from '@/lib/trpc/client';
 import { useSession } from 'next-auth/react';
 import { Avatar } from '@/components/ui/Avatar';
-import { Pencil, Plus, Trash2, ArrowRight, Archive, Undo2, Loader2 } from 'lucide-react';
+import { useState } from 'react';
+import {
+  Pencil,
+  Plus,
+  Trash2,
+  ArrowRight,
+  Archive,
+  Undo2,
+  Loader2,
+  ChevronDown,
+} from 'lucide-react';
 
 type Entity = 'Standard' | 'Meeting' | 'Task' | 'WorkingGroup' | 'User' | 'Document' | 'Vote';
 
@@ -92,11 +102,17 @@ export function ActivityFeed({
   entity,
   entityId,
   title = 'Журнал змін',
+  collapsible = false,
+  defaultOpen = true,
 }: {
   entity: Entity;
   entityId: string;
   title?: string;
+  /** Render header as a click-toggle that hides the list. */
+  collapsible?: boolean;
+  defaultOpen?: boolean;
 }) {
+  const [open, setOpen] = useState(defaultOpen);
   const { data: session } = useSession();
   const utils = trpc.useUtils();
   const { data: entries, isLoading } = trpc.activityLog.list.useQuery({
@@ -131,13 +147,32 @@ export function ActivityFeed({
 
   return (
     <div className="card overflow-hidden">
-      <div className="card-head">
-        <h3 className="font-bold text-ink">{title}</h3>
-        {entries && entries.length > 0 && (
-          <span className="text-[11px] text-light">{entries.length}</span>
-        )}
-      </div>
-      {isLoading ? (
+      {collapsible ? (
+        <button
+          type="button"
+          onClick={() => setOpen((v) => !v)}
+          className="card-head w-full flex items-center justify-between hover:bg-pill/30 transition-colors"
+        >
+          <h3 className="font-bold text-ink">{title}</h3>
+          <div className="flex items-center gap-2">
+            {entries && entries.length > 0 && (
+              <span className="text-[11px] text-light">{entries.length}</span>
+            )}
+            <ChevronDown
+              size={16}
+              className={`text-mid transition-transform ${open ? 'rotate-180' : ''}`}
+            />
+          </div>
+        </button>
+      ) : (
+        <div className="card-head">
+          <h3 className="font-bold text-ink">{title}</h3>
+          {entries && entries.length > 0 && (
+            <span className="text-[11px] text-light">{entries.length}</span>
+          )}
+        </div>
+      )}
+      {collapsible && !open ? null : isLoading ? (
         <div className="py-8 text-center text-light text-sm">Завантаження…</div>
       ) : !entries || entries.length === 0 ? (
         <div className="py-8 text-center text-light text-sm">Журнал порожній</div>
