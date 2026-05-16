@@ -299,11 +299,18 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
     const buffer = await renderToBuffer(
       createElement(ProtocolDoc, { meeting }) as unknown as ReactElement<DocumentProps>,
     );
+    // HTTP headers must be Latin-1. Build an ASCII-safe filename for the
+    // `filename=` fallback, and a URI-encoded UTF-8 variant (RFC 5987) so
+    // modern browsers show the proper Cyrillic name.
+    const date = new Date(meeting.startAt).toISOString().slice(0, 10);
+    const wgDigits = /(\d+)/.exec(meeting.workingGroup.code)?.[1] ?? 'x';
+    const asciiName = `protocol-rg${wgDigits}-${date}.pdf`;
+    const fullName = `protocol-${meeting.workingGroup.code.replace(/\s+/g, '_')}-${date}.pdf`;
     return new NextResponse(buffer as unknown as BodyInit, {
       status: 200,
       headers: {
         'Content-Type': 'application/pdf',
-        'Content-Disposition': `inline; filename="protocol-${meeting.workingGroup.code.replace(/\s+/g, '_')}-${new Date(meeting.startAt).toISOString().slice(0, 10)}.pdf"`,
+        'Content-Disposition': `inline; filename="${asciiName}"; filename*=UTF-8''${encodeURIComponent(fullName)}`,
         'Cache-Control': 'no-store',
       },
     });
