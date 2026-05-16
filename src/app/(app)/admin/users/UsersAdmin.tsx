@@ -7,11 +7,28 @@ import { useRouter } from 'next/navigation';
 import { Avatar } from '@/components/ui/Avatar';
 import { Modal } from '@/components/ui/Modal';
 import { RankBadge } from '@/components/ui/RankBadge';
+import { SortableHeader } from '@/components/ui/SortableHeader';
+import { useSort, sortedRows } from '@/lib/useSort';
 import { RANK_OPTIONS, rankLabel } from '@/lib/ranks';
 import { formatDate } from '@/lib/utils';
 import { useEscape } from '@/lib/useEscape';
 import { UserX, UserCheck, Pencil, X, Plus, Save } from 'lucide-react';
 import type { MilitaryRank, Organization } from '@prisma/client';
+
+// Numeric ordering for ranks (lowest → highest) for proper sort
+const RANK_ORDER: Record<MilitaryRank, number> = {
+  CIVILIAN: 0,
+  LIEUTENANT: 1,
+  SENIOR_LIEUTENANT: 2,
+  CAPTAIN: 3,
+  MAJOR: 4,
+  LIEUTENANT_COLONEL: 5,
+  COLONEL: 6,
+  BRIGADIER_GENERAL: 7,
+  MAJOR_GENERAL: 8,
+  LIEUTENANT_GENERAL: 9,
+  GENERAL: 10,
+};
 
 type WGRole = 'LEADER' | 'DEPUTY' | 'SECRETARY' | 'MEMBER' | 'GUEST';
 
@@ -130,6 +147,8 @@ export function UsersAdmin() {
     if (session && !isAdmin) router.replace('/dashboard');
   }, [session, isAdmin, router]);
 
+  const [sort, setSort] = useSort<'name' | 'rank' | 'position' | 'role' | 'wgs'>('name', 'asc');
+
   if (session && !isAdmin) return null;
 
   const filtered = users?.filter(
@@ -191,16 +210,51 @@ export function UsersAdmin() {
           <table className="w-full text-sm">
             <thead className="bg-page border-b border-hairline">
               <tr className="text-left text-xs text-mid uppercase tracking-wide">
-                <th className="px-5 py-3 font-medium">Користувач</th>
-                <th className="px-3 py-3 font-medium">Звання</th>
-                <th className="px-3 py-3 font-medium">Посада</th>
-                <th className="px-3 py-3 font-medium">Глобальна роль</th>
-                <th className="px-3 py-3 font-medium">Робочі групи</th>
+                <th className="px-5 py-3 font-medium">
+                  <SortableHeader columnKey="name" sort={sort} onSort={setSort}>
+                    Користувач
+                  </SortableHeader>
+                </th>
+                <th className="px-3 py-3 font-medium">
+                  <SortableHeader columnKey="rank" sort={sort} onSort={setSort}>
+                    Звання
+                  </SortableHeader>
+                </th>
+                <th className="px-3 py-3 font-medium">
+                  <SortableHeader columnKey="position" sort={sort} onSort={setSort}>
+                    Посада
+                  </SortableHeader>
+                </th>
+                <th className="px-3 py-3 font-medium">
+                  <SortableHeader columnKey="role" sort={sort} onSort={setSort}>
+                    Глобальна роль
+                  </SortableHeader>
+                </th>
+                <th className="px-3 py-3 font-medium">
+                  <SortableHeader columnKey="wgs" sort={sort} onSort={setSort}>
+                    Робочі групи
+                  </SortableHeader>
+                </th>
                 <th className="px-3 py-3 font-medium text-right">Дії</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-hairline">
-              {filtered?.map((u) => {
+              {sortedRows(filtered, sort, (u, key) => {
+                switch (key) {
+                  case 'name':
+                    return u.name;
+                  case 'rank':
+                    return RANK_ORDER[u.rank] ?? 0;
+                  case 'position':
+                    return u.position ?? null;
+                  case 'role':
+                    return u.globalRole;
+                  case 'wgs':
+                    return u.memberships.length;
+                  default:
+                    return null;
+                }
+              }).map((u) => {
                 const roleInfo = GLOBAL_ROLE_LABELS[u.globalRole] ?? {
                   label: u.globalRole,
                   cls: '',

@@ -13,6 +13,8 @@ import {
 import { formatDate } from '@/lib/utils';
 import { StandardProgress, hasOverdueStage } from '@/components/standards/StandardProgress';
 import { StatusBadge } from '@/components/ui/StatusBadge';
+import { SortableHeader } from '@/components/ui/SortableHeader';
+import { useSort, sortedRows } from '@/lib/useSort';
 import { AlertCircle } from 'lucide-react';
 
 const MONTHS_UA_ACC = [
@@ -94,6 +96,7 @@ export function DashboardContent() {
   const { data: myTasks } = trpc.task.list.useQuery({ assigneeId: userId }, { enabled: !!userId });
   const { data: notifications } = trpc.notification.list.useQuery({ limit: 5 });
   const { data: standardsData } = trpc.standard.list.useQuery({ page: 1, pageSize: 50 });
+  const [stdSort, setStdSort] = useSort<'code' | 'wg' | 'status'>('code', 'asc');
 
   const utils = trpc.useUtils();
   const toggleTask = trpc.task.changeStatus.useMutation({
@@ -271,14 +274,37 @@ export function DashboardContent() {
               <table className="w-full text-sm">
                 <thead className="bg-page border-b border-hairline">
                   <tr className="text-left text-xs text-mid uppercase tracking-wide">
-                    <th className="px-5 py-3 font-medium">Код / Назва</th>
-                    <th className="px-3 py-3 font-medium">РГ</th>
-                    <th className="px-3 py-3 font-medium">Статус</th>
+                    <th className="px-5 py-3 font-medium">
+                      <SortableHeader columnKey="code" sort={stdSort} onSort={setStdSort}>
+                        Код / Назва
+                      </SortableHeader>
+                    </th>
+                    <th className="px-3 py-3 font-medium">
+                      <SortableHeader columnKey="wg" sort={stdSort} onSort={setStdSort}>
+                        РГ
+                      </SortableHeader>
+                    </th>
+                    <th className="px-3 py-3 font-medium">
+                      <SortableHeader columnKey="status" sort={stdSort} onSort={setStdSort}>
+                        Статус
+                      </SortableHeader>
+                    </th>
                     <th className="px-3 py-3 font-medium">Етапи</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-hairline">
-                  {standardsData.items.map((s) => {
+                  {sortedRows(standardsData.items, stdSort, (s, key) => {
+                    switch (key) {
+                      case 'code':
+                        return s.code;
+                      case 'wg':
+                        return s.workingGroup.code;
+                      case 'status':
+                        return s.status;
+                      default:
+                        return null;
+                    }
+                  }).map((s) => {
                     const overdue = hasOverdueStage(s);
                     return (
                       <tr key={s.id} className="hover:bg-page transition-colors group">

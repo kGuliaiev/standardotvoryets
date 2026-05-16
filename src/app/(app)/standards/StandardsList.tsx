@@ -7,6 +7,8 @@ import Link from 'next/link';
 import { StatusBadge, type StandardStatus } from '@/components/ui/StatusBadge';
 import { Avatar } from '@/components/ui/Avatar';
 import { StandardProgress, hasOverdueStage } from '@/components/standards/StandardProgress';
+import { SortableHeader } from '@/components/ui/SortableHeader';
+import { useSort, sortedRows } from '@/lib/useSort';
 import { AlertCircle } from 'lucide-react';
 import { formatDate } from '@/lib/utils';
 
@@ -25,6 +27,10 @@ export function StandardsList() {
   const [activeStatus, setActiveStatus] = useState<StandardStatus | 'ALL'>('ALL');
   const [wgFilter, setWgFilter] = useState('');
   const [page, setPage] = useState(1);
+  const [sort, setSort] = useSort<'code' | 'wg' | 'status' | 'responsible' | 'deadline' | 'stage'>(
+    'code',
+    'asc',
+  );
 
   const { data: groups } = trpc.workingGroup.list.useQuery();
 
@@ -135,16 +141,68 @@ export function StandardsList() {
           <table className="w-full text-sm">
             <thead className="bg-page border-b border-hairline">
               <tr className="text-left text-xs text-mid uppercase tracking-wide">
-                <th className="px-5 py-3 font-medium">Код / Назва</th>
-                <th className="px-3 py-3 font-medium">РГ</th>
-                <th className="px-3 py-3 font-medium">Статус</th>
-                <th className="px-3 py-3 font-medium">Відповідальний</th>
-                <th className="px-3 py-3 font-medium w-[240px]">Етапи</th>
-                <th className="px-3 py-3 font-medium">Дедлайн</th>
+                <th className="px-5 py-3 font-medium">
+                  <SortableHeader columnKey="code" sort={sort} onSort={setSort}>
+                    Код / Назва
+                  </SortableHeader>
+                </th>
+                <th className="px-3 py-3 font-medium">
+                  <SortableHeader columnKey="wg" sort={sort} onSort={setSort}>
+                    РГ
+                  </SortableHeader>
+                </th>
+                <th className="px-3 py-3 font-medium">
+                  <SortableHeader columnKey="status" sort={sort} onSort={setSort}>
+                    Статус
+                  </SortableHeader>
+                </th>
+                <th className="px-3 py-3 font-medium">
+                  <SortableHeader columnKey="responsible" sort={sort} onSort={setSort}>
+                    Відповідальний
+                  </SortableHeader>
+                </th>
+                <th className="px-3 py-3 font-medium w-[240px]">
+                  <SortableHeader columnKey="stage" sort={sort} onSort={setSort}>
+                    Етапи
+                  </SortableHeader>
+                </th>
+                <th className="px-3 py-3 font-medium">
+                  <SortableHeader columnKey="deadline" sort={sort} onSort={setSort}>
+                    Дедлайн
+                  </SortableHeader>
+                </th>
               </tr>
             </thead>
             <tbody className="divide-y divide-hairline">
-              {data?.items.map((s) => (
+              {sortedRows(data?.items, sort, (s, key) => {
+                switch (key) {
+                  case 'code':
+                    return s.code;
+                  case 'wg':
+                    return s.workingGroup.code;
+                  case 'status':
+                    return s.status;
+                  case 'responsible':
+                    return s.responsible?.name ?? null;
+                  case 'deadline':
+                    return s.deadline ? new Date(s.deadline) : null;
+                  case 'stage':
+                    // Sort by earliest unconfirmed due date (overdue first)
+                    return s.techSpecCompletedAt
+                      ? s.draftCompletedAt
+                        ? s.feedbackCompletedAt
+                          ? s.techReviewCompletedAt
+                            ? s.finalCompletedAt
+                              ? new Date(0)
+                              : new Date(s.finalDueDate ?? 0)
+                            : new Date(s.techReviewDueDate ?? 0)
+                          : new Date(s.feedbackDueDate ?? 0)
+                        : new Date(s.draftDueDate ?? 0)
+                      : new Date(s.techSpecDueDate ?? 0);
+                  default:
+                    return null;
+                }
+              }).map((s) => (
                 <tr key={s.id} className="hover:bg-page transition-colors group">
                   <td className="px-5 py-3.5 max-w-xs">
                     <Link href={`/standards/${s.id}`} className="block">

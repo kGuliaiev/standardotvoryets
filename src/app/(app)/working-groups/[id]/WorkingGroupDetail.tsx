@@ -7,11 +7,34 @@ import { useRouter } from 'next/navigation';
 import { useSession } from 'next-auth/react';
 import { Avatar } from '@/components/ui/Avatar';
 import { RankBadge } from '@/components/ui/RankBadge';
+import { SortableHeader } from '@/components/ui/SortableHeader';
+import { useSort, sortedRows } from '@/lib/useSort';
 import { rankLabel } from '@/lib/ranks';
 import { StatusBadge } from '@/components/ui/StatusBadge';
 import { formatDate } from '@/lib/utils';
 import { can } from '@/lib/rbac';
 import { useEscape } from '@/lib/useEscape';
+
+const ROLE_ORDER: Record<string, number> = {
+  LEADER: 0,
+  DEPUTY: 1,
+  SECRETARY: 2,
+  MEMBER: 3,
+  GUEST: 4,
+};
+const MEMBER_RANK_ORDER: Record<string, number> = {
+  GENERAL: 0,
+  LIEUTENANT_GENERAL: 1,
+  MAJOR_GENERAL: 2,
+  BRIGADIER_GENERAL: 3,
+  COLONEL: 4,
+  LIEUTENANT_COLONEL: 5,
+  MAJOR: 6,
+  CAPTAIN: 7,
+  SENIOR_LIEUTENANT: 8,
+  LIEUTENANT: 9,
+  CIVILIAN: 10,
+};
 import { Archive, ArchiveRestore } from 'lucide-react';
 import type { GlobalRole, WorkingGroupRole } from '@prisma/client';
 
@@ -73,6 +96,16 @@ export function WorkingGroupDetail({ id }: Props) {
   const [editForm, setEditForm] = useState({ code: '', name: '', description: '' });
   const [editError, setEditError] = useState<string | null>(null);
   const [addError, setAddError] = useState('');
+  const [memberSort, setMemberSort] = useSort<'name' | 'email' | 'role' | 'joined' | 'rank'>(
+    'role',
+    'asc',
+  );
+  const [docSort, setDocSort] = useSort<'name' | 'date' | 'size'>('date', 'desc');
+  const [standardSort, setStandardSort] = useSort<'code' | 'status' | 'progress' | 'deadline'>(
+    'code',
+    'asc',
+  );
+  const [meetingSort, setMeetingSort] = useSort<'title' | 'date' | 'status'>('date', 'desc');
 
   const utils = trpc.useUtils();
   const { data: group, isLoading } = trpc.workingGroup.byId.useQuery({ id });
@@ -304,15 +337,46 @@ export function WorkingGroupDetail({ id }: Props) {
             <table className="w-full text-sm">
               <thead className="bg-page border-b border-hairline">
                 <tr className="text-left text-xs text-mid uppercase tracking-wide">
-                  <th className="px-5 py-3 font-medium">Учасник</th>
-                  <th className="px-3 py-3 font-medium">Email</th>
-                  <th className="px-3 py-3 font-medium">Роль</th>
-                  <th className="px-3 py-3 font-medium">З</th>
+                  <th className="px-5 py-3 font-medium">
+                    <SortableHeader columnKey="name" sort={memberSort} onSort={setMemberSort}>
+                      Учасник
+                    </SortableHeader>
+                  </th>
+                  <th className="px-3 py-3 font-medium">
+                    <SortableHeader columnKey="email" sort={memberSort} onSort={setMemberSort}>
+                      Email
+                    </SortableHeader>
+                  </th>
+                  <th className="px-3 py-3 font-medium">
+                    <SortableHeader columnKey="role" sort={memberSort} onSort={setMemberSort}>
+                      Роль
+                    </SortableHeader>
+                  </th>
+                  <th className="px-3 py-3 font-medium">
+                    <SortableHeader columnKey="joined" sort={memberSort} onSort={setMemberSort}>
+                      З
+                    </SortableHeader>
+                  </th>
                   {canInvite && <th className="px-3 py-3" />}
                 </tr>
               </thead>
               <tbody className="divide-y divide-hairline">
-                {group.members.map((m) => (
+                {sortedRows(group.members, memberSort, (m, key) => {
+                  switch (key) {
+                    case 'name':
+                      return m.user.name;
+                    case 'email':
+                      return m.user.email;
+                    case 'role':
+                      return ROLE_ORDER[m.role] ?? 99;
+                    case 'rank':
+                      return MEMBER_RANK_ORDER[m.user.rank] ?? 99;
+                    case 'joined':
+                      return new Date(m.joinedAt);
+                    default:
+                      return null;
+                  }
+                }).map((m) => (
                   <tr key={m.userId} className="hover:bg-page transition-colors">
                     <td className="px-5 py-3">
                       <div className="flex items-center gap-2.5">
@@ -406,14 +470,51 @@ export function WorkingGroupDetail({ id }: Props) {
             <table className="w-full text-sm">
               <thead className="bg-page border-b border-hairline">
                 <tr className="text-left text-xs text-mid uppercase tracking-wide">
-                  <th className="px-5 py-3 font-medium">Код / Назва</th>
-                  <th className="px-3 py-3 font-medium">Статус</th>
-                  <th className="px-3 py-3 font-medium">Прогрес</th>
-                  <th className="px-3 py-3 font-medium">Дедлайн</th>
+                  <th className="px-5 py-3 font-medium">
+                    <SortableHeader columnKey="code" sort={standardSort} onSort={setStandardSort}>
+                      Код / Назва
+                    </SortableHeader>
+                  </th>
+                  <th className="px-3 py-3 font-medium">
+                    <SortableHeader columnKey="status" sort={standardSort} onSort={setStandardSort}>
+                      Статус
+                    </SortableHeader>
+                  </th>
+                  <th className="px-3 py-3 font-medium">
+                    <SortableHeader
+                      columnKey="progress"
+                      sort={standardSort}
+                      onSort={setStandardSort}
+                    >
+                      Прогрес
+                    </SortableHeader>
+                  </th>
+                  <th className="px-3 py-3 font-medium">
+                    <SortableHeader
+                      columnKey="deadline"
+                      sort={standardSort}
+                      onSort={setStandardSort}
+                    >
+                      Дедлайн
+                    </SortableHeader>
+                  </th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-hairline">
-                {standards.items.map((s) => (
+                {sortedRows(standards.items, standardSort, (s, key) => {
+                  switch (key) {
+                    case 'code':
+                      return s.code;
+                    case 'status':
+                      return s.status;
+                    case 'progress':
+                      return s.progress;
+                    case 'deadline':
+                      return s.deadline ? new Date(s.deadline) : null;
+                    default:
+                      return null;
+                  }
+                }).map((s) => (
                   <tr key={s.id} className="hover:bg-page transition-colors">
                     <td className="px-5 py-3.5 max-w-xs">
                       <Link href={`/standards/${s.id}`} className="block group">
@@ -467,15 +568,38 @@ export function WorkingGroupDetail({ id }: Props) {
             <table className="w-full text-sm">
               <thead className="bg-page border-b border-hairline">
                 <tr className="text-left text-xs text-mid uppercase tracking-wide">
-                  <th className="px-5 py-3 font-medium">Тема</th>
-                  <th className="px-3 py-3 font-medium">Дата</th>
+                  <th className="px-5 py-3 font-medium">
+                    <SortableHeader columnKey="title" sort={meetingSort} onSort={setMeetingSort}>
+                      Тема
+                    </SortableHeader>
+                  </th>
+                  <th className="px-3 py-3 font-medium">
+                    <SortableHeader columnKey="date" sort={meetingSort} onSort={setMeetingSort}>
+                      Дата
+                    </SortableHeader>
+                  </th>
                   <th className="px-3 py-3 font-medium">Формат</th>
-                  <th className="px-3 py-3 font-medium">Статус</th>
+                  <th className="px-3 py-3 font-medium">
+                    <SortableHeader columnKey="status" sort={meetingSort} onSort={setMeetingSort}>
+                      Статус
+                    </SortableHeader>
+                  </th>
                   <th className="px-3 py-3 font-medium">Учасники</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-hairline">
-                {meetings.map((m) => {
+                {sortedRows(meetings, meetingSort, (m, key) => {
+                  switch (key) {
+                    case 'title':
+                      return m.title;
+                    case 'date':
+                      return new Date(m.startAt);
+                    case 'status':
+                      return m.status;
+                    default:
+                      return null;
+                  }
+                }).map((m) => {
                   const s = MEETING_STATUS_LABELS[m.status] ?? { label: m.status, cls: '' };
                   return (
                     <tr key={m.id} className="hover:bg-page transition-colors">
@@ -528,17 +652,40 @@ export function WorkingGroupDetail({ id }: Props) {
               <table className="w-full text-sm">
                 <thead className="bg-[#FAFBFD] border-b border-hairline">
                   <tr className="text-left text-[10px] text-light uppercase tracking-wide">
-                    <th className="px-5 py-2.5 font-bold">Файл</th>
+                    <th className="px-5 py-2.5 font-bold">
+                      <SortableHeader columnKey="name" sort={docSort} onSort={setDocSort}>
+                        Файл
+                      </SortableHeader>
+                    </th>
                     <th className="px-3 py-2.5 font-bold">Тип</th>
                     <th className="px-3 py-2.5 font-bold">Стандарт</th>
                     <th className="px-3 py-2.5 font-bold">Версія</th>
-                    <th className="px-3 py-2.5 font-bold">Розмір</th>
+                    <th className="px-3 py-2.5 font-bold">
+                      <SortableHeader columnKey="size" sort={docSort} onSort={setDocSort}>
+                        Розмір
+                      </SortableHeader>
+                    </th>
                     <th className="px-3 py-2.5 font-bold">Завантажив</th>
-                    <th className="px-3 py-2.5 font-bold">Дата / час</th>
+                    <th className="px-3 py-2.5 font-bold">
+                      <SortableHeader columnKey="date" sort={docSort} onSort={setDocSort}>
+                        Дата / час
+                      </SortableHeader>
+                    </th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-hairline">
-                  {docsBundle.documents.map((d) => {
+                  {sortedRows(docsBundle.documents, docSort, (d, key) => {
+                    switch (key) {
+                      case 'name':
+                        return d.filename;
+                      case 'date':
+                        return new Date(d.uploadedAt);
+                      case 'size':
+                        return d.sizeBytes;
+                      default:
+                        return null;
+                    }
+                  }).map((d) => {
                     const tInfo = DOC_TYPE_LABELS[d.type] ?? {
                       label: d.type,
                       cls: 'bg-pill text-mid',
