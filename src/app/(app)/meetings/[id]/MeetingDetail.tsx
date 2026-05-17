@@ -303,19 +303,54 @@ export function MeetingDetail({ id }: Props) {
                 )}
 
                 {started && hasItems && (
-                  <ol className="space-y-2 text-sm">
-                    {meeting.agendaItems.map((it, idx) => (
-                      <li key={it.id} className="text-mid leading-snug">
-                        <span className="font-bold text-ink">{idx + 1}. </span>
-                        {it.title || <span className="text-light italic">(без назви)</span>}
-                        {it.decisionText && (
-                          <p className="text-xs text-light italic mt-0.5 pl-4 line-clamp-2">
-                            Рішення: {it.decisionText}
-                          </p>
-                        )}
-                      </li>
-                    ))}
-                  </ol>
+                  <div className="space-y-4 text-sm">
+                    {(() => {
+                      const sections = [
+                        { key: 'AGENDA', label: 'ПОРЯДОК ДЕННИЙ' },
+                        { key: 'HEARD', label: 'СЛУХАЛИ / ВИСТУПИЛИ' },
+                        { key: 'DECISION', label: 'ВИРІШИЛИ' },
+                      ] as const;
+                      return sections.map((sec) => {
+                        const items = meeting.agendaItems.filter(
+                          (it) => (it.section ?? 'AGENDA') === sec.key,
+                        );
+                        if (items.length === 0) return null;
+                        return (
+                          <div key={sec.key}>
+                            <p className="text-[11px] font-bold uppercase tracking-wide text-light mb-1.5">
+                              {sec.label}
+                            </p>
+                            <ol className="space-y-1.5">
+                              {items.map((it, idx) => (
+                                <li key={it.id} className="text-mid leading-snug">
+                                  <span className="font-bold text-ink">{idx + 1}. </span>
+                                  {it.title || (
+                                    <span className="text-light italic">(без назви)</span>
+                                  )}
+                                  {sec.key === 'AGENDA' && it.speaker && (
+                                    <span className="text-light italic ml-1">
+                                      · доповідач {it.speaker.name}
+                                    </span>
+                                  )}
+                                  {sec.key === 'HEARD' && it.heardText && (
+                                    <p className="text-xs text-light italic mt-0.5 pl-4 line-clamp-2">
+                                      {it.heardText}
+                                    </p>
+                                  )}
+                                  {sec.key === 'DECISION' && it.deadline && (
+                                    <p className="text-xs text-light italic mt-0.5 pl-4">
+                                      Термін: до {new Date(it.deadline).toLocaleDateString('uk-UA')}
+                                      {it.responsible && ` · ${it.responsible.name}`}
+                                    </p>
+                                  )}
+                                </li>
+                              ))}
+                            </ol>
+                          </div>
+                        );
+                      });
+                    })()}
+                  </div>
                 )}
 
                 {started && !hasItems && hasMinutes && (
