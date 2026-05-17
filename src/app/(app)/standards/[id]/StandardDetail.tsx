@@ -244,19 +244,16 @@ export function StandardDetail({ id }: { id: string }) {
             onClick={() => setStepperOpen((o) => !o)}
             className="flex items-center justify-between w-full text-left group"
           >
-            <span className="text-xs text-mid font-semibold uppercase tracking-wide group-hover:text-ink transition-colors">
+            <span className="text-xs text-mid font-semibold uppercase tracking-wide group-hover:text-ink transition-colors inline-flex items-center gap-2">
               Поетапний план виконання
+              <span className="text-[10px] font-normal normal-case text-light">
+                · оновлено {formatDateTime(standard.updatedAt)}
+              </span>
             </span>
             <div className="flex items-center gap-2">
-              {!stepperOpen && (
-                <span className="text-[11px] text-light">
-                  {hasOverdueStage(standard) ? (
-                    <span className="text-red-600 dark:text-red-400 font-semibold">
-                      є прострочений етап
-                    </span>
-                  ) : (
-                    'натисніть, щоб розгорнути'
-                  )}
+              {!stepperOpen && hasOverdueStage(standard) && (
+                <span className="text-[11px] text-red-600 dark:text-red-400 font-semibold">
+                  є прострочений етап
                 </span>
               )}
               <ChevronDown
@@ -301,8 +298,8 @@ export function StandardDetail({ id }: { id: string }) {
         </div>
 
         {/* Meta row */}
-        <div className="mt-4 flex gap-6 flex-wrap text-sm">
-          {standard.responsible && (
+        {standard.responsible && (
+          <div className="mt-4 flex gap-6 flex-wrap text-sm">
             <div className="flex items-center gap-2">
               <span className="text-light text-xs">Відповідальний:</span>
               <Avatar
@@ -312,24 +309,8 @@ export function StandardDetail({ id }: { id: string }) {
               />
               <span className="text-ink text-xs">{standard.responsible.name}</span>
             </div>
-          )}
-          {standard.deadline && (
-            <div className="text-xs">
-              <span className="text-light">Дедлайн: </span>
-              <span
-                className={
-                  new Date(standard.deadline) < new Date() &&
-                  !['ADOPTED', 'ARCHIVED'].includes(standard.status)
-                    ? 'text-red-600 font-medium'
-                    : 'text-ink'
-                }
-              >
-                {formatDate(standard.deadline)}
-              </span>
-            </div>
-          )}
-          <div className="text-xs text-light">Оновлено: {formatDateTime(standard.updatedAt)}</div>
-        </div>
+          </div>
+        )}
       </div>
 
       {/* Tabs */}
