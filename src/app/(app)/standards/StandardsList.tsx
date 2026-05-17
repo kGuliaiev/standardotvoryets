@@ -256,150 +256,152 @@ export function StandardsList() {
             Стандартів не знайдено
           </div>
         ) : (
-          <table className="w-full text-sm">
-            <thead className="bg-page border-b border-hairline">
-              <tr className="text-left text-xs text-mid uppercase tracking-wide">
-                <th className="px-5 py-3 font-medium">
-                  <SortableHeader columnKey="code" sort={sort} onSort={setSort}>
-                    Код / Назва
-                  </SortableHeader>
-                </th>
-                <th className="px-3 py-3 font-medium">
-                  <SortableHeader columnKey="wg" sort={sort} onSort={setSort}>
-                    РГ
-                  </SortableHeader>
-                </th>
-                <th className="px-3 py-3 font-medium">
-                  <SortableHeader columnKey="status" sort={sort} onSort={setSort}>
-                    Статус
-                  </SortableHeader>
-                </th>
-                <th className="px-3 py-3 font-medium">
-                  <SortableHeader columnKey="responsible" sort={sort} onSort={setSort}>
-                    Відповідальний
-                  </SortableHeader>
-                </th>
-                <th className="px-3 py-3 font-medium w-[240px]">
-                  <SortableHeader columnKey="stage" sort={sort} onSort={setSort}>
-                    Етапи
-                  </SortableHeader>
-                </th>
-                <th className="px-3 py-3 font-medium">
-                  <SortableHeader columnKey="deadline" sort={sort} onSort={setSort}>
-                    Дедлайн
-                  </SortableHeader>
-                </th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-hairline">
-              {sortedRows(data?.items, sort, (s, key) => {
-                switch (key) {
-                  case 'code':
-                    return s.code;
-                  case 'wg':
-                    return s.workingGroup.code;
-                  case 'status':
-                    return s.status;
-                  case 'responsible':
-                    return s.responsible?.name ?? null;
-                  case 'deadline':
-                    return s.deadline ? new Date(s.deadline) : null;
-                  case 'stage':
-                    // Sort by earliest unconfirmed due date (overdue first)
-                    return s.techSpecCompletedAt
-                      ? s.draftCompletedAt
-                        ? s.feedbackCompletedAt
-                          ? s.techReviewCompletedAt
-                            ? s.finalCompletedAt
-                              ? new Date(0)
-                              : new Date(s.finalDueDate ?? 0)
-                            : new Date(s.techReviewDueDate ?? 0)
-                          : new Date(s.feedbackDueDate ?? 0)
-                        : new Date(s.draftDueDate ?? 0)
-                      : new Date(s.techSpecDueDate ?? 0);
-                  default:
-                    return null;
-                }
-              }).map((s) => (
-                <tr key={s.id} className="hover:bg-page transition-colors group">
-                  <td className="px-5 py-3.5 max-w-xs">
-                    <Link href={`/standards/${s.id}`} className="block">
-                      <div className="flex items-center gap-1.5">
-                        <span className="font-mono text-xs text-light group-hover:text-blue-500 transition-colors">
-                          {s.code}
-                        </span>
-                        {hasOverdueStage(s) && (
-                          <span
-                            title="Є прострочений етап без підтвердження"
-                            className="inline-flex items-center gap-0.5 text-red-600 dark:text-red-400 text-[10px] font-bold bg-red-50 dark:bg-red-900/30 rounded px-1 py-0.5"
-                          >
-                            <AlertCircle className="w-3 h-3" /> прострочка
-                          </span>
-                        )}
-                      </div>
-                      <p className="font-medium text-ink group-hover:text-blue-700 transition-colors line-clamp-1 mt-0.5">
-                        {s.title}
-                      </p>
-                    </Link>
-                  </td>
-                  <td className="px-3 py-3.5">
-                    <span className="flex items-center gap-1.5">
-                      <span
-                        className="w-2.5 h-2.5 rounded-full flex-shrink-0"
-                        style={{ backgroundColor: s.workingGroup.color }}
-                      />
-                      <span className="text-xs text-mid font-medium">{s.workingGroup.code}</span>
-                    </span>
-                  </td>
-                  <td className="px-3 py-3.5">
-                    <StatusBadge status={s.status} size="sm" />
-                  </td>
-                  <td className="px-3 py-3.5">
-                    {s.responsible ? (
-                      <div className="flex items-center gap-2">
-                        <Avatar
-                          name={s.responsible.name}
-                          avatarUrl={s.responsible.avatarUrl}
-                          size="xs"
-                        />
-                        <span className="text-xs text-mid truncate max-w-[100px]">
-                          {s.responsible.name}
-                        </span>
-                      </div>
-                    ) : (
-                      <span className="text-xs text-light">—</span>
-                    )}
-                  </td>
-                  <td className="px-3 py-3.5">
-                    <StandardProgress
-                      variant="compact"
-                      techSpecDueDate={s.techSpecDueDate}
-                      draftDueDate={s.draftDueDate}
-                      feedbackDueDate={s.feedbackDueDate}
-                      techReviewDueDate={s.techReviewDueDate}
-                      finalDueDate={s.finalDueDate}
-                      techSpecCompletedAt={s.techSpecCompletedAt}
-                      draftCompletedAt={s.draftCompletedAt}
-                      feedbackCompletedAt={s.feedbackCompletedAt}
-                      techReviewCompletedAt={s.techReviewCompletedAt}
-                      finalCompletedAt={s.finalCompletedAt}
-                    />
-                  </td>
-                  <td className="px-3 py-3.5">
-                    {s.deadline ? (
-                      <span
-                        className={`text-xs ${new Date(s.deadline) < new Date() && !['ADOPTED', 'ARCHIVED'].includes(s.status) ? 'text-red-600 font-medium' : 'text-mid'}`}
-                      >
-                        {formatDate(s.deadline)}
-                      </span>
-                    ) : (
-                      <span className="text-light text-xs">—</span>
-                    )}
-                  </td>
+          <div className="overflow-x-auto scrollbar-thin">
+            <table className="w-full text-sm min-w-[640px]">
+              <thead className="bg-page border-b border-hairline">
+                <tr className="text-left text-xs text-mid uppercase tracking-wide">
+                  <th className="px-5 py-3 font-medium">
+                    <SortableHeader columnKey="code" sort={sort} onSort={setSort}>
+                      Код / Назва
+                    </SortableHeader>
+                  </th>
+                  <th className="px-3 py-3 font-medium">
+                    <SortableHeader columnKey="wg" sort={sort} onSort={setSort}>
+                      РГ
+                    </SortableHeader>
+                  </th>
+                  <th className="px-3 py-3 font-medium">
+                    <SortableHeader columnKey="status" sort={sort} onSort={setSort}>
+                      Статус
+                    </SortableHeader>
+                  </th>
+                  <th className="px-3 py-3 font-medium">
+                    <SortableHeader columnKey="responsible" sort={sort} onSort={setSort}>
+                      Відповідальний
+                    </SortableHeader>
+                  </th>
+                  <th className="px-3 py-3 font-medium w-[240px]">
+                    <SortableHeader columnKey="stage" sort={sort} onSort={setSort}>
+                      Етапи
+                    </SortableHeader>
+                  </th>
+                  <th className="px-3 py-3 font-medium">
+                    <SortableHeader columnKey="deadline" sort={sort} onSort={setSort}>
+                      Дедлайн
+                    </SortableHeader>
+                  </th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody className="divide-y divide-hairline">
+                {sortedRows(data?.items, sort, (s, key) => {
+                  switch (key) {
+                    case 'code':
+                      return s.code;
+                    case 'wg':
+                      return s.workingGroup.code;
+                    case 'status':
+                      return s.status;
+                    case 'responsible':
+                      return s.responsible?.name ?? null;
+                    case 'deadline':
+                      return s.deadline ? new Date(s.deadline) : null;
+                    case 'stage':
+                      // Sort by earliest unconfirmed due date (overdue first)
+                      return s.techSpecCompletedAt
+                        ? s.draftCompletedAt
+                          ? s.feedbackCompletedAt
+                            ? s.techReviewCompletedAt
+                              ? s.finalCompletedAt
+                                ? new Date(0)
+                                : new Date(s.finalDueDate ?? 0)
+                              : new Date(s.techReviewDueDate ?? 0)
+                            : new Date(s.feedbackDueDate ?? 0)
+                          : new Date(s.draftDueDate ?? 0)
+                        : new Date(s.techSpecDueDate ?? 0);
+                    default:
+                      return null;
+                  }
+                }).map((s) => (
+                  <tr key={s.id} className="hover:bg-page transition-colors group">
+                    <td className="px-5 py-3.5 max-w-xs">
+                      <Link href={`/standards/${s.id}`} className="block">
+                        <div className="flex items-center gap-1.5">
+                          <span className="font-mono text-xs text-light group-hover:text-blue-500 transition-colors">
+                            {s.code}
+                          </span>
+                          {hasOverdueStage(s) && (
+                            <span
+                              title="Є прострочений етап без підтвердження"
+                              className="inline-flex items-center gap-0.5 text-red-600 dark:text-red-400 text-[10px] font-bold bg-red-50 dark:bg-red-900/30 rounded px-1 py-0.5"
+                            >
+                              <AlertCircle className="w-3 h-3" /> прострочка
+                            </span>
+                          )}
+                        </div>
+                        <p className="font-medium text-ink group-hover:text-blue-700 transition-colors line-clamp-1 mt-0.5">
+                          {s.title}
+                        </p>
+                      </Link>
+                    </td>
+                    <td className="px-3 py-3.5">
+                      <span className="flex items-center gap-1.5">
+                        <span
+                          className="w-2.5 h-2.5 rounded-full flex-shrink-0"
+                          style={{ backgroundColor: s.workingGroup.color }}
+                        />
+                        <span className="text-xs text-mid font-medium">{s.workingGroup.code}</span>
+                      </span>
+                    </td>
+                    <td className="px-3 py-3.5">
+                      <StatusBadge status={s.status} size="sm" />
+                    </td>
+                    <td className="px-3 py-3.5">
+                      {s.responsible ? (
+                        <div className="flex items-center gap-2">
+                          <Avatar
+                            name={s.responsible.name}
+                            avatarUrl={s.responsible.avatarUrl}
+                            size="xs"
+                          />
+                          <span className="text-xs text-mid truncate max-w-[100px]">
+                            {s.responsible.name}
+                          </span>
+                        </div>
+                      ) : (
+                        <span className="text-xs text-light">—</span>
+                      )}
+                    </td>
+                    <td className="px-3 py-3.5">
+                      <StandardProgress
+                        variant="compact"
+                        techSpecDueDate={s.techSpecDueDate}
+                        draftDueDate={s.draftDueDate}
+                        feedbackDueDate={s.feedbackDueDate}
+                        techReviewDueDate={s.techReviewDueDate}
+                        finalDueDate={s.finalDueDate}
+                        techSpecCompletedAt={s.techSpecCompletedAt}
+                        draftCompletedAt={s.draftCompletedAt}
+                        feedbackCompletedAt={s.feedbackCompletedAt}
+                        techReviewCompletedAt={s.techReviewCompletedAt}
+                        finalCompletedAt={s.finalCompletedAt}
+                      />
+                    </td>
+                    <td className="px-3 py-3.5">
+                      {s.deadline ? (
+                        <span
+                          className={`text-xs ${new Date(s.deadline) < new Date() && !['ADOPTED', 'ARCHIVED'].includes(s.status) ? 'text-red-600 font-medium' : 'text-mid'}`}
+                        >
+                          {formatDate(s.deadline)}
+                        </span>
+                      ) : (
+                        <span className="text-light text-xs">—</span>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         )}
 
         {/* Pagination */}

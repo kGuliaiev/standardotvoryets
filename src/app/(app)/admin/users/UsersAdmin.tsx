@@ -207,189 +207,193 @@ export function UsersAdmin() {
             Користувачів не знайдено
           </div>
         ) : (
-          <table className="w-full text-sm">
-            <thead className="bg-page border-b border-hairline">
-              <tr className="text-left text-xs text-mid uppercase tracking-wide">
-                <th className="px-5 py-3 font-medium">
-                  <SortableHeader columnKey="name" sort={sort} onSort={setSort}>
-                    Користувач
-                  </SortableHeader>
-                </th>
-                <th className="px-3 py-3 font-medium">
-                  <SortableHeader columnKey="rank" sort={sort} onSort={setSort}>
-                    Звання
-                  </SortableHeader>
-                </th>
-                <th className="px-3 py-3 font-medium">
-                  <SortableHeader columnKey="position" sort={sort} onSort={setSort}>
-                    Посада
-                  </SortableHeader>
-                </th>
-                <th className="px-3 py-3 font-medium">
-                  <SortableHeader columnKey="role" sort={sort} onSort={setSort}>
-                    Глобальна роль
-                  </SortableHeader>
-                </th>
-                <th className="px-3 py-3 font-medium">
-                  <SortableHeader columnKey="wgs" sort={sort} onSort={setSort}>
-                    Робочі групи
-                  </SortableHeader>
-                </th>
-                <th className="px-3 py-3 font-medium text-right">Дії</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-hairline">
-              {sortedRows(filtered, sort, (u, key) => {
-                switch (key) {
-                  case 'name':
-                    return u.name;
-                  case 'rank':
-                    return RANK_ORDER[u.rank] ?? 0;
-                  case 'position':
-                    return u.position ?? null;
-                  case 'role':
-                    return u.globalRole;
-                  case 'wgs':
-                    return u.memberships.length;
-                  default:
-                    return null;
-                }
-              }).map((u) => {
-                const roleInfo = GLOBAL_ROLE_LABELS[u.globalRole] ?? {
-                  label: u.globalRole,
-                  cls: '',
-                };
-                const isSelf = u.id === session?.user.id;
-                return (
-                  <tr key={u.id} className="hover:bg-page transition-colors">
-                    <td className="px-5 py-3.5">
-                      <div className="flex items-center gap-3">
-                        <Avatar name={u.name} avatarUrl={u.avatarUrl ?? undefined} size="sm" />
-                        <div>
-                          <p className="font-medium text-ink flex items-center gap-1.5">
-                            <RankBadge rank={u.rank} variant="icon" />
-                            <span>{u.name}</span>
-                            {isSelf && <span className="ml-1 text-xs text-light">(ви)</span>}
-                          </p>
-                          <p className="text-xs text-light">{u.email}</p>
+          <div className="overflow-x-auto scrollbar-thin">
+            <table className="w-full text-sm min-w-[820px]">
+              <thead className="bg-page border-b border-hairline">
+                <tr className="text-left text-xs text-mid uppercase tracking-wide">
+                  <th className="px-5 py-3 font-medium">
+                    <SortableHeader columnKey="name" sort={sort} onSort={setSort}>
+                      Користувач
+                    </SortableHeader>
+                  </th>
+                  <th className="px-3 py-3 font-medium">
+                    <SortableHeader columnKey="rank" sort={sort} onSort={setSort}>
+                      Звання
+                    </SortableHeader>
+                  </th>
+                  <th className="px-3 py-3 font-medium">
+                    <SortableHeader columnKey="position" sort={sort} onSort={setSort}>
+                      Посада
+                    </SortableHeader>
+                  </th>
+                  <th className="px-3 py-3 font-medium">
+                    <SortableHeader columnKey="role" sort={sort} onSort={setSort}>
+                      Глобальна роль
+                    </SortableHeader>
+                  </th>
+                  <th className="px-3 py-3 font-medium">
+                    <SortableHeader columnKey="wgs" sort={sort} onSort={setSort}>
+                      Робочі групи
+                    </SortableHeader>
+                  </th>
+                  <th className="px-3 py-3 font-medium text-right">Дії</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-hairline">
+                {sortedRows(filtered, sort, (u, key) => {
+                  switch (key) {
+                    case 'name':
+                      return u.name;
+                    case 'rank':
+                      return RANK_ORDER[u.rank] ?? 0;
+                    case 'position':
+                      return u.position ?? null;
+                    case 'role':
+                      return u.globalRole;
+                    case 'wgs':
+                      return u.memberships.length;
+                    default:
+                      return null;
+                  }
+                }).map((u) => {
+                  const roleInfo = GLOBAL_ROLE_LABELS[u.globalRole] ?? {
+                    label: u.globalRole,
+                    cls: '',
+                  };
+                  const isSelf = u.id === session?.user.id;
+                  return (
+                    <tr key={u.id} className="hover:bg-page transition-colors">
+                      <td className="px-5 py-3.5">
+                        <div className="flex items-center gap-3">
+                          <Avatar name={u.name} avatarUrl={u.avatarUrl ?? undefined} size="sm" />
+                          <div>
+                            <p className="font-medium text-ink flex items-center gap-1.5">
+                              <RankBadge rank={u.rank} variant="icon" />
+                              <span>{u.name}</span>
+                              {isSelf && <span className="ml-1 text-xs text-light">(ви)</span>}
+                            </p>
+                            <p className="text-xs text-light">{u.email}</p>
+                          </div>
                         </div>
-                      </div>
-                    </td>
-                    <td className="px-3 py-3.5">
-                      {u.rank && u.rank !== 'CIVILIAN' ? (
-                        <span className="text-xs text-ink">{rankLabel(u.rank)}</span>
-                      ) : (
-                        <span className="text-xs text-light">—</span>
-                      )}
-                    </td>
-                    <td className="px-3 py-3.5">
-                      <span
-                        className="text-xs text-mid line-clamp-2 max-w-[280px]"
-                        title={u.position ?? ''}
-                      >
-                        {u.position ?? '—'}
-                      </span>
-                    </td>
-                    <td className="px-3 py-3.5">
-                      {isSelf ? (
-                        <span
-                          className={`text-xs px-2 py-1 rounded-full font-medium ${roleInfo.cls}`}
-                        >
-                          {roleInfo.label}
-                        </span>
-                      ) : (
-                        <select
-                          value={u.globalRole}
-                          onChange={(e) =>
-                            changeRoleMutation.mutate({
-                              userId: u.id,
-                              globalRole: e.target.value as 'ADMIN' | 'DIRECTOR' | 'USER',
-                            })
-                          }
-                          className="text-xs border border-hairline rounded-lg px-2 py-1 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                        >
-                          <option value="USER">Користувач</option>
-                          <option value="DIRECTOR">Керівник центру</option>
-                          <option value="ADMIN">Адмін</option>
-                        </select>
-                      )}
-                    </td>
-                    <td className="px-3 py-3.5">
-                      <div className="flex flex-wrap gap-1">
-                        {u.memberships.length === 0 ? (
-                          <span className="text-xs text-light">—</span>
+                      </td>
+                      <td className="px-3 py-3.5">
+                        {u.rank && u.rank !== 'CIVILIAN' ? (
+                          <span className="text-xs text-ink">{rankLabel(u.rank)}</span>
                         ) : (
-                          u.memberships.map((m) => (
-                            <span
-                              key={m.workingGroup.id}
-                              className="inline-flex items-center gap-1 text-xs bg-pill text-mid px-1.5 py-0.5 rounded"
-                            >
-                              <span
-                                className="w-1.5 h-1.5 rounded-full"
-                                style={{ backgroundColor: m.workingGroup.color }}
-                              />
-                              {m.workingGroup.code}
-                              <span className="text-light">
-                                ·{WG_ROLE_LABELS[m.role] ?? m.role}
-                              </span>
-                            </span>
-                          ))
+                          <span className="text-xs text-light">—</span>
                         )}
-                      </div>
-                    </td>
-                    <td className="px-3 py-3.5 text-xs text-light">{formatDate(u.createdAt)}</td>
-                    <td className="px-3 py-3.5 text-right">
-                      <div className="inline-flex gap-1.5">
-                        <button
-                          onClick={() => setEditingUser({ id: u.id, name: u.name, email: u.email })}
-                          className="text-xs text-mid hover:text-brand inline-flex items-center gap-1 border border-hairline rounded-lg px-2.5 py-1 hover:bg-page"
-                          title="Редагувати"
+                      </td>
+                      <td className="px-3 py-3.5">
+                        <span
+                          className="text-xs text-mid line-clamp-2 max-w-[280px]"
+                          title={u.position ?? ''}
                         >
-                          <Pencil className="w-3.5 h-3.5" />
-                          Редагувати
-                        </button>
-                        {!isSelf && (
-                          <button
-                            onClick={() => {
-                              const wantActive = !(u as { isActive?: boolean }).isActive
-                                ? true
-                                : false;
-                              if (
-                                confirm(
-                                  `${wantActive ? 'Активувати' : 'Деактивувати'} користувача "${u.name}"?`,
-                                )
-                              ) {
-                                setActiveMutation.mutate({ userId: u.id, isActive: wantActive });
-                              }
-                            }}
-                            disabled={setActiveMutation.isPending}
-                            className="text-xs text-mid hover:text-ink inline-flex items-center gap-1 border border-hairline rounded-lg px-2.5 py-1 hover:bg-page disabled:opacity-50"
-                            title={
-                              (u as { isActive?: boolean }).isActive === false
-                                ? 'Активувати'
-                                : 'Деактивувати'
-                            }
+                          {u.position ?? '—'}
+                        </span>
+                      </td>
+                      <td className="px-3 py-3.5">
+                        {isSelf ? (
+                          <span
+                            className={`text-xs px-2 py-1 rounded-full font-medium ${roleInfo.cls}`}
                           >
-                            {(u as { isActive?: boolean }).isActive === false ? (
-                              <>
-                                <UserCheck className="w-3.5 h-3.5" />
-                                Активувати
-                              </>
-                            ) : (
-                              <>
-                                <UserX className="w-3.5 h-3.5" />
-                                Деактивувати
-                              </>
-                            )}
-                          </button>
+                            {roleInfo.label}
+                          </span>
+                        ) : (
+                          <select
+                            value={u.globalRole}
+                            onChange={(e) =>
+                              changeRoleMutation.mutate({
+                                userId: u.id,
+                                globalRole: e.target.value as 'ADMIN' | 'DIRECTOR' | 'USER',
+                              })
+                            }
+                            className="text-xs border border-hairline rounded-lg px-2 py-1 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                          >
+                            <option value="USER">Користувач</option>
+                            <option value="DIRECTOR">Керівник центру</option>
+                            <option value="ADMIN">Адмін</option>
+                          </select>
                         )}
-                      </div>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
+                      </td>
+                      <td className="px-3 py-3.5">
+                        <div className="flex flex-wrap gap-1">
+                          {u.memberships.length === 0 ? (
+                            <span className="text-xs text-light">—</span>
+                          ) : (
+                            u.memberships.map((m) => (
+                              <span
+                                key={m.workingGroup.id}
+                                className="inline-flex items-center gap-1 text-xs bg-pill text-mid px-1.5 py-0.5 rounded"
+                              >
+                                <span
+                                  className="w-1.5 h-1.5 rounded-full"
+                                  style={{ backgroundColor: m.workingGroup.color }}
+                                />
+                                {m.workingGroup.code}
+                                <span className="text-light">
+                                  ·{WG_ROLE_LABELS[m.role] ?? m.role}
+                                </span>
+                              </span>
+                            ))
+                          )}
+                        </div>
+                      </td>
+                      <td className="px-3 py-3.5 text-xs text-light">{formatDate(u.createdAt)}</td>
+                      <td className="px-3 py-3.5 text-right">
+                        <div className="inline-flex gap-1.5">
+                          <button
+                            onClick={() =>
+                              setEditingUser({ id: u.id, name: u.name, email: u.email })
+                            }
+                            className="text-xs text-mid hover:text-brand inline-flex items-center gap-1 border border-hairline rounded-lg px-2.5 py-1 hover:bg-page"
+                            title="Редагувати"
+                          >
+                            <Pencil className="w-3.5 h-3.5" />
+                            Редагувати
+                          </button>
+                          {!isSelf && (
+                            <button
+                              onClick={() => {
+                                const wantActive = !(u as { isActive?: boolean }).isActive
+                                  ? true
+                                  : false;
+                                if (
+                                  confirm(
+                                    `${wantActive ? 'Активувати' : 'Деактивувати'} користувача "${u.name}"?`,
+                                  )
+                                ) {
+                                  setActiveMutation.mutate({ userId: u.id, isActive: wantActive });
+                                }
+                              }}
+                              disabled={setActiveMutation.isPending}
+                              className="text-xs text-mid hover:text-ink inline-flex items-center gap-1 border border-hairline rounded-lg px-2.5 py-1 hover:bg-page disabled:opacity-50"
+                              title={
+                                (u as { isActive?: boolean }).isActive === false
+                                  ? 'Активувати'
+                                  : 'Деактивувати'
+                              }
+                            >
+                              {(u as { isActive?: boolean }).isActive === false ? (
+                                <>
+                                  <UserCheck className="w-3.5 h-3.5" />
+                                  Активувати
+                                </>
+                              ) : (
+                                <>
+                                  <UserX className="w-3.5 h-3.5" />
+                                  Деактивувати
+                                </>
+                              )}
+                            </button>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
         )}
 
         {/* Summary */}

@@ -231,6 +231,16 @@
     }
   }
 
+  /* Mobile bottom-sheet slide-in (used by Modal.tsx on <md) */
+  @keyframes slideInFromBottom {
+    from {
+      transform: translateY(100%);
+    }
+    to {
+      transform: translateY(0);
+    }
+  }
+
   /* Token utility classes (so bg-card / text-ink etc. work as Tailwind tokens via config) */
   .scrollbar-thin {
     scrollbar-width: thin;

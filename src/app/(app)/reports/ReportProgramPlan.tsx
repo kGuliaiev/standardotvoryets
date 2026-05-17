@@ -150,8 +150,8 @@ export function ReportProgramPlan() {
         </div>
       </div>
 
-      <div className="bg-card rounded-xl border border-hairline overflow-x-auto">
-        <table className="w-full text-xs">
+      <div className="bg-card rounded-xl border border-hairline overflow-x-auto scrollbar-thin">
+        <table className="w-full text-xs min-w-[1200px]">
           <thead className="bg-page border-b border-hairline text-mid uppercase tracking-wide">
             <tr>
               <th className="px-3 py-2.5 font-medium text-center w-10">

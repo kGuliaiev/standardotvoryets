@@ -184,163 +184,165 @@ export function ProtocolsList() {
             Протоколів не знайдено
           </div>
         ) : (
-          <table className="w-full text-sm">
-            <thead className="bg-page border-b border-hairline">
-              <tr className="text-left text-xs text-mid uppercase tracking-wide">
-                <th className="px-4 py-3 font-medium w-24">
-                  <SortableHeader columnKey="protocolNumber" sort={sort} onSort={setSort}>
-                    № протоколу
-                  </SortableHeader>
-                </th>
-                <th className="px-3 py-3 font-medium">
-                  <SortableHeader columnKey="title" sort={sort} onSort={setSort}>
-                    Тема засідання
-                  </SortableHeader>
-                </th>
-                <th className="px-3 py-3 font-medium">
-                  <SortableHeader columnKey="wg" sort={sort} onSort={setSort}>
-                    РГ
-                  </SortableHeader>
-                </th>
-                <th className="px-3 py-3 font-medium">
-                  <SortableHeader columnKey="date" sort={sort} onSort={setSort}>
-                    Дата
-                  </SortableHeader>
-                </th>
-                <th className="px-3 py-3 font-medium">
-                  <SortableHeader columnKey="status" sort={sort} onSort={setSort}>
-                    Статус
-                  </SortableHeader>
-                </th>
-                <th className="px-3 py-3 font-medium">Головуючий</th>
-                <th className="px-3 py-3 font-medium text-center">Пункти</th>
-                <th className="px-3 py-3 font-medium text-right">Дії</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-hairline">
-              {ordered.map((m) => {
-                const statusInfo = STATUS_LABELS[m.status] ?? { label: m.status, cls: '' };
-                const canEdit =
-                  isAdmin ||
-                  (userCtx ? can(userCtx, 'meeting:uploadMinutes', m.workingGroup.id) : false);
-                const year = new Date(m.startAt).getFullYear();
-                const wgNum = /(\d+)/.exec(m.workingGroup.code)?.[1] ?? '';
-                const protoLabel = m.protocolNumber
-                  ? `№ ${m.protocolNumber}/${wgNum}/${year}`
-                  : '— чернетка —';
-                return (
-                  <tr key={m.id} className="hover:bg-page transition-colors group">
-                    <td className="px-4 py-3 font-mono text-xs">
-                      {m.protocolNumber ? (
-                        <span className="text-ink font-bold">{protoLabel}</span>
-                      ) : (
-                        <span className="text-light italic">{protoLabel}</span>
-                      )}
-                    </td>
-                    <td className="px-3 py-3 max-w-md">
-                      <Link
-                        href={`/meetings/${m.id}`}
-                        className="font-medium text-ink hover:text-brand line-clamp-1"
-                      >
-                        {m.title}
-                      </Link>
-                    </td>
-                    <td className="px-3 py-3">
-                      <Link
-                        href={`/working-groups/${m.workingGroup.id}`}
-                        className="inline-flex items-center gap-1.5"
-                      >
-                        <span
-                          className="w-2 h-2 rounded-full"
-                          style={{ backgroundColor: m.workingGroup.color }}
-                        />
-                        <span className="text-xs text-mid font-mono font-semibold">
-                          {m.workingGroup.code}
-                        </span>
-                      </Link>
-                    </td>
-                    <td className="px-3 py-3 text-xs text-mid whitespace-nowrap">
-                      {formatDate(m.startAt)}
-                    </td>
-                    <td className="px-3 py-3">
-                      <span
-                        className={`text-[11px] px-2 py-0.5 rounded-full font-semibold ${statusInfo.cls}`}
-                      >
-                        {statusInfo.label}
-                      </span>
-                    </td>
-                    <td className="px-3 py-3 text-xs">
-                      {(() => {
-                        const fallbackLeader = m.workingGroup.members?.[0]?.user;
-                        const person = m.chairman ?? fallbackLeader ?? null;
-                        if (!person) return <span className="text-light">—</span>;
-                        return (
-                          <div className="flex items-center gap-1.5">
-                            <Avatar name={person.name} size="xs" />
-                            <span className="text-mid truncate max-w-[140px]">
-                              {rankPrefix(person.rank)}
-                              {person.name}
-                              {!m.chairman && (
-                                <span
-                                  className="text-light ml-1"
-                                  title="Керівник РГ за замовчуванням"
-                                >
-                                  ·
-                                </span>
-                              )}
-                            </span>
-                          </div>
-                        );
-                      })()}
-                    </td>
-                    <td className="px-3 py-3 text-center text-xs text-mid">
-                      {m._count.agendaItems}
-                    </td>
-                    <td className="px-3 py-3">
-                      <div className="inline-flex items-center gap-1 justify-end">
+          <div className="overflow-x-auto scrollbar-thin">
+            <table className="w-full text-sm min-w-[820px]">
+              <thead className="bg-page border-b border-hairline">
+                <tr className="text-left text-xs text-mid uppercase tracking-wide">
+                  <th className="px-4 py-3 font-medium w-24">
+                    <SortableHeader columnKey="protocolNumber" sort={sort} onSort={setSort}>
+                      № протоколу
+                    </SortableHeader>
+                  </th>
+                  <th className="px-3 py-3 font-medium">
+                    <SortableHeader columnKey="title" sort={sort} onSort={setSort}>
+                      Тема засідання
+                    </SortableHeader>
+                  </th>
+                  <th className="px-3 py-3 font-medium">
+                    <SortableHeader columnKey="wg" sort={sort} onSort={setSort}>
+                      РГ
+                    </SortableHeader>
+                  </th>
+                  <th className="px-3 py-3 font-medium">
+                    <SortableHeader columnKey="date" sort={sort} onSort={setSort}>
+                      Дата
+                    </SortableHeader>
+                  </th>
+                  <th className="px-3 py-3 font-medium">
+                    <SortableHeader columnKey="status" sort={sort} onSort={setSort}>
+                      Статус
+                    </SortableHeader>
+                  </th>
+                  <th className="px-3 py-3 font-medium">Головуючий</th>
+                  <th className="px-3 py-3 font-medium text-center">Пункти</th>
+                  <th className="px-3 py-3 font-medium text-right">Дії</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-hairline">
+                {ordered.map((m) => {
+                  const statusInfo = STATUS_LABELS[m.status] ?? { label: m.status, cls: '' };
+                  const canEdit =
+                    isAdmin ||
+                    (userCtx ? can(userCtx, 'meeting:uploadMinutes', m.workingGroup.id) : false);
+                  const year = new Date(m.startAt).getFullYear();
+                  const wgNum = /(\d+)/.exec(m.workingGroup.code)?.[1] ?? '';
+                  const protoLabel = m.protocolNumber
+                    ? `№ ${m.protocolNumber}/${wgNum}/${year}`
+                    : '— чернетка —';
+                  return (
+                    <tr key={m.id} className="hover:bg-page transition-colors group">
+                      <td className="px-4 py-3 font-mono text-xs">
+                        {m.protocolNumber ? (
+                          <span className="text-ink font-bold">{protoLabel}</span>
+                        ) : (
+                          <span className="text-light italic">{protoLabel}</span>
+                        )}
+                      </td>
+                      <td className="px-3 py-3 max-w-md">
                         <Link
                           href={`/meetings/${m.id}`}
-                          title="Переглянути"
-                          className="p-1.5 rounded text-mid hover:text-brand hover:bg-pill transition-colors"
+                          className="font-medium text-ink hover:text-brand line-clamp-1"
                         >
-                          <Eye className="w-3.5 h-3.5" />
+                          {m.title}
                         </Link>
-                        {canEdit && (
+                      </td>
+                      <td className="px-3 py-3">
+                        <Link
+                          href={`/working-groups/${m.workingGroup.id}`}
+                          className="inline-flex items-center gap-1.5"
+                        >
+                          <span
+                            className="w-2 h-2 rounded-full"
+                            style={{ backgroundColor: m.workingGroup.color }}
+                          />
+                          <span className="text-xs text-mid font-mono font-semibold">
+                            {m.workingGroup.code}
+                          </span>
+                        </Link>
+                      </td>
+                      <td className="px-3 py-3 text-xs text-mid whitespace-nowrap">
+                        {formatDate(m.startAt)}
+                      </td>
+                      <td className="px-3 py-3">
+                        <span
+                          className={`text-[11px] px-2 py-0.5 rounded-full font-semibold ${statusInfo.cls}`}
+                        >
+                          {statusInfo.label}
+                        </span>
+                      </td>
+                      <td className="px-3 py-3 text-xs">
+                        {(() => {
+                          const fallbackLeader = m.workingGroup.members?.[0]?.user;
+                          const person = m.chairman ?? fallbackLeader ?? null;
+                          if (!person) return <span className="text-light">—</span>;
+                          return (
+                            <div className="flex items-center gap-1.5">
+                              <Avatar name={person.name} size="xs" />
+                              <span className="text-mid truncate max-w-[140px]">
+                                {rankPrefix(person.rank)}
+                                {person.name}
+                                {!m.chairman && (
+                                  <span
+                                    className="text-light ml-1"
+                                    title="Керівник РГ за замовчуванням"
+                                  >
+                                    ·
+                                  </span>
+                                )}
+                              </span>
+                            </div>
+                          );
+                        })()}
+                      </td>
+                      <td className="px-3 py-3 text-center text-xs text-mid">
+                        {m._count.agendaItems}
+                      </td>
+                      <td className="px-3 py-3">
+                        <div className="inline-flex items-center gap-1 justify-end">
                           <Link
-                            href={`/meetings/${m.id}/protocol`}
-                            title="Редагувати"
+                            href={`/meetings/${m.id}`}
+                            title="Переглянути"
                             className="p-1.5 rounded text-mid hover:text-brand hover:bg-pill transition-colors"
                           >
-                            <Pencil className="w-3.5 h-3.5" />
+                            <Eye className="w-3.5 h-3.5" />
                           </Link>
-                        )}
-                        <a
-                          href={`/api/meetings/${m.id}/protocol.docx`}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          title="Завантажити Word"
-                          className="p-1.5 rounded text-mid hover:text-brand hover:bg-pill transition-colors inline-flex items-center gap-1"
-                        >
-                          <FileText className="w-3.5 h-3.5" />
-                          <span className="text-[10px] font-bold">DOC</span>
-                        </a>
-                        <a
-                          href={`/api/meetings/${m.id}/protocol`}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          title="Завантажити PDF"
-                          className="p-1.5 rounded text-mid hover:text-brand hover:bg-pill transition-colors inline-flex items-center gap-1"
-                        >
-                          <FileText className="w-3.5 h-3.5" />
-                          <span className="text-[10px] font-bold">PDF</span>
-                        </a>
-                      </div>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
+                          {canEdit && (
+                            <Link
+                              href={`/meetings/${m.id}/protocol`}
+                              title="Редагувати"
+                              className="p-1.5 rounded text-mid hover:text-brand hover:bg-pill transition-colors"
+                            >
+                              <Pencil className="w-3.5 h-3.5" />
+                            </Link>
+                          )}
+                          <a
+                            href={`/api/meetings/${m.id}/protocol.docx`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            title="Завантажити Word"
+                            className="p-1.5 rounded text-mid hover:text-brand hover:bg-pill transition-colors inline-flex items-center gap-1"
+                          >
+                            <FileText className="w-3.5 h-3.5" />
+                            <span className="text-[10px] font-bold">DOC</span>
+                          </a>
+                          <a
+                            href={`/api/meetings/${m.id}/protocol`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            title="Завантажити PDF"
+                            className="p-1.5 rounded text-mid hover:text-brand hover:bg-pill transition-colors inline-flex items-center gap-1"
+                          >
+                            <FileText className="w-3.5 h-3.5" />
+                            <span className="text-[10px] font-bold">PDF</span>
+                          </a>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
         )}
       </div>
     </div>

@@ -15,10 +15,10 @@ interface ModalProps {
 }
 
 const SIZE_CLASSES: Record<NonNullable<ModalProps['size']>, string> = {
-  sm: 'max-w-sm',
-  md: 'max-w-lg',
-  lg: 'max-w-2xl',
-  xl: 'max-w-4xl',
+  sm: 'md:max-w-sm',
+  md: 'md:max-w-lg',
+  lg: 'md:max-w-2xl',
+  xl: 'md:max-w-4xl',
 };
 
 export function Modal({
@@ -56,34 +56,43 @@ export function Modal({
     <div
       role="dialog"
       aria-modal="true"
-      className="fixed inset-0 z-[200] flex items-center justify-center bg-[rgba(8,14,33,0.55)] backdrop-blur-sm p-4 animate-fade-in"
+      className="fixed inset-0 z-[200] flex md:items-center justify-center bg-[rgba(8,14,33,0.55)] backdrop-blur-sm md:p-4 animate-fade-in items-end"
       onMouseDown={(e) => {
         if (closeOnOverlay && e.target === e.currentTarget) onClose();
       }}
     >
       <div
         ref={panelRef}
-        className={`bg-card rounded-[18px] shadow-modal w-full ${SIZE_CLASSES[size]} max-h-[92vh] overflow-y-auto`}
+        className={`bg-card shadow-modal w-full overflow-y-auto
+          md:rounded-[18px] md:max-h-[92vh]
+          rounded-t-[18px] max-h-[90vh] animate-[slideInFromBottom_220ms_ease-out]
+          md:animate-fade-in ${SIZE_CLASSES[size]}`}
       >
+        {/* Grab-handle (mobile only) */}
+        <div className="md:hidden flex justify-center py-2">
+          <span className="w-10 h-1 rounded-full bg-hairline" />
+        </div>
         {title && (
-          <div className="flex items-start justify-between gap-4 px-7 pt-7 pb-4">
+          <div className="flex items-start justify-between gap-4 px-5 md:px-7 pt-3 md:pt-7 pb-4">
             <div>
-              {title && <h3 className="text-[18px] font-extrabold text-navy">{title}</h3>}
+              {title && (
+                <h3 className="text-[16px] md:text-[18px] font-extrabold text-navy">{title}</h3>
+              )}
               {subtitle && <p className="text-[13px] text-mid mt-1">{subtitle}</p>}
             </div>
             <button
               type="button"
               onClick={onClose}
-              className="text-light hover:text-ink text-xl leading-none p-1"
+              className="text-light hover:text-ink text-xl leading-none p-1 -mr-1"
               aria-label="Закрити"
             >
               <X className="w-5 h-5" />
             </button>
           </div>
         )}
-        <div className="px-7 pb-5">{children}</div>
+        <div className="px-5 md:px-7 pb-5">{children}</div>
         {footer && (
-          <div className="px-7 py-4 border-t border-hairline flex items-center justify-end gap-2.5">
+          <div className="px-5 md:px-7 py-4 border-t border-hairline flex items-center justify-end gap-2.5 sticky bottom-0 bg-card">
             {footer}
           </div>
         )}
