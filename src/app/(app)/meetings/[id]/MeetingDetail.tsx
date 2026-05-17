@@ -214,34 +214,81 @@ export function MeetingDetail({ id }: Props) {
         {/* Left: main info */}
         <div className="lg:col-span-2 space-y-5">
           {/* Info card */}
-          <div className="bg-card rounded-xl border border-hairline p-5">
-            <div className="grid grid-cols-2 gap-4 text-sm">
-              <div>
-                <p className="text-xs text-light mb-1">Дата та час</p>
-                <p className="font-medium text-ink">{formatDate(meeting.startAt)}</p>
-              </div>
-              <div>
-                <p className="text-xs text-light mb-1">Тривалість</p>
-                <p className="font-medium text-ink">{meeting.durationMins} хв</p>
-              </div>
-              <div>
-                <p className="text-xs text-light mb-1">Формат</p>
-                <p className="font-medium text-ink">
-                  {FORMAT_LABELS[meeting.format] ?? meeting.format}
-                </p>
-              </div>
-              {meeting.location && (
-                <div>
-                  <p className="text-xs text-light mb-1">Місце / Посилання</p>
-                  <p className="font-medium text-ink break-all">{meeting.location}</p>
+          {(() => {
+            const wgLeader = meeting.workingGroup.members.find((m) => m.role === 'LEADER')?.user;
+            const chairman = meeting.chairman ?? wgLeader ?? null;
+            const total = meeting.attendances.length;
+            const confirmed = meeting.attendances.filter((a) => a.status === 'CONFIRMED').length;
+            const hasQuorum = total > 0 && confirmed * 2 > total;
+            return (
+              <div className="bg-card rounded-xl border border-hairline p-5">
+                <div className="grid grid-cols-2 md:grid-cols-3 gap-x-4 gap-y-4 text-sm">
+                  <div>
+                    <p className="text-xs text-light mb-1">Головуючий</p>
+                    <p className="font-medium text-ink">
+                      {chairman ? (
+                        <>
+                          {chairman.name}
+                          {!meeting.chairman && (
+                            <span className="text-[10px] text-light italic ml-1">
+                              · керівник РГ
+                            </span>
+                          )}
+                        </>
+                      ) : (
+                        <span className="text-light italic">не вказано</span>
+                      )}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-light mb-1">Дата та час</p>
+                    <p className="font-medium text-ink">{formatDate(meeting.startAt)}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-light mb-1">Тривалість</p>
+                    <p className="font-medium text-ink">{meeting.durationMins} хв</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-light mb-1">Кворум</p>
+                    {total === 0 ? (
+                      <p className="font-medium text-light italic">учасників немає</p>
+                    ) : (
+                      <p className="font-medium inline-flex items-center gap-1.5">
+                        <span className="text-ink tabular-nums">
+                          {confirmed} / {total}
+                        </span>
+                        <span
+                          className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${
+                            hasQuorum
+                              ? 'bg-green-50 text-green-700 dark:bg-green-900/30 dark:text-green-300'
+                              : 'bg-red-50 text-red-700 dark:bg-red-900/30 dark:text-red-300'
+                          }`}
+                        >
+                          {hasQuorum ? '✓ є кворум' : '✗ немає кворуму'}
+                        </span>
+                      </p>
+                    )}
+                  </div>
+                  <div>
+                    <p className="text-xs text-light mb-1">Формат</p>
+                    <p className="font-medium text-ink">
+                      {FORMAT_LABELS[meeting.format] ?? meeting.format}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-light mb-1">Організатор</p>
+                    <p className="font-medium text-ink">{meeting.createdBy.name}</p>
+                  </div>
+                  {meeting.location && (
+                    <div className="col-span-full">
+                      <p className="text-xs text-light mb-1">Місце / Посилання</p>
+                      <p className="font-medium text-ink break-all">{meeting.location}</p>
+                    </div>
+                  )}
                 </div>
-              )}
-              <div>
-                <p className="text-xs text-light mb-1">Організатор</p>
-                <p className="font-medium text-ink">{meeting.createdBy.name}</p>
               </div>
-            </div>
-          </div>
+            );
+          })()}
 
           {/* Agenda */}
           {meeting.agendaText && (
