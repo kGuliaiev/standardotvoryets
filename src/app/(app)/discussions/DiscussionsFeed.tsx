@@ -7,6 +7,7 @@ import { Avatar } from '@/components/ui/Avatar';
 import { RankBadge } from '@/components/ui/RankBadge';
 import { useLocalStorageState } from '@/lib/useLocalStorageState';
 import { MessageSquare, Sparkles } from 'lucide-react';
+import { renderMentions } from '@/components/ui/MentionTextarea';
 
 const STORAGE_KEY = 'discussions.lastVisit.v1';
 
@@ -183,7 +184,7 @@ export function DiscussionsFeed() {
                             </span>
                           </div>
                           <p className="text-sm text-ink mt-1 leading-relaxed whitespace-pre-wrap break-words">
-                            {c.body}
+                            {renderMentions(c.body)}
                           </p>
                         </div>
                       </li>

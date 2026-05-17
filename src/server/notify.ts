@@ -687,6 +687,73 @@ export async function notifyStageCompleted(
   }
 }
 
+/* ── Comment mentions ──────────────────────────────────────────────────── */
+
+/**
+ * Notify users who were @-mentioned inside a comment body.
+ *
+ * The wire format the editor inserts is `@[Display Name](userId)` —
+ * see `parseMentions()` below. This function takes the already-parsed
+ * list of user IDs and fires one in-app notification per recipient.
+ */
+export async function notifyMentioned(
+  db: PrismaClient,
+  commentId: string,
+  mentionedUserIds: string[],
+  actorUserId: string,
+) {
+  if (mentionedUserIds.length === 0) return;
+  try {
+    const settings = await getSettings(db);
+    if (!settings.commentMentionNotify) return;
+
+    const comment = await db.comment.findUnique({
+      where: { id: commentId },
+      include: {
+        standard: { select: { id: true, code: true, title: true } },
+        author: { select: { name: true } },
+      },
+    });
+    if (!comment) return;
+
+    const uniqueIds = Array.from(new Set(mentionedUserIds)).filter((id) => id !== actorUserId);
+    if (uniqueIds.length === 0) return;
+
+    const users = await db.user.findMany({
+      where: { id: { in: uniqueIds }, isActive: true },
+      select: { id: true, email: true, notifyInApp: true, notifyEmail: true },
+    });
+
+    const snippet = comment.body.replace(/@\[([^\]]+)]\([^)]+\)/g, '@$1').slice(0, 200);
+
+    await emit({
+      db,
+      recipients: users,
+      type: 'MENTION',
+      title: `${comment.author.name} згадав вас у коментарі`,
+      body: `${comment.standard.code} «${comment.standard.title}»\n${snippet}`,
+      link: `/standards/${comment.standard.id}?tab=comments#comment-${comment.id}`,
+      channelEnabled: { inApp: true, email: false },
+    });
+  } catch (e) {
+    console.error('[notifyMentioned]', e);
+  }
+}
+
+/**
+ * Extract user IDs from `@[Display Name](userId)` markers.
+ * Pure function — safe to use in router and frontend tests.
+ */
+export function parseMentions(body: string): string[] {
+  const re = /@\[[^\]]+]\(([a-z0-9]{20,32})\)/gi;
+  const ids: string[] = [];
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(body)) !== null) {
+    if (m[1]) ids.push(m[1]);
+  }
+  return ids;
+}
+
 /* ── Attendance + protocol events ──────────────────────────────────────── */
 
 /**

@@ -101,6 +101,7 @@ enum NotificationType {
   WEEKLY_DIGEST
   ATTENDANCE_DECLINED
   PROTOCOL_PUBLISHED
+  MENTION
 }
 
 enum MilitaryRank {

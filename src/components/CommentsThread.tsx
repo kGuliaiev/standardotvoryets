@@ -6,6 +6,11 @@ import { useSession } from 'next-auth/react';
 import { Avatar } from '@/components/ui/Avatar';
 import { Pencil, Trash2, Reply, Loader2, X, Check } from 'lucide-react';
 import { formatDateTime } from '@/lib/utils';
+import {
+  MentionTextarea,
+  renderMentions,
+  type MentionCandidate,
+} from '@/components/ui/MentionTextarea';
 
 interface Comment {
   id: string;
@@ -21,6 +26,27 @@ export function CommentsThread({ standardId }: { standardId: string }) {
   const { data: session } = useSession();
   const utils = trpc.useUtils();
   const { data: comments, isLoading } = trpc.comment.list.useQuery({ standardId });
+  const { data: standard } = trpc.standard.byId.useQuery({ id: standardId });
+  const { data: workingGroup } = trpc.workingGroup.byId.useQuery(
+    { id: standard?.workingGroupId ?? '' },
+    { enabled: !!standard?.workingGroupId },
+  );
+  const mentionCandidates: MentionCandidate[] = useMemo(() => {
+    if (!workingGroup) return [];
+    return workingGroup.members.map((m) => ({
+      id: m.user.id,
+      name: m.user.name,
+      avatarUrl: m.user.avatarUrl,
+      hint:
+        m.role === 'LEADER'
+          ? 'Керівник'
+          : m.role === 'DEPUTY'
+            ? 'Заступник'
+            : m.role === 'SECRETARY'
+              ? 'Секретар'
+              : undefined,
+    }));
+  }, [workingGroup]);
 
   const [draft, setDraft] = useState('');
   const [replyingTo, setReplyingTo] = useState<string | null>(null);
@@ -95,12 +121,12 @@ export function CommentsThread({ standardId }: { standardId: string }) {
               size="sm"
             />
             <div className="flex-1 space-y-2">
-              <textarea
-                rows={2}
+              <MentionTextarea
                 value={draft}
-                onChange={(e) => setDraft(e.target.value)}
-                placeholder="Залишити коментар…"
-                className="textarea resize-none"
+                onChange={setDraft}
+                candidates={mentionCandidates}
+                rows={2}
+                placeholder="Залишити коментар…  Використовуйте @ для згадки колег."
               />
               <div className="flex items-center justify-between">
                 <p className="text-[11px] text-light">{draft.trim().length}/5000</p>
@@ -140,6 +166,7 @@ export function CommentsThread({ standardId }: { standardId: string }) {
                 replies={c.replies}
                 userId={session?.user.id}
                 canDelete={canDelete(c)}
+                mentionCandidates={mentionCandidates}
                 replyingTo={replyingTo}
                 onReply={(id) => {
                   setReplyingTo(id);
@@ -194,6 +221,7 @@ function CommentItem({
   replies,
   userId,
   canDelete,
+  mentionCandidates,
   replyingTo,
   onReply,
   onCancelReply,
@@ -214,6 +242,7 @@ function CommentItem({
   replies: Comment[];
   userId?: string;
   canDelete: boolean;
+  mentionCandidates: MentionCandidate[];
   replyingTo: string | null;
   onReply: (id: string) => void;
   onCancelReply: () => void;
@@ -248,19 +277,22 @@ function CommentItem({
         onDelete={() => onDelete(comment.id)}
         onReply={() => onReply(comment.id)}
         pending={pending}
+        mentionCandidates={mentionCandidates}
       />
 
       {/* Reply composer */}
       {isReplying && (
         <div className="ml-11 mt-3 flex gap-2 items-start">
-          <textarea
-            rows={2}
-            value={replyDraft}
-            onChange={(e) => setReplyDraft(e.target.value)}
-            placeholder={`Відповісти ${comment.author.name}…`}
-            className="textarea resize-none flex-1"
-            autoFocus
-          />
+          <div className="flex-1">
+            <MentionTextarea
+              value={replyDraft}
+              onChange={setReplyDraft}
+              candidates={mentionCandidates}
+              rows={2}
+              placeholder={`Відповісти ${comment.author.name}…`}
+              autoFocus
+            />
+          </div>
           <div className="flex flex-col gap-1.5">
             <button
               onClick={onSubmitReply}
@@ -299,6 +331,7 @@ function CommentItem({
                 onDelete={() => onDelete(r.id)}
                 onReply={undefined /* no nested replies */}
                 pending={pending}
+                mentionCandidates={mentionCandidates}
               />
             </li>
           ))}
@@ -321,6 +354,7 @@ function CommentRow({
   onDelete,
   onReply,
   pending,
+  mentionCandidates,
 }: {
   comment: Comment;
   isOwn: boolean;
@@ -334,6 +368,7 @@ function CommentRow({
   onDelete: () => void;
   onReply?: () => void;
   pending: boolean;
+  mentionCandidates: MentionCandidate[];
 }) {
   const edited =
     new Date(comment.updatedAt).getTime() - new Date(comment.createdAt).getTime() > 1500;
@@ -352,11 +387,11 @@ function CommentRow({
         </div>
         {isEditing ? (
           <div className="mt-1.5 space-y-2">
-            <textarea
-              rows={3}
+            <MentionTextarea
               value={editDraft}
-              onChange={(e) => onChangeEdit(e.target.value)}
-              className="textarea resize-none"
+              onChange={onChangeEdit}
+              candidates={mentionCandidates}
+              rows={3}
               autoFocus
             />
             <div className="flex gap-2">
@@ -374,8 +409,11 @@ function CommentRow({
             </div>
           </div>
         ) : (
-          <p className="text-[14px] text-ink whitespace-pre-wrap leading-relaxed mt-0.5">
-            {comment.body}
+          <p
+            id={`comment-${comment.id}`}
+            className="text-[14px] text-ink whitespace-pre-wrap leading-relaxed mt-0.5 scroll-mt-24"
+          >
+            {renderMentions(comment.body)}
           </p>
         )}
 

@@ -4,6 +4,7 @@ import { createTRPCRouter, protectedProcedure } from '@/server/trpc';
 import { can } from '@/lib/rbac';
 import { logActivity } from '@/server/audit';
 import { seesAllWorkingGroups } from '@/server/permissions';
+import { notifyMentioned, parseMentions } from '@/server/notify';
 import type { GlobalRole, WorkingGroupRole } from '@prisma/client';
 
 function userCtx(session: {
@@ -96,6 +97,11 @@ export const commentRouter = createTRPCRouter({
           ? `Додано відповідь на коментар`
           : `Додано коментар: "${input.body.slice(0, 80)}${input.body.length > 80 ? '…' : ''}"`,
       });
+
+      const mentionedIds = parseMentions(created.body);
+      if (mentionedIds.length > 0) {
+        await notifyMentioned(ctx.db, created.id, mentionedIds, ctx.session.user.id);
+      }
 
       return created;
     }),
