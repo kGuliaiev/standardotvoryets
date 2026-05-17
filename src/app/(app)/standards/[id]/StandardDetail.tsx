@@ -14,7 +14,7 @@ import { DocumentUploadModal } from '@/components/DocumentUploadModal';
 import { CommentsThread } from '@/components/CommentsThread';
 import { StandardProgress, hasOverdueStage } from '@/components/standards/StandardProgress';
 import { RankBadge } from '@/components/ui/RankBadge';
-import { rankLabel } from '@/lib/ranks';
+import { rankLabel, rankWeight, extractSurname } from '@/lib/ranks';
 import { formatDate, formatDateTime, formatBytes } from '@/lib/utils';
 import { useLocalStorageState } from '@/lib/useLocalStorageState';
 import { can } from '@/lib/rbac';
@@ -37,6 +37,14 @@ const WG_ROLE_LABELS_UA: Record<string, string> = {
   SECRETARY: 'Секретар',
   MEMBER: 'Член РГ',
   GUEST: 'Гість',
+};
+
+const WG_ROLE_ORDER: Record<string, number> = {
+  LEADER: 0,
+  DEPUTY: 1,
+  SECRETARY: 2,
+  MEMBER: 3,
+  GUEST: 4,
 };
 
 const STATUS_TRANSITIONS: Record<StandardStatus, StandardStatus[]> = {
@@ -669,23 +677,34 @@ export function StandardDetail({ id }: { id: string }) {
                 Учасники РГ ({standard.workingGroup.members.length})
               </h3>
               <div className="space-y-3">
-                {standard.workingGroup.members.map((m) => (
-                  <div key={m.userId} className="flex items-center gap-3">
-                    <Avatar name={m.user.name} avatarUrl={m.user.avatarUrl} size="sm" />
-                    <div className="min-w-0 flex-1">
-                      <p className="text-sm font-medium text-ink flex items-center gap-1.5 flex-wrap">
-                        <RankBadge rank={m.user.rank} variant="icon" />
-                        {m.user.rank && m.user.rank !== 'CIVILIAN' && (
-                          <span className="text-xs text-mid font-normal">
-                            {rankLabel(m.user.rank)}
-                          </span>
-                        )}
-                        <span>{m.user.name}</span>
-                      </p>
-                      <p className="text-xs text-light">{WG_ROLE_LABELS_UA[m.role] ?? m.role}</p>
+                {[...standard.workingGroup.members]
+                  .sort((a, b) => {
+                    const r = (WG_ROLE_ORDER[a.role] ?? 99) - (WG_ROLE_ORDER[b.role] ?? 99);
+                    if (r !== 0) return r;
+                    const w = rankWeight(b.user.rank) - rankWeight(a.user.rank);
+                    if (w !== 0) return w;
+                    return extractSurname(a.user.name).localeCompare(
+                      extractSurname(b.user.name),
+                      'uk',
+                    );
+                  })
+                  .map((m) => (
+                    <div key={m.userId} className="flex items-center gap-3">
+                      <Avatar name={m.user.name} avatarUrl={m.user.avatarUrl} size="sm" />
+                      <div className="min-w-0 flex-1">
+                        <p className="text-sm font-medium text-ink flex items-center gap-1.5 flex-wrap">
+                          <RankBadge rank={m.user.rank} variant="icon" />
+                          {m.user.rank && m.user.rank !== 'CIVILIAN' && (
+                            <span className="text-xs text-mid font-normal">
+                              {rankLabel(m.user.rank)}
+                            </span>
+                          )}
+                          <span>{m.user.name}</span>
+                        </p>
+                        <p className="text-xs text-light">{WG_ROLE_LABELS_UA[m.role] ?? m.role}</p>
+                      </div>
                     </div>
-                  </div>
-                ))}
+                  ))}
               </div>
             </div>
           )}
@@ -778,11 +797,22 @@ export function StandardDetail({ id }: { id: string }) {
                 onChange={(e) => setEditForm((f) => ({ ...f, responsibleId: e.target.value }))}
               >
                 <option value="">— не вказано —</option>
-                {standard.workingGroup.members.map((m) => (
-                  <option key={m.userId} value={m.userId}>
-                    {m.user.name} ({m.role})
-                  </option>
-                ))}
+                {[...standard.workingGroup.members]
+                  .sort((a, b) => {
+                    const r = (WG_ROLE_ORDER[a.role] ?? 99) - (WG_ROLE_ORDER[b.role] ?? 99);
+                    if (r !== 0) return r;
+                    const w = rankWeight(b.user.rank) - rankWeight(a.user.rank);
+                    if (w !== 0) return w;
+                    return extractSurname(a.user.name).localeCompare(
+                      extractSurname(b.user.name),
+                      'uk',
+                    );
+                  })
+                  .map((m) => (
+                    <option key={m.userId} value={m.userId}>
+                      {m.user.name} ({WG_ROLE_LABELS_UA[m.role] ?? m.role})
+                    </option>
+                  ))}
               </select>
             </div>
           </div>
