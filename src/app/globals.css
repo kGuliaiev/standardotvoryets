@@ -221,6 +221,16 @@
 }
 
 @layer utilities {
+  /* Mobile drawer slide-in (used by Shell.tsx) */
+  @keyframes slideInFromLeft {
+    from {
+      transform: translateX(-100%);
+    }
+    to {
+      transform: translateX(0);
+    }
+  }
+
   /* Token utility classes (so bg-card / text-ink etc. work as Tailwind tokens via config) */
   .scrollbar-thin {
     scrollbar-width: thin;

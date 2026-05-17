@@ -27,6 +27,8 @@ import { useLocalStorageState } from '@/lib/useLocalStorageState';
 
 interface SidebarProps {
   session: Session;
+  /** When true, ignore the persisted collapsed state and always show the full sidebar. Used for the mobile drawer. */
+  forceExpanded?: boolean;
 }
 
 type BadgeTone = 'brand' | 'rose' | 'amber' | 'gray';
@@ -50,10 +52,14 @@ const BADGE_CLS: Record<BadgeTone, string> = {
   gray: 'bg-pill text-mid',
 };
 
-export function Sidebar({ session }: SidebarProps) {
+export function Sidebar({ session, forceExpanded = false }: SidebarProps) {
   const pathname = usePathname();
   const memberships = session.user.memberships ?? [];
-  const [collapsed, setCollapsed] = useLocalStorageState<boolean>('sidebar.collapsed', false);
+  const [persistedCollapsed, setCollapsed] = useLocalStorageState<boolean>(
+    'sidebar.collapsed',
+    false,
+  );
+  const collapsed = forceExpanded ? false : persistedCollapsed;
 
   const { data: counts } = trpc.dashboard.navCounts.useQuery(undefined, {
     refetchInterval: 60_000,
