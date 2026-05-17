@@ -4,7 +4,12 @@ import { createTRPCRouter, protectedProcedure } from '@/server/trpc';
 import { can } from '@/lib/rbac';
 import { logActivity } from '@/server/audit';
 import { seesAllWorkingGroups } from '@/server/permissions';
-import { notifyMeetingCreated, notifyMeetingChanged } from '@/server/notify';
+import {
+  notifyMeetingCreated,
+  notifyMeetingChanged,
+  notifyAttendanceDeclined,
+  notifyProtocolPublished,
+} from '@/server/notify';
 import type { GlobalRole, WorkingGroupRole } from '@prisma/client';
 
 function userCtx(session: {
@@ -266,6 +271,17 @@ export const meetingRouter = createTRPCRouter({
         after: { status: input.status, note: input.note },
         note: 'Підтвердження участі',
       });
+
+      // Notify chairman + WG leadership when someone declines
+      if (input.status === 'DECLINED' && before?.status !== 'DECLINED') {
+        await notifyAttendanceDeclined(
+          ctx.db,
+          input.meetingId,
+          ctx.session.user.id,
+          ctx.session.user.id,
+        );
+      }
+
       return updated;
     }),
 
@@ -310,6 +326,12 @@ export const meetingRouter = createTRPCRouter({
         after: { status: input.status, note: input.note },
         note: 'Зміна явки секретарем',
       });
+
+      // Notify chairman + WG leadership when the participant transitions to DECLINED
+      if (input.status === 'DECLINED' && before?.status !== 'DECLINED') {
+        await notifyAttendanceDeclined(ctx.db, input.meetingId, input.userId, ctx.session.user.id);
+      }
+
       return updated;
     }),
 
@@ -431,6 +453,10 @@ export const meetingRouter = createTRPCRouter({
         after: { protocolNumber: maxNum + 1 },
         note: `Присвоєно протокол № ${maxNum + 1}`,
       });
+
+      // Protocol number assignment = protocol officially published.
+      await notifyProtocolPublished(ctx.db, input.meetingId, ctx.session.user.id);
+
       return updated;
     }),
 

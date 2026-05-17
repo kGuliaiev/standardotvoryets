@@ -687,6 +687,140 @@ export async function notifyStageCompleted(
   }
 }
 
+/* ── Attendance + protocol events ──────────────────────────────────────── */
+
+/**
+ * Fired when a member changes their attendance to DECLINED (either via
+ * `meeting.confirmAttendance` or when a secretary marks them via
+ * `meeting.setAttendance`). Notifies the meeting's chairman + the WG
+ * secretary so they can plan around the missing quorum.
+ *
+ *  excludeUserId = the actor (so when secretary marks themselves declined,
+ *                  they don't notify themselves).
+ */
+export async function notifyAttendanceDeclined(
+  db: PrismaClient,
+  meetingId: string,
+  declinedUserId: string,
+  actorUserId: string,
+) {
+  try {
+    const m = await db.meeting.findUnique({
+      where: { id: meetingId },
+      include: {
+        workingGroup: {
+          select: {
+            id: true,
+            code: true,
+            members: {
+              where: { role: { in: ['LEADER', 'SECRETARY'] } },
+              select: {
+                user: {
+                  select: {
+                    id: true,
+                    email: true,
+                    notifyInApp: true,
+                    notifyEmail: true,
+                    isActive: true,
+                  },
+                },
+              },
+            },
+          },
+        },
+        chairman: {
+          select: {
+            id: true,
+            email: true,
+            notifyInApp: true,
+            notifyEmail: true,
+            isActive: true,
+            name: true,
+          },
+        },
+      },
+    });
+    if (!m) return;
+    const settings = await getSettings(db);
+    if (!settings.attendanceDeclinedNotify) return;
+
+    const declinedUser = await db.user.findUnique({
+      where: { id: declinedUserId },
+      select: { name: true },
+    });
+
+    // Recipients: chairman + LEADER + SECRETARY of WG; dedupe + skip inactive.
+    const chairman = m.chairman?.isActive
+      ? [
+          {
+            id: m.chairman.id,
+            email: m.chairman.email,
+            notifyInApp: m.chairman.notifyInApp,
+            notifyEmail: m.chairman.notifyEmail,
+          },
+        ]
+      : [];
+    const wgLeads = m.workingGroup.members
+      .map((mm) => mm.user)
+      .filter((u) => u.isActive)
+      .map((u) => ({
+        id: u.id,
+        email: u.email,
+        notifyInApp: u.notifyInApp,
+        notifyEmail: u.notifyEmail,
+      }));
+    const recipients = dedupeRecipients([chairman, wgLeads]);
+
+    await emit({
+      db,
+      recipients,
+      excludeUserId: actorUserId,
+      type: 'ATTENDANCE_DECLINED',
+      title: `Відмова на засіданні: ${declinedUser?.name ?? 'учасник'}`,
+      body: `${m.workingGroup.code} · «${m.title}» · ${formatDate(m.startAt)}`,
+      link: `/meetings/${m.id}`,
+      channelEnabled: { inApp: true, email: false },
+    });
+  } catch (e) {
+    console.error('[notifyAttendanceDeclined]', e);
+  }
+}
+
+/**
+ * Fired when `meeting.assignProtocolNumber` succeeds — i.e. the secretary
+ * has finalized the protocol. Notifies all WG members with a link to the
+ * meeting (where they can read or download the protocol).
+ */
+export async function notifyProtocolPublished(
+  db: PrismaClient,
+  meetingId: string,
+  actorUserId: string,
+) {
+  try {
+    const m = await db.meeting.findUnique({
+      where: { id: meetingId },
+      include: { workingGroup: { select: { id: true, code: true } } },
+    });
+    if (!m) return;
+    const settings = await getSettings(db);
+    if (!settings.protocolPublishedNotify) return;
+
+    const recipients = await workingGroupRecipients(db, m.workingGroupId);
+    await emit({
+      db,
+      recipients,
+      excludeUserId: actorUserId,
+      type: 'PROTOCOL_PUBLISHED',
+      title: `Протокол готовий: ${m.title}`,
+      body: `${m.workingGroup.code} · протокол №${m.protocolNumber} · ${formatDate(m.startAt)}`,
+      link: `/meetings/${m.id}`,
+      channelEnabled: { inApp: true, email: true },
+    });
+  } catch (e) {
+    console.error('[notifyProtocolPublished]', e);
+  }
+}
+
 /* ── Weekly digest (Monday 09:00 Kyiv) ─────────────────────────────────── */
 
 interface DigestBucket {

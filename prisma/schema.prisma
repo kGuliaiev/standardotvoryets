@@ -99,6 +99,8 @@ enum NotificationType {
   STAGE_OVERDUE
   STAGE_COMPLETED
   WEEKLY_DIGEST
+  ATTENDANCE_DECLINED
+  PROTOCOL_PUBLISHED
 }
 
 enum MilitaryRank {
@@ -590,6 +592,10 @@ model SystemSettings {
   stageOverdueNotify        Boolean  @default(true)  // one-shot when stage misses deadline
   stageCompletedNotify      Boolean  @default(true)  // notify leadership when stage confirmed
   weeklyDigestEnabled       Boolean  @default(true)  // Monday 09:00 Kyiv digest to leadership
+
+  // ── Meetings: secondary events ──
+  attendanceDeclinedNotify  Boolean  @default(true)  // alert chairman+secretary when member declines
+  protocolPublishedNotify   Boolean  @default(true)  // alert WG when protocol number is assigned
 
   // ── Channels (system defaults; user can override per-user) ──
   channelEmail              Boolean  @default(true)
