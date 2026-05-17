@@ -505,6 +505,14 @@ async function runTests() {
       documentUploadNotify: false,
       channelEmail: true,
       channelInApp: true,
+      stageDueSoonNotify: true,
+      stageDueLeadDays1: 7,
+      stageDueLeadDays2: 1,
+      stageOverdueNotify: true,
+      stageCompletedNotify: true,
+      weeklyDigestEnabled: true,
+      attendanceDeclinedNotify: true,
+      protocolPublishedNotify: true,
     });
     await expectAuditLog('SystemSettings', '1', 'UPDATE');
   });

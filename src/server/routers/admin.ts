@@ -20,6 +20,14 @@ const settingsSchema = z.object({
   documentUploadNotify: z.boolean(),
   channelEmail: z.boolean(),
   channelInApp: z.boolean(),
+  stageDueSoonNotify: z.boolean(),
+  stageDueLeadDays1: z.number().int().min(1).max(60),
+  stageDueLeadDays2: z.number().int().min(1).max(60),
+  stageOverdueNotify: z.boolean(),
+  stageCompletedNotify: z.boolean(),
+  weeklyDigestEnabled: z.boolean(),
+  attendanceDeclinedNotify: z.boolean(),
+  protocolPublishedNotify: z.boolean(),
 });
 
 export const adminRouter = createTRPCRouter({

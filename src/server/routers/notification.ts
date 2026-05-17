@@ -8,7 +8,29 @@ export const notificationRouter = createTRPCRouter({
     .input(
       z.object({
         unreadOnly: z.boolean().default(false),
-        limit: z.number().min(1).max(50).default(20),
+        limit: z.number().min(1).max(200).default(50),
+        types: z
+          .array(
+            z.enum([
+              'MEETING_INVITE',
+              'MEETING_REMINDER',
+              'VOTE_OPENED',
+              'VOTE_CLOSED',
+              'DOCUMENT_UPLOADED',
+              'COMMENT_ADDED',
+              'TASK_ASSIGNED',
+              'TASK_OVERDUE',
+              'STANDARD_STATUS_CHANGED',
+              'STAGE_DUE_SOON',
+              'STAGE_OVERDUE',
+              'STAGE_COMPLETED',
+              'WEEKLY_DIGEST',
+              'ATTENDANCE_DECLINED',
+              'PROTOCOL_PUBLISHED',
+              'MENTION',
+            ]),
+          )
+          .optional(),
       }),
     )
     .query(async ({ ctx, input }) => {
@@ -16,6 +38,7 @@ export const notificationRouter = createTRPCRouter({
         where: {
           userId: ctx.session.user.id,
           ...(input.unreadOnly ? { read: false } : {}),
+          ...(input.types && input.types.length > 0 ? { type: { in: input.types } } : {}),
         },
         orderBy: { createdAt: 'desc' },
         take: input.limit,

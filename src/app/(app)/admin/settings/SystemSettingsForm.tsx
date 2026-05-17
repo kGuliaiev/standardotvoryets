@@ -13,6 +13,8 @@ import {
   Mail,
   Bell,
   Save,
+  Target,
+  CalendarDays,
 } from 'lucide-react';
 
 interface SettingsState {
@@ -32,7 +34,25 @@ interface SettingsState {
   documentUploadNotify: boolean;
   channelEmail: boolean;
   channelInApp: boolean;
+  stageDueSoonNotify: boolean;
+  stageDueLeadDays1: number;
+  stageDueLeadDays2: number;
+  stageOverdueNotify: boolean;
+  stageCompletedNotify: boolean;
+  weeklyDigestEnabled: boolean;
+  attendanceDeclinedNotify: boolean;
+  protocolPublishedNotify: boolean;
 }
+
+const DAY_OPTIONS = [
+  { v: 1, l: '1 день' },
+  { v: 2, l: '2 дні' },
+  { v: 3, l: '3 дні' },
+  { v: 5, l: '5 днів' },
+  { v: 7, l: '7 днів' },
+  { v: 14, l: '14 днів' },
+  { v: 30, l: '30 днів' },
+];
 
 const HOUR_OPTIONS = [
   { v: 0, l: 'миттєво' },
@@ -86,6 +106,14 @@ export function SystemSettingsForm() {
         documentUploadNotify: data.documentUploadNotify,
         channelEmail: data.channelEmail,
         channelInApp: data.channelInApp,
+        stageDueSoonNotify: data.stageDueSoonNotify,
+        stageDueLeadDays1: data.stageDueLeadDays1,
+        stageDueLeadDays2: data.stageDueLeadDays2,
+        stageOverdueNotify: data.stageOverdueNotify,
+        stageCompletedNotify: data.stageCompletedNotify,
+        weeklyDigestEnabled: data.weeklyDigestEnabled,
+        attendanceDeclinedNotify: data.attendanceDeclinedNotify,
+        protocolPublishedNotify: data.protocolPublishedNotify,
       });
     }
   }, [data, form]);
@@ -165,6 +193,16 @@ export function SystemSettingsForm() {
               checked={form.meetingChangeNotify}
               onChange={(v) => set('meetingChangeNotify', v)}
             />
+            <Toggle
+              label="Сповіщати голову та секретаря, коли учасник відмовляється"
+              checked={form.attendanceDeclinedNotify}
+              onChange={(v) => set('attendanceDeclinedNotify', v)}
+            />
+            <Toggle
+              label="Сповіщати РГ, коли протокол отримав номер (опубліковано)"
+              checked={form.protocolPublishedNotify}
+              onChange={(v) => set('protocolPublishedNotify', v)}
+            />
             <Field label="Нагадування №1 — за скільки часу до засідання">
               <select
                 value={form.meetingRemindLead1Hours}
@@ -195,6 +233,64 @@ export function SystemSettingsForm() {
                 ))}
               </select>
             </Field>
+          </Card>
+
+          {/* Stages */}
+          <Card icon={<Target size={18} />} title="Етапи стандартів (поетапний план)">
+            <Toggle
+              label="Сповіщати про наближення дедлайну етапу"
+              checked={form.stageDueSoonNotify}
+              onChange={(v) => set('stageDueSoonNotify', v)}
+            />
+            <Field label="Перше нагадування (in-app, всім членам РГ)">
+              <select
+                value={form.stageDueLeadDays1}
+                onChange={(e) => set('stageDueLeadDays1', Number(e.target.value))}
+                className="select"
+              >
+                {DAY_OPTIONS.map((o) => (
+                  <option key={o.v} value={o.v}>
+                    {o.l}
+                  </option>
+                ))}
+              </select>
+            </Field>
+            <Field label="Друге нагадування (in-app + email керівництву)">
+              <select
+                value={form.stageDueLeadDays2}
+                onChange={(e) => set('stageDueLeadDays2', Number(e.target.value))}
+                className="select"
+              >
+                {DAY_OPTIONS.map((o) => (
+                  <option key={o.v} value={o.v}>
+                    {o.l}
+                  </option>
+                ))}
+              </select>
+            </Field>
+            <Toggle
+              label="Сповіщати про прострочений етап (один раз)"
+              checked={form.stageOverdueNotify}
+              onChange={(v) => set('stageOverdueNotify', v)}
+            />
+            <Toggle
+              label="Сповіщати керівництво, коли етап підтверджено"
+              checked={form.stageCompletedNotify}
+              onChange={(v) => set('stageCompletedNotify', v)}
+            />
+          </Card>
+
+          {/* Weekly digest */}
+          <Card icon={<CalendarDays size={18} />} title="Тижневий звіт (понеділок 09:00)">
+            <Toggle
+              label="Надсилати тижневий звіт керівникам, заступникам, секретарям РГ та керівництву"
+              checked={form.weeklyDigestEnabled}
+              onChange={(v) => set('weeklyDigestEnabled', v)}
+            />
+            <p className="text-xs text-light leading-relaxed">
+              Звіт містить: прострочені етапи, дедлайни найближчих 7 днів, заплановані засідання
+              тижня, відкриті голосування. Порожні звіти не надсилаються.
+            </p>
           </Card>
 
           {/* Tasks */}
@@ -316,7 +412,38 @@ export function SystemSettingsForm() {
                 />
                 <Row e="Закрито голосування" w="члени РГ" c="дзвіночок" t="одразу" />
                 <Row e="Зміна статусу стандарту" w="члени РГ" c="дзвіночок" t="одразу" />
-                <Row e="Згадка @user в коментарі" w="згаданий" c="email + дзвіночок" t="одразу" />
+                <Row e="Згадка @user в коментарі" w="згаданий" c="дзвіночок" t="одразу" />
+                <Row
+                  e="Етап стандарту — наближення"
+                  w="всі члени РГ + керівництво"
+                  c="дзвіночок (email для керівництва на 2-му)"
+                  t={`за ${form.stageDueLeadDays1} та ${form.stageDueLeadDays2} дн`}
+                />
+                <Row
+                  e="Етап прострочено"
+                  w="керівництво РГ + DIRECTOR/ADMIN"
+                  c="email + дзвіночок"
+                  t="одного разу"
+                />
+                <Row
+                  e="Етап виконано"
+                  w="керівництво РГ + DIRECTOR/ADMIN"
+                  c="дзвіночок"
+                  t="одразу"
+                />
+                <Row
+                  e="Тижневий звіт"
+                  w="керівники, заступники, секретарі, DIRECTOR/ADMIN"
+                  c="email + дзвіночок"
+                  t="понеділок 09:00"
+                />
+                <Row
+                  e="Відмова на засіданні"
+                  w="голова + керівник + секретар"
+                  c="дзвіночок"
+                  t="одразу"
+                />
+                <Row e="Протокол отримав номер" w="всі члени РГ" c="email + дзвіночок" t="одразу" />
               </tbody>
             </table>
           </Card>
