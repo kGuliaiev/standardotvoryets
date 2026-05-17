@@ -221,9 +221,9 @@ export function TasksList() {
         </button>
       </div>
 
-      <div className="grid grid-cols-[260px_1fr] gap-5 items-start">
-        {/* LEFT: Tree */}
-        <aside className="card overflow-hidden self-stretch">
+      <div className="grid grid-cols-1 lg:grid-cols-[260px_1fr] gap-5 items-start">
+        {/* LEFT: Tree (full-width on mobile, fixed sidebar on lg+) */}
+        <aside className="card overflow-hidden self-stretch lg:sticky lg:top-0">
           <div className="p-3 border-b border-hairline">
             <input
               type="search"

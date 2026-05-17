@@ -271,8 +271,8 @@ export function WorkingGroupDetail({ id }: Props) {
 
       {/* Tab content */}
       {tab === 'info' && (
-        <div className="bg-card rounded-xl border border-hairline p-6 space-y-5">
-          <div className="grid grid-cols-2 gap-6">
+        <div className="bg-card rounded-xl border border-hairline p-5 sm:p-6 space-y-5">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6">
             <div>
               <p className="text-xs text-light uppercase tracking-wide mb-1">Код</p>
               <p className="font-mono font-semibold text-ink">{group.code}</p>
@@ -334,121 +334,123 @@ export function WorkingGroupDetail({ id }: Props) {
           {group.members.length === 0 ? (
             <div className="py-12 text-center text-light text-sm">Учасників немає</div>
           ) : (
-            <table className="w-full text-sm">
-              <thead className="bg-page border-b border-hairline">
-                <tr className="text-left text-xs text-mid uppercase tracking-wide">
-                  <th className="px-5 py-3 font-medium">
-                    <SortableHeader columnKey="name" sort={memberSort} onSort={setMemberSort}>
-                      Учасник
-                    </SortableHeader>
-                  </th>
-                  <th className="px-3 py-3 font-medium">
-                    <SortableHeader columnKey="email" sort={memberSort} onSort={setMemberSort}>
-                      Email
-                    </SortableHeader>
-                  </th>
-                  <th className="px-3 py-3 font-medium">
-                    <SortableHeader columnKey="role" sort={memberSort} onSort={setMemberSort}>
-                      Роль
-                    </SortableHeader>
-                  </th>
-                  <th className="px-3 py-3 font-medium">
-                    <SortableHeader columnKey="joined" sort={memberSort} onSort={setMemberSort}>
-                      З
-                    </SortableHeader>
-                  </th>
-                  {canInvite && <th className="px-3 py-3" />}
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-hairline">
-                {sortedRows(group.members, memberSort, (m, key) => {
-                  switch (key) {
-                    case 'name':
-                      return m.user.name;
-                    case 'email':
-                      return m.user.email;
-                    case 'role':
-                      return ROLE_ORDER[m.role] ?? 99;
-                    case 'rank':
-                      return MEMBER_RANK_ORDER[m.user.rank] ?? 99;
-                    case 'joined':
-                      return new Date(m.joinedAt);
-                    default:
-                      return null;
-                  }
-                }).map((m) => (
-                  <tr key={m.userId} className="hover:bg-page transition-colors">
-                    <td className="px-5 py-3">
-                      <div className="flex items-center gap-2.5">
-                        <Avatar name={m.user.name} size="sm" />
-                        <div className="min-w-0">
-                          <p className="font-medium text-ink flex items-center gap-1.5 flex-wrap">
-                            <RankBadge rank={m.user.rank} variant="icon" />
-                            {m.user.rank && m.user.rank !== 'CIVILIAN' && (
-                              <span className="text-xs text-mid font-normal">
-                                {rankLabel(m.user.rank)}
-                              </span>
-                            )}
-                            <span>{m.user.name}</span>
-                          </p>
-                          {m.user.position && (
-                            <p
-                              className="text-[11px] text-light line-clamp-1 mt-0.5"
-                              title={m.user.position}
-                            >
-                              {m.user.position}
+            <div className="overflow-x-auto scrollbar-thin">
+              <table className="w-full text-sm min-w-[640px]">
+                <thead className="bg-page border-b border-hairline">
+                  <tr className="text-left text-xs text-mid uppercase tracking-wide">
+                    <th className="px-5 py-3 font-medium">
+                      <SortableHeader columnKey="name" sort={memberSort} onSort={setMemberSort}>
+                        Учасник
+                      </SortableHeader>
+                    </th>
+                    <th className="px-3 py-3 font-medium">
+                      <SortableHeader columnKey="email" sort={memberSort} onSort={setMemberSort}>
+                        Email
+                      </SortableHeader>
+                    </th>
+                    <th className="px-3 py-3 font-medium">
+                      <SortableHeader columnKey="role" sort={memberSort} onSort={setMemberSort}>
+                        Роль
+                      </SortableHeader>
+                    </th>
+                    <th className="px-3 py-3 font-medium">
+                      <SortableHeader columnKey="joined" sort={memberSort} onSort={setMemberSort}>
+                        З
+                      </SortableHeader>
+                    </th>
+                    {canInvite && <th className="px-3 py-3" />}
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-hairline">
+                  {sortedRows(group.members, memberSort, (m, key) => {
+                    switch (key) {
+                      case 'name':
+                        return m.user.name;
+                      case 'email':
+                        return m.user.email;
+                      case 'role':
+                        return ROLE_ORDER[m.role] ?? 99;
+                      case 'rank':
+                        return MEMBER_RANK_ORDER[m.user.rank] ?? 99;
+                      case 'joined':
+                        return new Date(m.joinedAt);
+                      default:
+                        return null;
+                    }
+                  }).map((m) => (
+                    <tr key={m.userId} className="hover:bg-page transition-colors">
+                      <td className="px-5 py-3">
+                        <div className="flex items-center gap-2.5">
+                          <Avatar name={m.user.name} size="sm" />
+                          <div className="min-w-0">
+                            <p className="font-medium text-ink flex items-center gap-1.5 flex-wrap">
+                              <RankBadge rank={m.user.rank} variant="icon" />
+                              {m.user.rank && m.user.rank !== 'CIVILIAN' && (
+                                <span className="text-xs text-mid font-normal">
+                                  {rankLabel(m.user.rank)}
+                                </span>
+                              )}
+                              <span>{m.user.name}</span>
                             </p>
-                          )}
+                            {m.user.position && (
+                              <p
+                                className="text-[11px] text-light line-clamp-1 mt-0.5"
+                                title={m.user.position}
+                              >
+                                {m.user.position}
+                              </p>
+                            )}
+                          </div>
                         </div>
-                      </div>
-                    </td>
-                    <td className="px-3 py-3 text-mid text-xs">{m.user.email}</td>
-                    <td className="px-3 py-3">
-                      {canInvite && session?.user.id !== m.userId ? (
-                        <select
-                          value={m.role}
-                          onChange={(e) =>
-                            changeRoleMutation.mutate({
-                              workingGroupId: id,
-                              userId: m.userId,
-                              role: e.target.value as WorkingGroupRole,
-                            })
-                          }
-                          className="text-xs border border-hairline rounded-lg px-2 py-1 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                        >
-                          {ROLE_OPTIONS.map((o) => (
-                            <option key={o.value} value={o.value}>
-                              {o.label}
-                            </option>
-                          ))}
-                        </select>
-                      ) : (
-                        <span className="text-xs bg-pill text-mid px-2 py-1 rounded-full">
-                          {ROLE_OPTIONS.find((o) => o.value === m.role)?.label ?? m.role}
-                        </span>
-                      )}
-                    </td>
-                    <td className="px-3 py-3 text-xs text-light">{formatDate(m.joinedAt)}</td>
-                    {canInvite && (
-                      <td className="px-3 py-3 text-right">
-                        {session?.user.id !== m.userId && (
-                          <button
-                            onClick={() => {
-                              if (confirm(`Видалити ${m.user.name} з групи?`)) {
-                                removeMutation.mutate({ workingGroupId: id, userId: m.userId });
-                              }
-                            }}
-                            className="text-xs text-red-500 hover:text-red-700 transition-colors px-2 py-1 rounded hover:bg-red-50"
+                      </td>
+                      <td className="px-3 py-3 text-mid text-xs">{m.user.email}</td>
+                      <td className="px-3 py-3">
+                        {canInvite && session?.user.id !== m.userId ? (
+                          <select
+                            value={m.role}
+                            onChange={(e) =>
+                              changeRoleMutation.mutate({
+                                workingGroupId: id,
+                                userId: m.userId,
+                                role: e.target.value as WorkingGroupRole,
+                              })
+                            }
+                            className="text-xs border border-hairline rounded-lg px-2 py-1 focus:outline-none focus:ring-2 focus:ring-blue-500"
                           >
-                            Видалити
-                          </button>
+                            {ROLE_OPTIONS.map((o) => (
+                              <option key={o.value} value={o.value}>
+                                {o.label}
+                              </option>
+                            ))}
+                          </select>
+                        ) : (
+                          <span className="text-xs bg-pill text-mid px-2 py-1 rounded-full">
+                            {ROLE_OPTIONS.find((o) => o.value === m.role)?.label ?? m.role}
+                          </span>
                         )}
                       </td>
-                    )}
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+                      <td className="px-3 py-3 text-xs text-light">{formatDate(m.joinedAt)}</td>
+                      {canInvite && (
+                        <td className="px-3 py-3 text-right">
+                          {session?.user.id !== m.userId && (
+                            <button
+                              onClick={() => {
+                                if (confirm(`Видалити ${m.user.name} з групи?`)) {
+                                  removeMutation.mutate({ workingGroupId: id, userId: m.userId });
+                                }
+                              }}
+                              className="text-xs text-red-500 hover:text-red-700 transition-colors px-2 py-1 rounded hover:bg-red-50"
+                            >
+                              Видалити
+                            </button>
+                          )}
+                        </td>
+                      )}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           )}
         </div>
       )}
@@ -467,86 +469,92 @@ export function WorkingGroupDetail({ id }: Props) {
           {!standards || standards.items.length === 0 ? (
             <div className="py-12 text-center text-light text-sm">Стандартів немає</div>
           ) : (
-            <table className="w-full text-sm">
-              <thead className="bg-page border-b border-hairline">
-                <tr className="text-left text-xs text-mid uppercase tracking-wide">
-                  <th className="px-5 py-3 font-medium">
-                    <SortableHeader columnKey="code" sort={standardSort} onSort={setStandardSort}>
-                      Код / Назва
-                    </SortableHeader>
-                  </th>
-                  <th className="px-3 py-3 font-medium">
-                    <SortableHeader columnKey="status" sort={standardSort} onSort={setStandardSort}>
-                      Статус
-                    </SortableHeader>
-                  </th>
-                  <th className="px-3 py-3 font-medium">
-                    <SortableHeader
-                      columnKey="progress"
-                      sort={standardSort}
-                      onSort={setStandardSort}
-                    >
-                      Прогрес
-                    </SortableHeader>
-                  </th>
-                  <th className="px-3 py-3 font-medium">
-                    <SortableHeader
-                      columnKey="deadline"
-                      sort={standardSort}
-                      onSort={setStandardSort}
-                    >
-                      Дедлайн
-                    </SortableHeader>
-                  </th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-hairline">
-                {sortedRows(standards.items, standardSort, (s, key) => {
-                  switch (key) {
-                    case 'code':
-                      return s.code;
-                    case 'status':
-                      return s.status;
-                    case 'progress':
-                      return s.progress;
-                    case 'deadline':
-                      return s.deadline ? new Date(s.deadline) : null;
-                    default:
-                      return null;
-                  }
-                }).map((s) => (
-                  <tr key={s.id} className="hover:bg-page transition-colors">
-                    <td className="px-5 py-3.5 max-w-xs">
-                      <Link href={`/standards/${s.id}`} className="block group">
-                        <span className="font-mono text-xs text-light group-hover:text-blue-500">
-                          {s.code}
-                        </span>
-                        <p className="font-medium text-ink group-hover:text-blue-700 line-clamp-1 mt-0.5">
-                          {s.title}
-                        </p>
-                      </Link>
-                    </td>
-                    <td className="px-3 py-3.5">
-                      <StatusBadge status={s.status} size="sm" />
-                    </td>
-                    <td className="px-3 py-3.5">
-                      <div className="flex items-center gap-2">
-                        <div className="w-16 h-1.5 bg-pill rounded-full overflow-hidden">
-                          <div
-                            className="h-full bg-blue-500 rounded-full"
-                            style={{ width: `${s.progress}%` }}
-                          />
-                        </div>
-                        <span className="text-xs text-light">{s.progress}%</span>
-                      </div>
-                    </td>
-                    <td className="px-3 py-3.5 text-xs text-mid">
-                      {s.deadline ? formatDate(s.deadline) : '—'}
-                    </td>
+            <div className="overflow-x-auto scrollbar-thin">
+              <table className="w-full text-sm min-w-[640px]">
+                <thead className="bg-page border-b border-hairline">
+                  <tr className="text-left text-xs text-mid uppercase tracking-wide">
+                    <th className="px-5 py-3 font-medium">
+                      <SortableHeader columnKey="code" sort={standardSort} onSort={setStandardSort}>
+                        Код / Назва
+                      </SortableHeader>
+                    </th>
+                    <th className="px-3 py-3 font-medium">
+                      <SortableHeader
+                        columnKey="status"
+                        sort={standardSort}
+                        onSort={setStandardSort}
+                      >
+                        Статус
+                      </SortableHeader>
+                    </th>
+                    <th className="px-3 py-3 font-medium">
+                      <SortableHeader
+                        columnKey="progress"
+                        sort={standardSort}
+                        onSort={setStandardSort}
+                      >
+                        Прогрес
+                      </SortableHeader>
+                    </th>
+                    <th className="px-3 py-3 font-medium">
+                      <SortableHeader
+                        columnKey="deadline"
+                        sort={standardSort}
+                        onSort={setStandardSort}
+                      >
+                        Дедлайн
+                      </SortableHeader>
+                    </th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody className="divide-y divide-hairline">
+                  {sortedRows(standards.items, standardSort, (s, key) => {
+                    switch (key) {
+                      case 'code':
+                        return s.code;
+                      case 'status':
+                        return s.status;
+                      case 'progress':
+                        return s.progress;
+                      case 'deadline':
+                        return s.deadline ? new Date(s.deadline) : null;
+                      default:
+                        return null;
+                    }
+                  }).map((s) => (
+                    <tr key={s.id} className="hover:bg-page transition-colors">
+                      <td className="px-5 py-3.5 max-w-xs">
+                        <Link href={`/standards/${s.id}`} className="block group">
+                          <span className="font-mono text-xs text-light group-hover:text-blue-500">
+                            {s.code}
+                          </span>
+                          <p className="font-medium text-ink group-hover:text-blue-700 line-clamp-1 mt-0.5">
+                            {s.title}
+                          </p>
+                        </Link>
+                      </td>
+                      <td className="px-3 py-3.5">
+                        <StatusBadge status={s.status} size="sm" />
+                      </td>
+                      <td className="px-3 py-3.5">
+                        <div className="flex items-center gap-2">
+                          <div className="w-16 h-1.5 bg-pill rounded-full overflow-hidden">
+                            <div
+                              className="h-full bg-blue-500 rounded-full"
+                              style={{ width: `${s.progress}%` }}
+                            />
+                          </div>
+                          <span className="text-xs text-light">{s.progress}%</span>
+                        </div>
+                      </td>
+                      <td className="px-3 py-3.5 text-xs text-mid">
+                        {s.deadline ? formatDate(s.deadline) : '—'}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           )}
         </div>
       )}
@@ -565,67 +573,69 @@ export function WorkingGroupDetail({ id }: Props) {
           {!meetings || meetings.length === 0 ? (
             <div className="py-12 text-center text-light text-sm">Засідань немає</div>
           ) : (
-            <table className="w-full text-sm">
-              <thead className="bg-page border-b border-hairline">
-                <tr className="text-left text-xs text-mid uppercase tracking-wide">
-                  <th className="px-5 py-3 font-medium">
-                    <SortableHeader columnKey="title" sort={meetingSort} onSort={setMeetingSort}>
-                      Тема
-                    </SortableHeader>
-                  </th>
-                  <th className="px-3 py-3 font-medium">
-                    <SortableHeader columnKey="date" sort={meetingSort} onSort={setMeetingSort}>
-                      Дата
-                    </SortableHeader>
-                  </th>
-                  <th className="px-3 py-3 font-medium">Формат</th>
-                  <th className="px-3 py-3 font-medium">
-                    <SortableHeader columnKey="status" sort={meetingSort} onSort={setMeetingSort}>
-                      Статус
-                    </SortableHeader>
-                  </th>
-                  <th className="px-3 py-3 font-medium">Учасники</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-hairline">
-                {sortedRows(meetings, meetingSort, (m, key) => {
-                  switch (key) {
-                    case 'title':
-                      return m.title;
-                    case 'date':
-                      return new Date(m.startAt);
-                    case 'status':
-                      return m.status;
-                    default:
-                      return null;
-                  }
-                }).map((m) => {
-                  const s = MEETING_STATUS_LABELS[m.status] ?? { label: m.status, cls: '' };
-                  return (
-                    <tr key={m.id} className="hover:bg-page transition-colors">
-                      <td className="px-5 py-3.5 max-w-xs">
-                        <Link
-                          href={`/meetings/${m.id}`}
-                          className="font-medium text-ink hover:text-blue-700 line-clamp-1"
-                        >
-                          {m.title}
-                        </Link>
-                      </td>
-                      <td className="px-3 py-3.5 text-xs text-mid">{formatDate(m.startAt)}</td>
-                      <td className="px-3 py-3.5 text-xs text-mid">
-                        {FORMAT_LABELS[m.format] ?? m.format}
-                      </td>
-                      <td className="px-3 py-3.5">
-                        <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${s.cls}`}>
-                          {s.label}
-                        </span>
-                      </td>
-                      <td className="px-3 py-3.5 text-xs text-light">{m._count.attendances}</td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
+            <div className="overflow-x-auto scrollbar-thin">
+              <table className="w-full text-sm min-w-[640px]">
+                <thead className="bg-page border-b border-hairline">
+                  <tr className="text-left text-xs text-mid uppercase tracking-wide">
+                    <th className="px-5 py-3 font-medium">
+                      <SortableHeader columnKey="title" sort={meetingSort} onSort={setMeetingSort}>
+                        Тема
+                      </SortableHeader>
+                    </th>
+                    <th className="px-3 py-3 font-medium">
+                      <SortableHeader columnKey="date" sort={meetingSort} onSort={setMeetingSort}>
+                        Дата
+                      </SortableHeader>
+                    </th>
+                    <th className="px-3 py-3 font-medium">Формат</th>
+                    <th className="px-3 py-3 font-medium">
+                      <SortableHeader columnKey="status" sort={meetingSort} onSort={setMeetingSort}>
+                        Статус
+                      </SortableHeader>
+                    </th>
+                    <th className="px-3 py-3 font-medium">Учасники</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-hairline">
+                  {sortedRows(meetings, meetingSort, (m, key) => {
+                    switch (key) {
+                      case 'title':
+                        return m.title;
+                      case 'date':
+                        return new Date(m.startAt);
+                      case 'status':
+                        return m.status;
+                      default:
+                        return null;
+                    }
+                  }).map((m) => {
+                    const s = MEETING_STATUS_LABELS[m.status] ?? { label: m.status, cls: '' };
+                    return (
+                      <tr key={m.id} className="hover:bg-page transition-colors">
+                        <td className="px-5 py-3.5 max-w-xs">
+                          <Link
+                            href={`/meetings/${m.id}`}
+                            className="font-medium text-ink hover:text-blue-700 line-clamp-1"
+                          >
+                            {m.title}
+                          </Link>
+                        </td>
+                        <td className="px-3 py-3.5 text-xs text-mid">{formatDate(m.startAt)}</td>
+                        <td className="px-3 py-3.5 text-xs text-mid">
+                          {FORMAT_LABELS[m.format] ?? m.format}
+                        </td>
+                        <td className="px-3 py-3.5">
+                          <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${s.cls}`}>
+                            {s.label}
+                          </span>
+                        </td>
+                        <td className="px-3 py-3.5 text-xs text-light">{m._count.attendances}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
           )}
         </div>
       )}
@@ -649,97 +659,101 @@ export function WorkingGroupDetail({ id }: Props) {
                 У стандартах цієї групи ще немає завантажених документів
               </div>
             ) : (
-              <table className="w-full text-sm">
-                <thead className="bg-[#FAFBFD] border-b border-hairline">
-                  <tr className="text-left text-[10px] text-light uppercase tracking-wide">
-                    <th className="px-5 py-2.5 font-bold">
-                      <SortableHeader columnKey="name" sort={docSort} onSort={setDocSort}>
-                        Файл
-                      </SortableHeader>
-                    </th>
-                    <th className="px-3 py-2.5 font-bold">Тип</th>
-                    <th className="px-3 py-2.5 font-bold">Стандарт</th>
-                    <th className="px-3 py-2.5 font-bold">Версія</th>
-                    <th className="px-3 py-2.5 font-bold">
-                      <SortableHeader columnKey="size" sort={docSort} onSort={setDocSort}>
-                        Розмір
-                      </SortableHeader>
-                    </th>
-                    <th className="px-3 py-2.5 font-bold">Завантажив</th>
-                    <th className="px-3 py-2.5 font-bold">
-                      <SortableHeader columnKey="date" sort={docSort} onSort={setDocSort}>
-                        Дата / час
-                      </SortableHeader>
-                    </th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-hairline">
-                  {sortedRows(docsBundle.documents, docSort, (d, key) => {
-                    switch (key) {
-                      case 'name':
-                        return d.filename;
-                      case 'date':
-                        return new Date(d.uploadedAt);
-                      case 'size':
-                        return d.sizeBytes;
-                      default:
-                        return null;
-                    }
-                  }).map((d) => {
-                    const tInfo = DOC_TYPE_LABELS[d.type] ?? {
-                      label: d.type,
-                      cls: 'bg-pill text-mid',
-                    };
-                    const ext = d.filename.split('.').pop()?.toUpperCase().slice(0, 4) ?? '';
-                    return (
-                      <tr key={d.id} className="hover:bg-[#FAFBFD]">
-                        <td className="px-5 py-3">
-                          <div className="flex items-center gap-3">
-                            <div className="w-8 h-8 bg-brand-soft text-brand rounded-[8px] flex items-center justify-center text-[10px] font-bold shrink-0">
-                              {ext}
-                            </div>
-                            <span className="text-ink font-medium truncate max-w-[260px]">
-                              {d.filename}
-                            </span>
-                            {d.isCurrent && (
-                              <span className="text-[10px] font-bold rounded-full px-2 py-0.5 bg-[#ECFDF5] text-[#065F46]">
-                                Актуальний
+              <div className="overflow-x-auto scrollbar-thin">
+                <table className="w-full text-sm min-w-[640px]">
+                  <thead className="bg-[#FAFBFD] border-b border-hairline">
+                    <tr className="text-left text-[10px] text-light uppercase tracking-wide">
+                      <th className="px-5 py-2.5 font-bold">
+                        <SortableHeader columnKey="name" sort={docSort} onSort={setDocSort}>
+                          Файл
+                        </SortableHeader>
+                      </th>
+                      <th className="px-3 py-2.5 font-bold">Тип</th>
+                      <th className="px-3 py-2.5 font-bold">Стандарт</th>
+                      <th className="px-3 py-2.5 font-bold">Версія</th>
+                      <th className="px-3 py-2.5 font-bold">
+                        <SortableHeader columnKey="size" sort={docSort} onSort={setDocSort}>
+                          Розмір
+                        </SortableHeader>
+                      </th>
+                      <th className="px-3 py-2.5 font-bold">Завантажив</th>
+                      <th className="px-3 py-2.5 font-bold">
+                        <SortableHeader columnKey="date" sort={docSort} onSort={setDocSort}>
+                          Дата / час
+                        </SortableHeader>
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-hairline">
+                    {sortedRows(docsBundle.documents, docSort, (d, key) => {
+                      switch (key) {
+                        case 'name':
+                          return d.filename;
+                        case 'date':
+                          return new Date(d.uploadedAt);
+                        case 'size':
+                          return d.sizeBytes;
+                        default:
+                          return null;
+                      }
+                    }).map((d) => {
+                      const tInfo = DOC_TYPE_LABELS[d.type] ?? {
+                        label: d.type,
+                        cls: 'bg-pill text-mid',
+                      };
+                      const ext = d.filename.split('.').pop()?.toUpperCase().slice(0, 4) ?? '';
+                      return (
+                        <tr key={d.id} className="hover:bg-[#FAFBFD]">
+                          <td className="px-5 py-3">
+                            <div className="flex items-center gap-3">
+                              <div className="w-8 h-8 bg-brand-soft text-brand rounded-[8px] flex items-center justify-center text-[10px] font-bold shrink-0">
+                                {ext}
+                              </div>
+                              <span className="text-ink font-medium truncate max-w-[260px]">
+                                {d.filename}
                               </span>
-                            )}
-                          </div>
-                        </td>
-                        <td className="px-3 py-3">
-                          <span
-                            className={`text-[10px] font-bold rounded-full px-2 py-0.5 ${tInfo.cls}`}
-                          >
-                            {tInfo.label}
-                          </span>
-                        </td>
-                        <td className="px-3 py-3">
-                          <Link
-                            href={`/standards/${d.standard.id}`}
-                            className="font-mono text-xs text-mid hover:text-brand"
-                          >
-                            {d.standard.code}
-                          </Link>
-                        </td>
-                        <td className="px-3 py-3 text-xs text-mid font-mono">{d.version ?? '—'}</td>
-                        <td className="px-3 py-3 text-xs text-mid">{formatBytes(d.sizeBytes)}</td>
-                        <td className="px-3 py-3 text-xs text-mid">{d.uploadedBy.name}</td>
-                        <td className="px-3 py-3 text-xs text-light font-mono">
-                          {new Date(d.uploadedAt).toLocaleString('uk-UA', {
-                            year: 'numeric',
-                            month: '2-digit',
-                            day: '2-digit',
-                            hour: '2-digit',
-                            minute: '2-digit',
-                          })}
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
+                              {d.isCurrent && (
+                                <span className="text-[10px] font-bold rounded-full px-2 py-0.5 bg-[#ECFDF5] text-[#065F46]">
+                                  Актуальний
+                                </span>
+                              )}
+                            </div>
+                          </td>
+                          <td className="px-3 py-3">
+                            <span
+                              className={`text-[10px] font-bold rounded-full px-2 py-0.5 ${tInfo.cls}`}
+                            >
+                              {tInfo.label}
+                            </span>
+                          </td>
+                          <td className="px-3 py-3">
+                            <Link
+                              href={`/standards/${d.standard.id}`}
+                              className="font-mono text-xs text-mid hover:text-brand"
+                            >
+                              {d.standard.code}
+                            </Link>
+                          </td>
+                          <td className="px-3 py-3 text-xs text-mid font-mono">
+                            {d.version ?? '—'}
+                          </td>
+                          <td className="px-3 py-3 text-xs text-mid">{formatBytes(d.sizeBytes)}</td>
+                          <td className="px-3 py-3 text-xs text-mid">{d.uploadedBy.name}</td>
+                          <td className="px-3 py-3 text-xs text-light font-mono">
+                            {new Date(d.uploadedAt).toLocaleString('uk-UA', {
+                              year: 'numeric',
+                              month: '2-digit',
+                              day: '2-digit',
+                              hour: '2-digit',
+                              minute: '2-digit',
+                            })}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
             )}
           </div>
 
@@ -760,49 +774,51 @@ export function WorkingGroupDetail({ id }: Props) {
                 Протоколів ще немає. Додавайте їх на сторінці засідання.
               </div>
             ) : (
-              <table className="w-full text-sm">
-                <thead className="bg-[#FAFBFD] border-b border-hairline">
-                  <tr className="text-left text-[10px] text-light uppercase tracking-wide">
-                    <th className="px-5 py-2.5 font-bold">Засідання</th>
-                    <th className="px-3 py-2.5 font-bold">Дата засідання</th>
-                    <th className="px-3 py-2.5 font-bold">Записав</th>
-                    <th className="px-3 py-2.5 font-bold">Оновлено</th>
-                    <th className="px-3 py-2.5"></th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-hairline">
-                  {docsBundle.protocols.map((p) => (
-                    <tr key={p.id} className="hover:bg-[#FAFBFD]">
-                      <td className="px-5 py-3 font-medium text-ink">
-                        <Link href={`/meetings/${p.id}`} className="hover:text-brand">
-                          {p.meetingTitle}
-                        </Link>
-                      </td>
-                      <td className="px-3 py-3 text-xs text-mid font-mono">
-                        {new Date(p.meetingDate).toLocaleDateString('uk-UA')}
-                      </td>
-                      <td className="px-3 py-3 text-xs text-mid">{p.uploadedBy.name}</td>
-                      <td className="px-3 py-3 text-xs text-light font-mono">
-                        {new Date(p.updatedAt).toLocaleString('uk-UA', {
-                          year: 'numeric',
-                          month: '2-digit',
-                          day: '2-digit',
-                          hour: '2-digit',
-                          minute: '2-digit',
-                        })}
-                      </td>
-                      <td className="px-3 py-3 text-right">
-                        <Link
-                          href={`/meetings/${p.id}`}
-                          className="text-xs text-brand hover:underline"
-                        >
-                          Відкрити →
-                        </Link>
-                      </td>
+              <div className="overflow-x-auto scrollbar-thin">
+                <table className="w-full text-sm min-w-[640px]">
+                  <thead className="bg-[#FAFBFD] border-b border-hairline">
+                    <tr className="text-left text-[10px] text-light uppercase tracking-wide">
+                      <th className="px-5 py-2.5 font-bold">Засідання</th>
+                      <th className="px-3 py-2.5 font-bold">Дата засідання</th>
+                      <th className="px-3 py-2.5 font-bold">Записав</th>
+                      <th className="px-3 py-2.5 font-bold">Оновлено</th>
+                      <th className="px-3 py-2.5"></th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody className="divide-y divide-hairline">
+                    {docsBundle.protocols.map((p) => (
+                      <tr key={p.id} className="hover:bg-[#FAFBFD]">
+                        <td className="px-5 py-3 font-medium text-ink">
+                          <Link href={`/meetings/${p.id}`} className="hover:text-brand">
+                            {p.meetingTitle}
+                          </Link>
+                        </td>
+                        <td className="px-3 py-3 text-xs text-mid font-mono">
+                          {new Date(p.meetingDate).toLocaleDateString('uk-UA')}
+                        </td>
+                        <td className="px-3 py-3 text-xs text-mid">{p.uploadedBy.name}</td>
+                        <td className="px-3 py-3 text-xs text-light font-mono">
+                          {new Date(p.updatedAt).toLocaleString('uk-UA', {
+                            year: 'numeric',
+                            month: '2-digit',
+                            day: '2-digit',
+                            hour: '2-digit',
+                            minute: '2-digit',
+                          })}
+                        </td>
+                        <td className="px-3 py-3 text-right">
+                          <Link
+                            href={`/meetings/${p.id}`}
+                            className="text-xs text-brand hover:underline"
+                          >
+                            Відкрити →
+                          </Link>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             )}
           </div>
         </div>

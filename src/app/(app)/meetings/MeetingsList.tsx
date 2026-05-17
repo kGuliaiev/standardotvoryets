@@ -615,19 +615,22 @@ function WeekView({
   });
 
   return (
-    <div className="grid grid-cols-7">
+    <div className="grid grid-cols-1 sm:grid-cols-7">
       {days.map((d, i) => {
         const k = keyForDate(d);
         const list = byDay.get(k) ?? [];
         const isToday = k === todayKey;
         const isSelected = k === selectedKey;
+        // Days without meetings collapse to a thin row on mobile so the
+        // view doesn't become a wall of 7 empty 260px columns when stacked.
+        const hasMeetings = list.length > 0;
         return (
           <button
             key={k}
             onClick={() => onSelectDay(k)}
-            className={`min-h-[260px] border-t border-l border-hairline -ml-px -mt-px text-left p-2 align-top flex flex-col gap-1 transition-colors ${
-              isSelected ? 'bg-brand-soft/30' : 'bg-card'
-            } hover:bg-brand-soft/40`}
+            className={`border-t border-l border-hairline -ml-px -mt-px text-left p-2 align-top flex flex-col gap-1 transition-colors sm:min-h-[260px] ${
+              hasMeetings ? 'min-h-[88px]' : 'min-h-[44px]'
+            } ${isSelected ? 'bg-brand-soft/30' : 'bg-card'} hover:bg-brand-soft/40`}
           >
             <div className="flex items-center justify-between">
               <span
