@@ -11,7 +11,21 @@ import { ActivityFeed } from '@/components/ActivityFeed';
 import { formatDate } from '@/lib/utils';
 import { can } from '@/lib/rbac';
 import { useEscape } from '@/lib/useEscape';
+import { rankWeight, extractSurname } from '@/lib/ranks';
 import type { GlobalRole, WorkingGroupRole } from '@prisma/client';
+
+// Sort priority within the WG roster: lower number = higher up
+const WG_ROLE_ORDER: Record<string, number> = {
+  LEADER: 0,
+  DEPUTY: 1,
+  SECRETARY: 2,
+  MEMBER: 3,
+  GUEST: 4,
+};
+
+// Roles that don't count toward quorum (secretaries are administrative,
+// not voting members of the working group).
+const NON_QUORUM_ROLES = new Set(['SECRETARY', 'GUEST']);
 
 const FORMAT_LABELS: Record<string, string> = {
   ONLINE: 'Онлайн',
@@ -217,8 +231,16 @@ export function MeetingDetail({ id }: Props) {
           {(() => {
             const wgLeader = meeting.workingGroup.members.find((m) => m.role === 'LEADER')?.user;
             const chairman = meeting.chairman ?? wgLeader ?? null;
-            const total = meeting.attendances.length;
-            const confirmed = meeting.attendances.filter((a) => a.status === 'CONFIRMED').length;
+            // Quorum is calculated on current WG roster (not stale attendances)
+            // and excludes administrative roles (SECRETARY/GUEST). >50% rule.
+            const attByUser = new Map(meeting.attendances.map((a) => [a.user.id, a.status]));
+            const votingMembers = meeting.workingGroup.members.filter(
+              (m) => !NON_QUORUM_ROLES.has(m.role),
+            );
+            const total = votingMembers.length;
+            const confirmed = votingMembers.filter(
+              (m) => attByUser.get(m.user.id) === 'CONFIRMED',
+            ).length;
             const hasQuorum = total > 0 && confirmed * 2 > total;
             return (
               <div className="bg-card rounded-xl border border-hairline p-5">
@@ -452,11 +474,19 @@ export function MeetingDetail({ id }: Props) {
             // WG + DIRECTOR + ADMIN) can edit each member's status — even for
             // members who don't have an attendance row yet (upsert on the server).
             const attByUser = new Map(meeting.attendances.map((a) => [a.user.id, a]));
-            const roster = meeting.workingGroup.members.map((m) => ({
-              user: m.user,
-              role: m.role,
-              status: attByUser.get(m.user.id)?.status ?? null,
-            }));
+            const roster = meeting.workingGroup.members
+              .map((m) => ({
+                user: m.user,
+                role: m.role,
+                status: attByUser.get(m.user.id)?.status ?? null,
+              }))
+              .sort((a, b) => {
+                const r = (WG_ROLE_ORDER[a.role] ?? 99) - (WG_ROLE_ORDER[b.role] ?? 99);
+                if (r !== 0) return r;
+                const w = rankWeight(b.user.rank) - rankWeight(a.user.rank);
+                if (w !== 0) return w;
+                return extractSurname(a.user.name).localeCompare(extractSurname(b.user.name), 'uk');
+              });
             const confirmedCount = roster.filter((r) => r.status === 'CONFIRMED').length;
             return (
               <div className="bg-card rounded-xl border border-hairline overflow-hidden">

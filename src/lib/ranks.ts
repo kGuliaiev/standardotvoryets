@@ -47,6 +47,36 @@ export function rankLabel(rank: MilitaryRank | null | undefined): string {
 }
 
 /**
+ * Numeric weight for sorting: higher = more senior. Civilian = 0,
+ * lieutenant = 1, …, full general = 10. Use descending order in sort.
+ */
+export function rankWeight(rank: MilitaryRank | null | undefined): number {
+  if (!rank) return 0;
+  return Math.max(
+    0,
+    RANK_OPTIONS.findIndex((o) => o.value === rank),
+  );
+}
+
+/**
+ * Extract surname from "Ім'я ПРІЗВИЩЕ" / "Ім'я По-Батькові ПРІЗВИЩЕ".
+ * Military convention surnames are UPPERCASE Cyrillic — pick the last
+ * such token. Falls back to the whole string for non-military names.
+ */
+export function extractSurname(fullName: string): string {
+  const parts = fullName.trim().split(/\s+/);
+  // Find rightmost ALL-UPPERCASE Cyrillic token
+  for (let i = parts.length - 1; i >= 0; i--) {
+    const p = parts[i];
+    if (!p) continue;
+    if (p === p.toUpperCase() && /[А-ЯЁЇІЄҐ]/.test(p)) {
+      return p;
+    }
+  }
+  return parts[parts.length - 1] ?? fullName;
+}
+
+/**
  * Returns Tailwind classes for the shoulder-board pill based on rank tier.
  * Civilian renders nothing.
  */
