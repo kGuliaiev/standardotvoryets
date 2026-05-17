@@ -1,0 +1,55 @@
+name: Cron — notifications + weekly digest
+
+# Runs every hour on the hour (UTC).
+# Two endpoints get pinged:
+#  - /api/cron/notifications  — fires every hour; the route itself only sends
+#    stage reminders around 09:00 Kyiv (06:00 UTC summer / 07:00 UTC winter).
+#  - /api/cron/digest          — fires every hour; the route only sends on
+#    Monday 09:00 Kyiv, otherwise returns {ok:true, skipped:true}.
+#
+# Required secrets (set in repo Settings → Secrets and variables → Actions):
+#   CRON_SECRET — must match Railway's CRON_SECRET env var
+#   APP_URL     — base URL of the app, e.g. https://your-app.up.railway.app
+
+on:
+  schedule:
+    # Hourly at minute 0. GitHub may delay by a few minutes under load.
+    - cron: '0 * * * *'
+  workflow_dispatch: # allow manual trigger from Actions tab
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Ping /api/cron/notifications
+        env:
+          APP_URL: ${{ secrets.APP_URL }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+        run: |
+          set -euo pipefail
+          if [ -z "${APP_URL:-}" ] || [ -z "${CRON_SECRET:-}" ]; then
+            echo "::error::APP_URL or CRON_SECRET not set in repo secrets"
+            exit 1
+          fi
+          echo "Hitting ${APP_URL}/api/cron/notifications"
+          code=$(curl -sS -o /tmp/notif.json -w '%{http_code}' \
+            -H "Authorization: Bearer ${CRON_SECRET}" \
+            "${APP_URL}/api/cron/notifications")
+          echo "HTTP ${code}"
+          cat /tmp/notif.json || true
+          test "${code}" = "200"
+
+      - name: Ping /api/cron/digest
+        env:
+          APP_URL: ${{ secrets.APP_URL }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+        run: |
+          set -euo pipefail
+          echo "Hitting ${APP_URL}/api/cron/digest"
+          code=$(curl -sS -o /tmp/digest.json -w '%{http_code}' \
+            -H "Authorization: Bearer ${CRON_SECRET}" \
+            "${APP_URL}/api/cron/digest")
+          echo "HTTP ${code}"
+          cat /tmp/digest.json || true
+          test "${code}" = "200"
