@@ -640,9 +640,12 @@ function SuggestionDraftModal({
         : `Змінити параграф ${draft.paragraphIndex + 1}`;
 
   const proposedIsEmpty = htmlToPlainText(draft.proposedText).trim().length === 0;
+  // Compare HTML, not plain text, so changes that affect only formatting
+  // (alignment, bold, italic, etc.) still count as a valid edit. Two
+  // bodies with identical text but different alignment must be allowed
+  // through.
   const sameAsOriginal =
-    draft.operation === 'REPLACE' &&
-    htmlToPlainText(draft.proposedText).trim() === htmlToPlainText(draft.originalText).trim();
+    draft.operation === 'REPLACE' && draft.proposedText.trim() === draft.originalText.trim();
 
   return (
     <Modal open={!!draft} onClose={onClose} title={title} size="lg">
