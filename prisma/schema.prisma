@@ -104,6 +104,8 @@ enum NotificationType {
   ATTENDANCE_DECLINED
   PROTOCOL_PUBLISHED
   MENTION
+  SUGGESTION_NEW
+  SUGGESTION_RESOLVED
 }
 
 enum MilitaryRank {
@@ -164,7 +166,11 @@ model User {
   notifications   Notification[]
   sessions        Session[]
   accounts        Account[]
-  standards       Standard[]
+  standards            Standard[]
+  standardBodiesEdited Standard[]              @relation("StandardBodyEditor")
+  suggestionsCreated   StandardSuggestion[]    @relation("SuggestionAuthor")
+  suggestionsResolved  StandardSuggestion[]    @relation("SuggestionResolver")
+  suggestionReactions  SuggestionReaction[]
   activityLogs    ActivityLog[]
   statusChanges   StandardStatusHistory[] @relation("StatusChanger")
 
@@ -316,19 +322,84 @@ model Standard {
   techReviewCompletedAt DateTime?
   finalCompletedAt      DateTime?
 
+  // Collaborative body of the standard. Paragraphs are split by "\n\n".
+  // Suggestions reference paragraph indices (StandardSuggestion).
+  bodyText           String?
+  bodyUpdatedAt      DateTime?
+  bodyUpdatedById    String?
+
   createdAt      DateTime       @default(now())
   updatedAt      DateTime       @updatedAt
 
   workingGroup  WorkingGroup            @relation(fields: [workingGroupId], references: [id])
   responsible   User?                   @relation(fields: [responsibleId], references: [id])
+  bodyUpdatedBy User?                   @relation("StandardBodyEditor", fields: [bodyUpdatedById], references: [id])
   documents     Document[]
   comments      Comment[]
   votes         Voting[]
   tasks         Task[]
   statusHistory StandardStatusHistory[]
+  suggestions   StandardSuggestion[]
 
   @@unique([workingGroupId, code])
   @@map("standards")
+}
+
+// Collaborative edit suggestion against a Standard's bodyText.
+// Any WG member can create one; LEADER/DEPUTY/SECRETARY resolve.
+// Other members may LIKE/DISLIKE for advisory weight (no quorum gate).
+model StandardSuggestion {
+  id              String              @id @default(cuid())
+  standardId      String
+  authorId        String
+  paragraphIndex  Int                 // 0-based index into split(/\n\n+/) of bodyText at creation time
+  originalText    String              // snapshot of paragraph as it was when suggestion made
+  proposedText    String              // empty string = "delete this paragraph"
+  operation       SuggestionOp        @default(REPLACE)
+  rationale       String?
+  status          SuggestionStatus    @default(PENDING)
+  createdAt       DateTime            @default(now())
+  resolvedAt      DateTime?
+  resolvedById    String?
+  resolveNote     String?
+
+  standard        Standard            @relation(fields: [standardId], references: [id], onDelete: Cascade)
+  author          User                @relation("SuggestionAuthor", fields: [authorId], references: [id])
+  resolvedBy      User?               @relation("SuggestionResolver", fields: [resolvedById], references: [id])
+  reactions       SuggestionReaction[]
+
+  @@index([standardId, status])
+  @@map("standard_suggestions")
+}
+
+model SuggestionReaction {
+  suggestionId String
+  userId       String
+  type         ReactionType
+  createdAt    DateTime @default(now())
+
+  suggestion   StandardSuggestion @relation(fields: [suggestionId], references: [id], onDelete: Cascade)
+  user         User               @relation(fields: [userId], references: [id])
+
+  @@id([suggestionId, userId])
+  @@map("suggestion_reactions")
+}
+
+enum SuggestionStatus {
+  PENDING
+  ACCEPTED
+  REJECTED
+}
+
+enum SuggestionOp {
+  REPLACE       // proposedText replaces originalText
+  INSERT_AFTER  // proposedText is a new paragraph inserted after paragraphIndex
+  DELETE        // remove paragraph at paragraphIndex (proposedText must be "")
+}
+
+enum ReactionType {
+  LIKE
+  DISLIKE
 }
 
 enum StandardStage {

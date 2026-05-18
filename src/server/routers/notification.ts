@@ -28,6 +28,8 @@ export const notificationRouter = createTRPCRouter({
               'ATTENDANCE_DECLINED',
               'PROTOCOL_PUBLISHED',
               'MENTION',
+              'SUGGESTION_NEW',
+              'SUGGESTION_RESOLVED',
             ]),
           )
           .optional(),

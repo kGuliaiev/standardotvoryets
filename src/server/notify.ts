@@ -888,6 +888,85 @@ export async function notifyProtocolPublished(
   }
 }
 
+/* ── Collaborative-edit suggestions ────────────────────────────────────── */
+
+/**
+ * Fired when a member creates a new edit suggestion against a standard.
+ * Notifies the WG leadership (LEADER/DEPUTY/SECRETARY) so they can review.
+ */
+export async function notifySuggestionNew(
+  db: PrismaClient,
+  suggestionId: string,
+  actorUserId: string,
+) {
+  try {
+    const s = await db.standardSuggestion.findUnique({
+      where: { id: suggestionId },
+      include: {
+        author: { select: { name: true } },
+        standard: {
+          select: { id: true, code: true, title: true, workingGroupId: true },
+        },
+      },
+    });
+    if (!s) return;
+
+    const leadership = await wgLeadershipRecipients(db, s.standard.workingGroupId);
+    if (leadership.length === 0) return;
+
+    await emit({
+      db,
+      recipients: leadership,
+      excludeUserId: actorUserId,
+      type: 'SUGGESTION_NEW',
+      title: `Нова правка від ${s.author.name}: ${s.standard.code}`,
+      body: `«${s.standard.title}» · параграф ${s.paragraphIndex + 1}${s.rationale ? `\n${s.rationale}` : ''}`,
+      link: `/standards/${s.standard.id}?tab=body`,
+      channelEnabled: { inApp: true, email: false },
+    });
+  } catch (e) {
+    console.error('[notifySuggestionNew]', e);
+  }
+}
+
+/**
+ * Fired when the leader accepts or rejects an edit suggestion. Notifies
+ * the suggestion author so they know the outcome.
+ */
+export async function notifySuggestionResolved(
+  db: PrismaClient,
+  suggestionId: string,
+  outcome: 'ACCEPTED' | 'REJECTED',
+  actorUserId: string,
+) {
+  try {
+    const s = await db.standardSuggestion.findUnique({
+      where: { id: suggestionId },
+      include: {
+        standard: { select: { id: true, code: true, title: true } },
+      },
+    });
+    if (!s) return;
+    if (s.authorId === actorUserId) return; // resolved their own — no self-ping
+
+    const recipients = await singleUserRecipient(db, s.authorId);
+    if (recipients.length === 0) return;
+
+    const label = outcome === 'ACCEPTED' ? 'Прийнято' : 'Відхилено';
+    await emit({
+      db,
+      recipients,
+      type: 'SUGGESTION_RESOLVED',
+      title: `${label} вашу правку: ${s.standard.code}`,
+      body: `«${s.standard.title}» · параграф ${s.paragraphIndex + 1}${s.resolveNote ? `\n${s.resolveNote}` : ''}`,
+      link: `/standards/${s.standard.id}?tab=body`,
+      channelEnabled: { inApp: true, email: false },
+    });
+  } catch (e) {
+    console.error('[notifySuggestionResolved]', e);
+  }
+}
+
 /* ── Weekly digest (Monday 09:00 Kyiv) ─────────────────────────────────── */
 
 interface DigestBucket {

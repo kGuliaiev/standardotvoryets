@@ -14,7 +14,8 @@ export type AuditEntity =
   | 'Attendance'
   | 'Invite'
   | 'Notification'
-  | 'SystemSettings';
+  | 'SystemSettings'
+  | 'StandardSuggestion';
 
 /**
  * Compute a shallow diff between two snapshots. Returns null if no differences.

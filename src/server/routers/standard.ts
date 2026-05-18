@@ -115,6 +115,7 @@ export const standardRouter = createTRPCRouter({
             },
           },
           responsible: { select: { id: true, name: true, avatarUrl: true } },
+          bodyUpdatedBy: { select: { id: true, name: true } },
           documents: {
             include: { uploadedBy: { select: { id: true, name: true } } },
             orderBy: { createdAt: 'desc' },

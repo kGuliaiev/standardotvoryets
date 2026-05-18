@@ -12,6 +12,7 @@ import { activityLogRouter } from './activityLog';
 import { commentRouter } from './comment';
 import { searchRouter } from './search';
 import { adminRouter } from './admin';
+import { suggestionRouter } from './suggestion';
 
 /**
  * This is the primary router for the server.
@@ -31,6 +32,7 @@ export const appRouter = createTRPCRouter({
   comment: commentRouter,
   search: searchRouter,
   admin: adminRouter,
+  suggestion: suggestionRouter,
 });
 
 export type AppRouter = typeof appRouter;
