@@ -205,8 +205,32 @@ export function ProtocolEditor({ meetingId }: { meetingId: string }) {
     ? `ПРОТОКОЛ № ${protoNum}/${wgNum}/${year}`
     : 'ПРОТОКОЛ № (не присвоєно)';
 
+  // Short Ukrainian role labels for the slim attendance sidebar
+  const ROLE_SHORT: Record<string, string> = {
+    LEADER: 'Керівник',
+    DEPUTY: 'Заступник',
+    SECRETARY: 'Секретар',
+    MEMBER: 'Член РГ',
+    GUEST: 'Гість',
+  };
+  const ROLE_ORDER: Record<string, number> = {
+    LEADER: 0,
+    DEPUTY: 1,
+    SECRETARY: 2,
+    MEMBER: 3,
+    GUEST: 4,
+  };
+  const memberRoleByUserId = new Map(members.map((m) => [m.userId, m.role]));
+  const rosterSorted = [...meeting.attendances].sort((a, b) => {
+    const ra = memberRoleByUserId.get(a.user.id) ?? 'MEMBER';
+    const rb = memberRoleByUserId.get(b.user.id) ?? 'MEMBER';
+    const dr = (ROLE_ORDER[ra] ?? 99) - (ROLE_ORDER[rb] ?? 99);
+    if (dr !== 0) return dr;
+    return a.user.name.localeCompare(b.user.name, 'uk');
+  });
+
   return (
-    <div className="space-y-5 pg-enter max-w-5xl">
+    <div className="space-y-5 pg-enter">
       {/* Breadcrumb */}
       <nav className="flex items-center gap-2 text-sm text-mid">
         <Link href="/meetings" className="hover:text-brand">
@@ -302,80 +326,92 @@ export function ProtocolEditor({ meetingId }: { meetingId: string }) {
         </div>
       </div>
 
-      {/* Attendance */}
-      <div className="card overflow-hidden">
-        <div className="card-head">
-          <h2 className="font-bold text-ink">Присутність</h2>
-          <span className="text-[11px] text-light">
-            {meeting.attendances.filter((a) => a.status === 'CONFIRMED').length} /{' '}
-            {meeting.attendances.length}
-          </span>
-        </div>
-        <div className="divide-y divide-hairline">
-          {meeting.attendances.length === 0 ? (
-            <div className="px-5 py-8 text-center text-light text-sm">Учасників немає</div>
-          ) : (
-            meeting.attendances.map((a) => (
-              <div key={a.user.id} className="px-5 py-3 flex items-center gap-3">
-                <Avatar name={a.user.name} avatarUrl={a.user.avatarUrl ?? undefined} size="sm" />
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-semibold text-ink truncate">
-                    {rankPrefix(a.user.rank)}
-                    {a.user.name}
-                  </p>
-                  {a.user.position && (
-                    <p className="text-[11px] text-light truncate">{a.user.position}</p>
-                  )}
-                </div>
-                {canEdit ? (
-                  <select
-                    className="select w-[160px] text-xs"
-                    value={a.status}
-                    onChange={(e) =>
-                      setAttendanceMutation.mutate({
-                        meetingId,
-                        userId: a.user.id,
-                        status: e.target.value as 'PENDING' | 'CONFIRMED' | 'DECLINED',
-                      })
-                    }
-                  >
-                    {ATTENDANCE_OPTIONS.map((opt) => (
-                      <option key={opt.value} value={opt.value}>
-                        {opt.label}
-                      </option>
-                    ))}
-                  </select>
-                ) : (
-                  <span
-                    className={`text-[11px] font-bold rounded-full px-2.5 py-1 ${ATT_TONE[a.status]}`}
-                  >
-                    {ATTENDANCE_OPTIONS.find((o) => o.value === a.status)?.label ?? a.status}
-                  </span>
-                )}
-              </div>
-            ))
-          )}
-        </div>
-      </div>
+      {/* Two-column layout: protocol main + narrow attendance rail.
+          Stacks vertically on <lg so the attendance card sits below
+          on phones / tablets. */}
+      <div className="grid grid-cols-1 lg:grid-cols-[1fr_260px] gap-5 items-start">
+        <ProtocolTabs
+          items={items}
+          members={members}
+          chairman={meeting.chairman}
+          secretary={meeting.workingGroup.members.find((m) => m.role === 'SECRETARY')?.user ?? null}
+          meetingTitle={meeting.title}
+          meetingStartAt={meeting.startAt}
+          wgCode={meeting.workingGroup.code}
+          protocolNumber={meeting.protocolNumber ?? null}
+          canEdit={canEdit}
+          savingAll={savingAll}
+          dirtyCount={dirtyCount}
+          onChange={setItems}
+          onAdd={addItem}
+          onSaveAll={saveAll}
+          onRemove={removeItem}
+        />
 
-      {/* Agenda items — tabbed: overview / агенда / слухали / вирішили */}
-      <ProtocolTabs
-        items={items}
-        members={members}
-        chairman={meeting.chairman}
-        secretary={meeting.workingGroup.members.find((m) => m.role === 'SECRETARY')?.user ?? null}
-        meetingTitle={meeting.title}
-        meetingStartAt={meeting.startAt}
-        wgCode={meeting.workingGroup.code}
-        protocolNumber={meeting.protocolNumber ?? null}
-        canEdit={canEdit}
-        savingAll={savingAll}
-        dirtyCount={dirtyCount}
-        onChange={setItems}
-        onAdd={addItem}
-        onSaveAll={saveAll}
-        onRemove={removeItem}
-      />
+        {/* Narrow attendance rail — role only, no rank/position */}
+        <aside className="card overflow-hidden lg:sticky lg:top-4 self-start">
+          <div className="card-head !px-3 !py-2.5">
+            <h2 className="text-xs font-bold text-ink uppercase tracking-wide">Учасники</h2>
+            <span className="text-[11px] text-light tabular-nums">
+              {meeting.attendances.filter((a) => a.status === 'CONFIRMED').length} /{' '}
+              {meeting.attendances.length}
+            </span>
+          </div>
+          <ul className="divide-y divide-hairline">
+            {rosterSorted.length === 0 ? (
+              <li className="px-3 py-6 text-center text-light text-xs">Учасників немає</li>
+            ) : (
+              rosterSorted.map((a) => {
+                const wgRole = memberRoleByUserId.get(a.user.id);
+                return (
+                  <li key={a.user.id} className="px-3 py-2 flex items-center gap-2">
+                    <Avatar
+                      name={a.user.name}
+                      avatarUrl={a.user.avatarUrl ?? undefined}
+                      size="xs"
+                    />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-[12px] text-ink truncate font-medium">{a.user.name}</p>
+                      {wgRole && (
+                        <p className="text-[10px] text-light truncate">
+                          {ROLE_SHORT[wgRole] ?? wgRole}
+                        </p>
+                      )}
+                    </div>
+                    {canEdit ? (
+                      <select
+                        aria-label="Присутність"
+                        className="text-[10px] border border-hairline rounded px-1 py-0.5 bg-page text-ink focus:outline-none focus:border-brand"
+                        value={a.status}
+                        onChange={(e) =>
+                          setAttendanceMutation.mutate({
+                            meetingId,
+                            userId: a.user.id,
+                            status: e.target.value as 'PENDING' | 'CONFIRMED' | 'DECLINED',
+                          })
+                        }
+                      >
+                        <option value="CONFIRMED">✓</option>
+                        <option value="DECLINED">✗</option>
+                        <option value="PENDING">—</option>
+                      </select>
+                    ) : (
+                      <span
+                        className={`text-[10px] font-bold rounded-full w-5 h-5 inline-flex items-center justify-center ${ATT_TONE[a.status]}`}
+                        title={
+                          ATTENDANCE_OPTIONS.find((o) => o.value === a.status)?.label ?? a.status
+                        }
+                      >
+                        {a.status === 'CONFIRMED' ? '✓' : a.status === 'DECLINED' ? '✗' : '—'}
+                      </span>
+                    )}
+                  </li>
+                );
+              })
+            )}
+          </ul>
+        </aside>
+      </div>
     </div>
   );
 }
