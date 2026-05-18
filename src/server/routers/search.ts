@@ -12,7 +12,7 @@ export const searchRouter = createTRPCRouter({
 
       const q = input.q.trim();
 
-      const [standards, meetings, tasks, workingGroups] = await Promise.all([
+      const [standards, meetings, tasks, workingGroups, users] = await Promise.all([
         ctx.db.standard.findMany({
           where: {
             ...wgFilter,
@@ -77,8 +77,41 @@ export const searchRouter = createTRPCRouter({
           take: 5,
           orderBy: { code: 'asc' },
         }),
+        ctx.db.user.findMany({
+          where: {
+            isActive: true,
+            // Visibility: ADMIN/DIRECTOR see everyone; others see only users
+            // who share at least one WG membership with them.
+            ...(seesAll
+              ? {}
+              : { memberships: { some: { workingGroupId: { in: memberGroupIds } } } }),
+            OR: [
+              { name: { contains: q, mode: 'insensitive' } },
+              { email: { contains: q, mode: 'insensitive' } },
+              { position: { contains: q, mode: 'insensitive' } },
+            ],
+          },
+          select: {
+            id: true,
+            name: true,
+            email: true,
+            position: true,
+            rank: true,
+            avatarUrl: true,
+            memberships: {
+              select: {
+                role: true,
+                workingGroup: { select: { id: true, code: true, color: true } },
+              },
+              orderBy: { joinedAt: 'asc' },
+              take: 1,
+            },
+          },
+          take: 8,
+          orderBy: { name: 'asc' },
+        }),
       ]);
 
-      return { standards, meetings, tasks, workingGroups };
+      return { standards, meetings, tasks, workingGroups, users };
     }),
 });

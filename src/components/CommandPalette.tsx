@@ -2,7 +2,15 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { Search, BookOpen, Calendar, CheckSquare, FolderKanban, ArrowRight } from 'lucide-react';
+import {
+  Search,
+  BookOpen,
+  Calendar,
+  CheckSquare,
+  FolderKanban,
+  Users as UsersIcon,
+  ArrowRight,
+} from 'lucide-react';
 import { trpc } from '@/lib/trpc/client';
 
 interface FlatResult {
@@ -135,6 +143,24 @@ export function CommandPalette() {
         meta: t.standard.code,
         sectionLabel: 'Завдання',
         Icon: CheckSquare,
+      });
+    }
+    for (const u of data.users) {
+      const firstWg = u.memberships[0]?.workingGroup;
+      // No standalone /users/[id] page yet — jump to the user's first WG
+      // so the caller has somewhere to land (the WG page lists members
+      // with roles). Falls back to /admin/users for the unmember'd case.
+      const href = firstWg ? `/working-groups/${firstWg.id}` : '/admin/users';
+      out.push({
+        id: `usr-${u.id}`,
+        href,
+        title: u.name,
+        meta: firstWg
+          ? `${firstWg.code}${u.position ? ` · ${u.position}` : ''}`
+          : (u.position ?? u.email),
+        dot: firstWg?.color,
+        sectionLabel: 'Люди',
+        Icon: UsersIcon,
       });
     }
     return out;
