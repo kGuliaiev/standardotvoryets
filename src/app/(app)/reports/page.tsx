@@ -1,8 +1,8 @@
 import type { Metadata } from 'next';
-import { ReportProgramPlan } from './ReportProgramPlan';
+import { ReportsTabs } from './ReportsTabs';
 
 export const metadata: Metadata = { title: 'Звіт' };
 
 export default function ReportsPage() {
-  return <ReportProgramPlan />;
+  return <ReportsTabs />;
 }
