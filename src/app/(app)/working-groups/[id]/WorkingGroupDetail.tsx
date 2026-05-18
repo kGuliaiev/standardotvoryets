@@ -250,24 +250,39 @@ export function WorkingGroupDetail({ id }: Props) {
       {/* Tabs */}
       <div className="border-b border-hairline">
         <div className="flex gap-0">
-          {TABS.map((t) => (
-            <button
-              key={t.id}
-              onClick={() => setTab(t.id)}
-              className={`px-4 py-2.5 text-sm font-medium border-b-2 transition-colors ${
-                tab === t.id
-                  ? 'border-blue-600 text-blue-700'
-                  : 'border-transparent text-mid hover:text-ink hover:border-slate-300'
-              }`}
-            >
-              {t.label}
-              {t.id === 'members' && (
-                <span className="ml-1.5 text-xs bg-pill text-mid rounded-full px-1.5 py-0.5">
-                  {group.members.length}
-                </span>
-              )}
-            </button>
-          ))}
+          {TABS.map((t) => {
+            // Real-time counts pulled from the byId payload (members,
+            // standards, meetings, documents). The "Інформація" tab has
+            // no count by design.
+            const count: number | null =
+              t.id === 'members'
+                ? group.members.length
+                : t.id === 'standards'
+                  ? group._count.standards
+                  : t.id === 'meetings'
+                    ? group._count.meetings
+                    : t.id === 'documents'
+                      ? group._count.documents
+                      : null;
+            return (
+              <button
+                key={t.id}
+                onClick={() => setTab(t.id)}
+                className={`px-4 py-2.5 text-sm font-medium border-b-2 transition-colors ${
+                  tab === t.id
+                    ? 'border-blue-600 text-blue-700'
+                    : 'border-transparent text-mid hover:text-ink hover:border-slate-300'
+                }`}
+              >
+                {t.label}
+                {count !== null && (
+                  <span className="ml-1.5 text-xs bg-pill text-mid rounded-full px-1.5 py-0.5 tabular-nums">
+                    {count}
+                  </span>
+                )}
+              </button>
+            );
+          })}
         </div>
       </div>
 

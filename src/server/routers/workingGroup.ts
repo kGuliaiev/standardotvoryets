@@ -48,27 +48,33 @@ export const workingGroupRouter = createTRPCRouter({
   byId: protectedProcedure
     .input(z.object({ id: z.string().cuid() }))
     .query(async ({ ctx, input }) => {
-      const group = await ctx.db.workingGroup.findUnique({
-        where: { id: input.id },
-        include: {
-          members: {
-            include: {
-              user: {
-                select: {
-                  id: true,
-                  name: true,
-                  email: true,
-                  avatarUrl: true,
-                  rank: true,
-                  position: true,
+      // Documents have no direct workingGroupId — they hang off the
+      // group's Standards. Run the aggregate in parallel so the tab
+      // badge can show the real count without an extra round-trip.
+      const [group, documentsCount] = await Promise.all([
+        ctx.db.workingGroup.findUnique({
+          where: { id: input.id },
+          include: {
+            members: {
+              include: {
+                user: {
+                  select: {
+                    id: true,
+                    name: true,
+                    email: true,
+                    avatarUrl: true,
+                    rank: true,
+                    position: true,
+                  },
                 },
               },
+              orderBy: { joinedAt: 'asc' },
             },
-            orderBy: { joinedAt: 'asc' },
+            _count: { select: { standards: true, meetings: true } },
           },
-          _count: { select: { standards: true, meetings: true } },
-        },
-      });
+        }),
+        ctx.db.document.count({ where: { standard: { workingGroupId: input.id } } }),
+      ]);
 
       if (!group) throw new TRPCError({ code: 'NOT_FOUND' });
 
@@ -81,7 +87,10 @@ export const workingGroupRouter = createTRPCRouter({
         throw new TRPCError({ code: 'FORBIDDEN' });
       }
 
-      return group;
+      return {
+        ...group,
+        _count: { ...group._count, documents: documentsCount },
+      };
     }),
 
   // ── icalSubscribeUrl: stable per-(user, wg) URL for calendar apps ─────
