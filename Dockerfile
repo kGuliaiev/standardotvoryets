@@ -14,8 +14,15 @@
 # Deploy: works on Railway (auto-detects Dockerfile), Fly.io, Render,
 # Coolify, Dokku, plain Docker host, Kubernetes. Just provide the env
 # vars from .env.example.
+#
+# Why Debian-slim and not Alpine? Prisma's prebuilt query engines
+# expect glibc + a known libssl. Alpine 3.20+ ships only libssl 3.x,
+# but Prisma 5.x defaults to looking for libssl 1.1, which leads to
+# noisy warnings and `Error loading shared library libssl.so.1.1`
+# during `next build` page-data collection. Debian bookworm-slim has
+# libssl3 + glibc out of the box and Just Works.
 
-ARG NODE_VERSION=20-alpine
+ARG NODE_VERSION=20-bookworm-slim
 
 # ── deps ────────────────────────────────────────────────────────────
 FROM node:${NODE_VERSION} AS deps
@@ -37,9 +44,11 @@ RUN pnpm build
 # ── runner ──────────────────────────────────────────────────────────
 FROM node:${NODE_VERSION} AS runner
 RUN corepack enable && corepack prepare pnpm@9.15.9 --activate
-# pg_dump (postgresql-client) is required by the in-process backup job.
-# gzip is preinstalled on alpine.
-RUN apk add --no-cache postgresql-client
+# postgresql-client provides pg_dump for the in-process backup job.
+# Debian-slim images don't have it preinstalled.
+RUN apt-get update \
+  && apt-get install -y --no-install-recommends postgresql-client \
+  && rm -rf /var/lib/apt/lists/*
 WORKDIR /app
 ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
