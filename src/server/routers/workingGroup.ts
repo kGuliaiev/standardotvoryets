@@ -1,8 +1,10 @@
 import { z } from 'zod';
+import { createHmac } from 'node:crypto';
 import { TRPCError } from '@trpc/server';
 import { createTRPCRouter, protectedProcedure } from '@/server/trpc';
 import { can } from '@/lib/rbac';
 import { logActivity } from '@/server/audit';
+import { env } from '@/lib/env';
 import type { GlobalRole, WorkingGroupRole } from '@prisma/client';
 
 function userCtx(session: {
@@ -80,6 +82,21 @@ export const workingGroupRouter = createTRPCRouter({
       }
 
       return group;
+    }),
+
+  // ── icalSubscribeUrl: stable per-(user, wg) URL for calendar apps ─────
+  icalSubscribeUrl: protectedProcedure
+    .input(z.object({ workingGroupId: z.string().cuid() }))
+    .query(({ ctx, input }) => {
+      const userId = ctx.session.user.id;
+      const token = createHmac('sha256', env.NEXTAUTH_SECRET)
+        .update(`ical:${userId}:${input.workingGroupId}`)
+        .digest('hex')
+        .slice(0, 32);
+      const base = env.NEXT_PUBLIC_APP_URL.replace(/\/$/, '');
+      return {
+        url: `${base}/api/working-groups/${input.workingGroupId}/ical?user=${userId}&token=${token}`,
+      };
     }),
 
   // ── create (ADMIN only) ───────────────────────────────────────────────

@@ -221,6 +221,14 @@ export function MeetingDetail({ id }: Props) {
               )}
             </>
           )}
+          {/* Calendar download — visible for any meeting */}
+          <a
+            href={`/api/meetings/${id}/ical`}
+            className="text-xs px-3 py-1.5 rounded-lg border-[1.5px] border-hairline hover:border-brand hover:text-brand text-mid transition-colors font-semibold inline-flex items-center gap-1.5"
+            title="Завантажити .ics для Outlook / Google Calendar"
+          >
+            📅 Календар
+          </a>
         </div>
       </div>
 

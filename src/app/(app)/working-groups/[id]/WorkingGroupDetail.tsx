@@ -35,7 +35,7 @@ const MEMBER_RANK_ORDER: Record<string, number> = {
   LIEUTENANT: 9,
   CIVILIAN: 10,
 };
-import { Archive, ArchiveRestore } from 'lucide-react';
+import { Archive, ArchiveRestore, Calendar, Check, Copy } from 'lucide-react';
 import type { GlobalRole, WorkingGroupRole } from '@prisma/client';
 
 const TABS = [
@@ -561,14 +561,17 @@ export function WorkingGroupDetail({ id }: Props) {
 
       {tab === 'meetings' && (
         <div className="bg-card rounded-xl border border-hairline overflow-hidden">
-          <div className="flex items-center justify-between px-5 py-3.5 border-b border-hairline">
+          <div className="flex items-center justify-between px-5 py-3.5 border-b border-hairline gap-3 flex-wrap">
             <span className="text-sm font-medium text-ink">Засідання групи</span>
-            <Link
-              href={`/meetings/new?wg=${id}`}
-              className="text-xs bg-blue-700 text-white px-3 py-1.5 rounded-lg hover:bg-blue-800 transition-colors font-medium"
-            >
-              + Нове засідання
-            </Link>
+            <div className="inline-flex items-center gap-2">
+              <CalendarSubscribeButton wgId={id} userId={session?.user?.id ?? ''} />
+              <Link
+                href={`/meetings/new?wg=${id}`}
+                className="text-xs bg-blue-700 text-white px-3 py-1.5 rounded-lg hover:bg-blue-800 transition-colors font-medium"
+              >
+                + Нове засідання
+              </Link>
+            </div>
           </div>
           {!meetings || meetings.length === 0 ? (
             <div className="py-12 text-center text-light text-sm">Засідань немає</div>
@@ -972,6 +975,85 @@ export function WorkingGroupDetail({ id }: Props) {
               </div>
             </div>
           </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/**
+ * Renders a "Підписатися" button that, when clicked, fetches the user's
+ * personal iCalendar feed URL for this WG, copies it to the clipboard,
+ * and shows a brief confirmation. Users can paste it into Outlook /
+ * Google Calendar / Apple Calendar as a subscription URL.
+ */
+function CalendarSubscribeButton({ wgId, userId }: { wgId: string; userId: string }) {
+  const [copied, setCopied] = useState(false);
+  const [open, setOpen] = useState(false);
+  const { data, isFetching } = trpc.workingGroup.icalSubscribeUrl.useQuery(
+    { workingGroupId: wgId },
+    { enabled: open, staleTime: Infinity },
+  );
+
+  async function copyUrl() {
+    if (!data?.url) return;
+    try {
+      await navigator.clipboard.writeText(data.url);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      // fallback: prompt
+      window.prompt('Скопіюйте посилання:', data.url);
+    }
+  }
+
+  if (!userId) return null;
+
+  return (
+    <div className="relative">
+      <button
+        onClick={() => setOpen((o) => !o)}
+        className="inline-flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg border border-hairline text-mid hover:bg-pill transition-colors"
+        title="Підписатися на календар цієї РГ"
+      >
+        <Calendar size={13} />
+        Підписатися
+      </button>
+      {open && (
+        <div className="absolute right-0 top-full mt-1 z-20 w-[360px] bg-card border border-hairline rounded-lg shadow-lg p-4">
+          <p className="text-xs font-semibold text-ink mb-1">Підписка на календар РГ</p>
+          <p className="text-[11px] text-mid mb-3 leading-relaxed">
+            Скопіюйте посилання та додайте як підписку в Outlook / Google Calendar / Apple Calendar
+            — нові засідання з&apos;являтимуться автоматично.
+          </p>
+          {isFetching ? (
+            <p className="text-xs text-light">Генерація посилання…</p>
+          ) : data?.url ? (
+            <>
+              <input
+                readOnly
+                value={data.url}
+                onClick={(e) => (e.target as HTMLInputElement).select()}
+                className="w-full text-[11px] font-mono px-2 py-1.5 bg-page border border-hairline rounded text-ink"
+              />
+              <button
+                onClick={copyUrl}
+                className="mt-2 w-full inline-flex items-center justify-center gap-1.5 text-xs px-3 py-1.5 rounded-lg bg-brand text-white hover:bg-navy transition-colors"
+              >
+                {copied ? (
+                  <>
+                    <Check size={13} /> Скопійовано
+                  </>
+                ) : (
+                  <>
+                    <Copy size={13} /> Копіювати
+                  </>
+                )}
+              </button>
+            </>
+          ) : (
+            <p className="text-xs text-light">Не вдалось згенерувати посилання</p>
+          )}
         </div>
       )}
     </div>
