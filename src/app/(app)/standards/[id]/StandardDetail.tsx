@@ -98,7 +98,23 @@ export function StandardDetail({ id }: { id: string }) {
     }
   }, [queryTab]);
 
-  const { data: standard, isLoading, refetch } = trpc.standard.byId.useQuery({ id });
+  // Light polling so a leader accepting a suggestion (which rewrites
+  // bodyText) propagates to anyone else viewing the standard within ~10s
+  // without a manual refresh. `refetchIntervalInBackground: false` means
+  // the polling stops when the tab is hidden, so it costs nothing while
+  // the page sits in a background tab.
+  const {
+    data: standard,
+    isLoading,
+    refetch,
+  } = trpc.standard.byId.useQuery(
+    { id },
+    {
+      refetchInterval: 10_000,
+      refetchIntervalInBackground: false,
+      refetchOnWindowFocus: true,
+    },
+  );
   const { data: currentVoting } = trpc.vote.current.useQuery({ standardId: id });
   const { data: votingHistory } = trpc.vote.history.useQuery({ standardId: id });
   const { data: tasks } = trpc.task.list.useQuery({ standardId: id });

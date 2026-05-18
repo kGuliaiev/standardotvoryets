@@ -85,9 +85,20 @@ export function StandardBodyEditor({
   const normalizedBody = useMemo(() => normalizeBodyHtml(bodyText), [bodyText]);
   const paragraphs = useMemo(() => splitHtmlBlocks(normalizedBody), [normalizedBody]);
 
+  // Poll every 5s so a suggestion submitted by one collaborator shows up
+  // on everyone else's open document without a manual refresh. The query
+  // payload is tiny (just open + recent resolved edits) so the bandwidth
+  // cost is negligible. Polling pauses automatically when the tab is in
+  // the background.
   const { data: suggestions } = trpc.suggestion.list.useQuery(
     { standardId },
-    { staleTime: 30_000, refetchOnMount: 'always' },
+    {
+      staleTime: 0,
+      refetchOnMount: 'always',
+      refetchOnWindowFocus: true,
+      refetchInterval: 5_000,
+      refetchIntervalInBackground: false,
+    },
   );
   const pendingBySection = useMemo(() => {
     const map = new Map<number, SuggestionListItem[]>();
