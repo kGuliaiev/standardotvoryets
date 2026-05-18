@@ -5,6 +5,7 @@ import { usePathname } from 'next/navigation';
 import { type Session } from 'next-auth';
 import { Sidebar } from './Sidebar';
 import { Topbar } from './Topbar';
+import { CommandPalette } from '@/components/CommandPalette';
 
 interface ShellProps {
   children: React.ReactNode;
@@ -57,6 +58,9 @@ export function Shell({ children, session }: ShellProps) {
         <Topbar session={session} onOpenMobileMenu={() => setMobileMenuOpen(true)} />
         <main className="flex-1 overflow-y-auto p-4 md:p-6 scrollbar-thin">{children}</main>
       </div>
+
+      {/* Cmd/Ctrl+K command palette — global, mounted once */}
+      <CommandPalette />
     </div>
   );
 }

@@ -1,12 +1,11 @@
 'use client';
 
 import { type Session } from 'next-auth';
-import { Bell, Sun, Moon, Menu } from 'lucide-react';
+import { Bell, Sun, Moon, Menu, Search } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { trpc } from '@/lib/trpc/client';
 import { useTheme } from '@/components/providers/ThemeProvider';
-import { GlobalSearch } from '@/components/GlobalSearch';
 
 interface TopbarProps {
   session: Session;
@@ -55,10 +54,19 @@ export function Topbar({ session: _session, onOpenMobileMenu }: TopbarProps) {
 
       <div className="flex-1" />
 
-      {/* Search — hidden on small screens to free space; user can still reach via slash command if added */}
-      <div className="hidden md:block">
-        <GlobalSearch />
-      </div>
+      {/* Search trigger — opens Cmd+K command palette */}
+      <button
+        type="button"
+        onClick={() => window.dispatchEvent(new Event('cmdk:open'))}
+        className="inline-flex items-center gap-2 h-9 md:h-9 px-2 md:px-3 rounded-[10px] border border-hairline bg-page text-light hover:text-ink hover:border-mid transition-colors"
+        title="Пошук (⌘K)"
+      >
+        <Search size={15} />
+        <span className="hidden md:inline text-sm">Пошук</span>
+        <kbd className="hidden md:inline ml-2 text-[10px] font-mono px-1 py-0.5 border border-hairline rounded">
+          ⌘K
+        </kbd>
+      </button>
 
       {/* Theme toggle */}
       <button
