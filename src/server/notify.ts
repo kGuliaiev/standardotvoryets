@@ -907,15 +907,39 @@ export async function notifySuggestionNew(
         standard: {
           select: { id: true, code: true, title: true, workingGroupId: true },
         },
+        document: {
+          select: {
+            id: true,
+            filename: true,
+            standard: { select: { id: true, code: true, title: true, workingGroupId: true } },
+          },
+        },
       },
     });
     if (!s) return;
-    // Suggestions on uploaded documents currently skip the notification
-    // flow (see suggestion.create in the router). When the parent is a
-    // document, `s.standard` is null and we silently bail.
-    if (!s.standard) return;
 
-    const leadership = await wgLeadershipRecipients(db, s.standard.workingGroupId);
+    // Resolve the parent — either a Standard directly, or via the
+    // suggestion's Document (whose parent is also a Standard). The
+    // notification text and link diverge so the recipient sees which
+    // body the edit lives in.
+    const parent = s.standard
+      ? {
+          workingGroupId: s.standard.workingGroupId,
+          title: `${s.standard.code}`,
+          subject: `«${s.standard.title}»`,
+          link: `/standards/${s.standard.id}?tab=body`,
+        }
+      : s.document
+        ? {
+            workingGroupId: s.document.standard.workingGroupId,
+            title: `${s.document.standard.code}`,
+            subject: `📎 «${s.document.filename}»`,
+            link: `/standards/${s.document.standard.id}?tab=documents`,
+          }
+        : null;
+    if (!parent) return;
+
+    const leadership = await wgLeadershipRecipients(db, parent.workingGroupId);
     if (leadership.length === 0) return;
 
     await emit({
@@ -923,9 +947,9 @@ export async function notifySuggestionNew(
       recipients: leadership,
       excludeUserId: actorUserId,
       type: 'SUGGESTION_NEW',
-      title: `Нова правка від ${s.author.name}: ${s.standard.code}`,
-      body: `«${s.standard.title}» · параграф ${s.paragraphIndex + 1}${s.rationale ? `\n${s.rationale}` : ''}`,
-      link: `/standards/${s.standard.id}?tab=body`,
+      title: `Нова правка від ${s.author.name}: ${parent.title}`,
+      body: `${parent.subject} · параграф ${s.paragraphIndex + 1}${s.rationale ? `\n${s.rationale}` : ''}`,
+      link: parent.link,
       channelEnabled: { inApp: true, email: false },
     });
   } catch (e) {
@@ -948,12 +972,31 @@ export async function notifySuggestionResolved(
       where: { id: suggestionId },
       include: {
         standard: { select: { id: true, code: true, title: true } },
+        document: {
+          select: {
+            filename: true,
+            standard: { select: { id: true, code: true, title: true } },
+          },
+        },
       },
     });
     if (!s) return;
-    // Document-targeted suggestions skip the notification flow.
-    if (!s.standard) return;
     if (s.authorId === actorUserId) return; // resolved their own — no self-ping
+
+    const parent = s.standard
+      ? {
+          title: s.standard.code,
+          subject: `«${s.standard.title}»`,
+          link: `/standards/${s.standard.id}?tab=body`,
+        }
+      : s.document
+        ? {
+            title: s.document.standard.code,
+            subject: `📎 «${s.document.filename}»`,
+            link: `/standards/${s.document.standard.id}?tab=documents`,
+          }
+        : null;
+    if (!parent) return;
 
     const recipients = await singleUserRecipient(db, s.authorId);
     if (recipients.length === 0) return;
@@ -963,9 +1006,9 @@ export async function notifySuggestionResolved(
       db,
       recipients,
       type: 'SUGGESTION_RESOLVED',
-      title: `${label} вашу правку: ${s.standard.code}`,
-      body: `«${s.standard.title}» · параграф ${s.paragraphIndex + 1}${s.resolveNote ? `\n${s.resolveNote}` : ''}`,
-      link: `/standards/${s.standard.id}?tab=body`,
+      title: `${label} вашу правку: ${parent.title}`,
+      body: `${parent.subject} · параграф ${s.paragraphIndex + 1}${s.resolveNote ? `\n${s.resolveNote}` : ''}`,
+      link: parent.link,
       channelEnabled: { inApp: true, email: false },
     });
   } catch (e) {

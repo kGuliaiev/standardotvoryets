@@ -53,7 +53,9 @@ export const PERMISSIONS: Record<string, readonly WorkingGroupRole[]> = {
   'standard:delete': [], // ADMIN only via globalRole check
   'document:upload': STAFF,
   'document:setCurrent': LEADERS,
-  'document:delete': LEADERS,
+  // Secretary keeps the document filing tidy day-to-day, so they're
+  // trusted to remove stale uploads alongside the leadership pair.
+  'document:delete': STAFF,
   'comment:add': ALL_MEMBERS,
   'vote:open': LEADERS,
   'vote:cast': VOTERS,

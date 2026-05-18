@@ -243,12 +243,10 @@ export const suggestionRouter = createTRPCRouter({
             ? 'Запропоновано правку до тексту стандарту'
             : 'Запропоновано правку до документа',
       });
-      // Only fire notifications for standard-level suggestions for now —
-      // document-level edits are scoped tighter and we don't want to
-      // flood inboxes during the rollout.
-      if (target.kind === 'standard') {
-        await notifySuggestionNew(ctx.db, created.id, ctx.session.user.id);
-      }
+      // Notify WG leadership for both standard and document targets.
+      // notifySuggestionNew picks the right parent (Standard vs Document
+      // → Standard) and links to the appropriate tab.
+      await notifySuggestionNew(ctx.db, created.id, ctx.session.user.id);
       return created;
     }),
 
@@ -395,9 +393,7 @@ export const suggestionRouter = createTRPCRouter({
         after: { status: 'ACCEPTED' },
         note: input.note ?? 'Правку прийнято',
       });
-      if (sug.standardId) {
-        await notifySuggestionResolved(ctx.db, sug.id, 'ACCEPTED', ctx.session.user.id);
-      }
+      await notifySuggestionResolved(ctx.db, sug.id, 'ACCEPTED', ctx.session.user.id);
       return { ok: true };
     }),
 
@@ -440,9 +436,7 @@ export const suggestionRouter = createTRPCRouter({
         after: { status: 'REJECTED' },
         note: input.note ?? 'Правку відхилено',
       });
-      if (sug.standardId) {
-        await notifySuggestionResolved(ctx.db, sug.id, 'REJECTED', ctx.session.user.id);
-      }
+      await notifySuggestionResolved(ctx.db, sug.id, 'REJECTED', ctx.session.user.id);
       return { ok: true };
     }),
 

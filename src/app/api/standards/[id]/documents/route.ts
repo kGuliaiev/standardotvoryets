@@ -23,13 +23,13 @@
 import { NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { PutObjectCommand } from '@aws-sdk/client-s3';
-import mammoth from 'mammoth';
 import { authOptions } from '@/server/auth';
 import { db } from '@/server/db';
 import { s3 } from '@/server/s3';
 import { env } from '@/lib/env';
 import { can } from '@/lib/rbac';
 import { logActivity } from '@/server/audit';
+import { docxBufferToHtml } from '@/lib/docxToHtml';
 import type { GlobalRole, WorkingGroupRole, DocumentType } from '@prisma/client';
 
 const DOCX_MIME = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
@@ -113,23 +113,17 @@ export async function POST(req: Request, { params }: { params: { id: string } })
   // Convert .docx → HTML for collaborative editing if the uploader
   // ticked the box. Anything else (PDF, XLSX, ODT) can't be inlined as
   // TipTap content, so we ignore the flag and tell mammoth to skip.
+  // Uses the same shared converter as the standalone import-body
+  // endpoint, so headings/lists/alignment all round-trip identically.
   const isDocx = file.name.toLowerCase().endsWith('.docx') || file.type === DOCX_MIME;
   const shouldExtractBody = allowEditsRequested && isDocx;
   let bodyHtml: string | null = null;
   if (shouldExtractBody) {
     try {
-      // Read buffer once up-front so we can stream the same bytes to S3
-      // below without re-reading from the File object.
       const ab = await file.arrayBuffer();
       const buf = Buffer.from(ab);
-      const result = await mammoth.convertToHtml(
-        { buffer: buf },
-        {
-          ignoreEmptyParagraphs: false,
-          convertImage: mammoth.images.imgElement(() => Promise.resolve({ src: '' })),
-        },
-      );
-      bodyHtml = result.value.trim().length > 0 ? result.value : null;
+      const result = await docxBufferToHtml(buf);
+      bodyHtml = result.html.trim().length > 0 ? result.html : null;
     } catch {
       // If the conversion fails, keep allowEdits flag false rather than
       // refuse the upload — the file itself is still useful as a
