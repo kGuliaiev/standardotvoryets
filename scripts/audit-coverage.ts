@@ -34,6 +34,9 @@ const EXEMPT = new Set<string>([
   'document.getUploadUrl',
   'document.registerMetadata',
   // ProtocolNumber helper — protected, but trivial counter
+  // Suggestion reactions are per-user UX state (LIKE/DISLIKE), not a
+  // domain event — the underlying create/accept/reject are audited.
+  'suggestion.react',
 ]);
 
 interface Finding {
