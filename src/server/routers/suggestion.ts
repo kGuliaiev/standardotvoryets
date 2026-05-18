@@ -34,17 +34,66 @@ function userCtx(session: {
   };
 }
 
-/** Split bodyText into paragraphs the same way the UI does. */
+/**
+ * Split bodyText into top-level "blocks" the same way the UI does.
+ * Body is HTML emitted by TipTap (paragraph, heading, list, etc.).
+ * Legacy plain-text bodies are migrated on the fly to <p>-wrapped HTML
+ * so the rest of this file only deals with one format.
+ *
+ * Server-side implementation avoids DOMParser (not available in Node) —
+ * uses a tag-depth scanner that handles the limited TipTap schema we
+ * allow. For more complex HTML we'd reach for `cheerio`; for now this
+ * is intentionally minimal.
+ */
 function splitParagraphs(body: string | null | undefined): string[] {
   if (!body) return [];
-  return body
-    .split(/\n{2,}/)
-    .map((p) => p.trim())
-    .filter((p) => p.length > 0);
+  const trimmed = body.trim();
+  if (!trimmed) return [];
+
+  // Legacy plain text — migrate by wrapping each non-empty line group in <p>
+  if (!trimmed.startsWith('<')) {
+    return trimmed
+      .split(/\n{2,}/)
+      .map((p) => p.trim())
+      .filter((p) => p.length > 0)
+      .map(
+        (p) =>
+          `<p>${p
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/\n/g, '<br>')}</p>`,
+      );
+  }
+
+  const blocks: string[] = [];
+  let depth = 0;
+  let buffer = '';
+  const re = /<\/?(\w+)[^>]*>/g;
+  let lastIndex = 0;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(trimmed)) !== null) {
+    const isClosing = m[0].startsWith('</');
+    const tag = (m[1] ?? '').toLowerCase();
+    buffer += trimmed.slice(lastIndex, re.lastIndex);
+    lastIndex = re.lastIndex;
+    if (isClosing) {
+      depth--;
+      if (depth === 0) {
+        blocks.push(buffer);
+        buffer = '';
+      }
+    } else if (!m[0].endsWith('/>')) {
+      depth++;
+      if (tag === 'br' || tag === 'img' || tag === 'hr') depth--;
+    }
+  }
+  if (buffer.trim()) blocks.push(buffer);
+  return blocks.filter((b) => b.trim().length > 0);
 }
 
-function joinParagraphs(paras: string[]): string {
-  return paras.join('\n\n');
+function joinParagraphs(blocks: string[]): string {
+  return blocks.join('');
 }
 
 export const suggestionRouter = createTRPCRouter({

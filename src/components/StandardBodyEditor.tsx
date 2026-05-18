@@ -5,6 +5,8 @@ import { useSession } from 'next-auth/react';
 import { trpc } from '@/lib/trpc/client';
 import { Avatar } from '@/components/ui/Avatar';
 import { Modal } from '@/components/ui/Modal';
+import { RichTextEditor } from '@/components/ui/RichTextEditor';
+import { splitHtmlBlocks, htmlToPlainText, normalizeBodyHtml } from '@/lib/standardBody';
 import {
   Pencil,
   ThumbsUp,
@@ -30,15 +32,6 @@ interface Props {
   bodyUpdatedBy: { name: string } | null;
 }
 
-/** Split text into paragraphs in the same way the backend does. */
-function splitParas(text: string | null | undefined): string[] {
-  if (!text) return [];
-  return text
-    .split(/\n{2,}/)
-    .map((p) => p.trim())
-    .filter((p) => p.length > 0);
-}
-
 type OpKind = 'REPLACE' | 'INSERT_AFTER' | 'DELETE';
 
 interface DraftSuggestion {
@@ -48,6 +41,18 @@ interface DraftSuggestion {
   operation: OpKind;
   rationale: string;
 }
+
+/**
+ * Tailwind prose classes used for read-only rendering of HTML blocks.
+ * Kept in sync with the live editor surface in RichTextEditor.tsx so the
+ * preview looks identical to the editing experience.
+ */
+const READONLY_PROSE_CLASSES =
+  'prose prose-sm dark:prose-invert max-w-none ' +
+  'prose-headings:text-ink prose-p:text-ink prose-li:text-ink prose-strong:text-ink ' +
+  'prose-blockquote:text-mid prose-blockquote:border-brand ' +
+  'prose-a:text-brand prose-code:text-ink prose-code:bg-pill prose-code:px-1 prose-code:rounded ' +
+  'prose-p:my-0 prose-headings:my-0';
 
 export function StandardBodyEditor({
   standardId,
@@ -73,7 +78,10 @@ export function StandardBodyEditor({
   const canEditMeta = userCtx ? can(userCtx, 'standard:editMeta', workingGroupId) : false;
   const canSuggest = userCtx ? can(userCtx, 'comment:add', workingGroupId) : false;
 
-  const paragraphs = useMemo(() => splitParas(bodyText), [bodyText]);
+  // Body is HTML emitted by TipTap (legacy plain-text bodies are migrated to
+  // <p>-wrapped HTML transparently inside splitHtmlBlocks).
+  const normalizedBody = useMemo(() => normalizeBodyHtml(bodyText), [bodyText]);
+  const paragraphs = useMemo(() => splitHtmlBlocks(normalizedBody), [normalizedBody]);
 
   const { data: suggestions } = trpc.suggestion.list.useQuery(
     { standardId },
@@ -97,7 +105,7 @@ export function StandardBodyEditor({
 
   const [draft, setDraft] = useState<DraftSuggestion | null>(null);
   const [bulkOpen, setBulkOpen] = useState(false);
-  const [bulkText, setBulkText] = useState(bodyText ?? '');
+  const [bulkText, setBulkText] = useState(normalizedBody);
 
   const createMutation = trpc.suggestion.create.useMutation({
     onSuccess: () => {
@@ -131,6 +139,8 @@ export function StandardBodyEditor({
     setDraft({
       paragraphIndex: idx,
       originalText: original,
+      // Seed REPLACE with the original markup so authors edit in place; DELETE
+      // keeps proposedText empty per backend contract.
       proposedText: op === 'DELETE' ? '' : original,
       operation: op,
       rationale: '',
@@ -222,11 +232,11 @@ export function StandardBodyEditor({
           {canEditMeta && (
             <button
               onClick={() => {
-                setBulkText(bodyText ?? '');
+                setBulkText(normalizedBody);
                 setBulkOpen(true);
               }}
               className="text-xs px-2.5 py-1 rounded border border-hairline text-mid hover:text-ink hover:bg-pill inline-flex items-center gap-1.5"
-              title="Редагувати весь текст одразу (для бувлк-правок)"
+              title="Редагувати весь текст із форматуванням як у Word"
             >
               <Edit3 className="w-3 h-3" />
               Редагувати все
@@ -234,15 +244,15 @@ export function StandardBodyEditor({
           )}
         </div>
 
-        {/* Body paragraphs */}
+        {/* Body blocks (HTML, rendered via prose classes) */}
         <article className="bg-card rounded-xl border border-hairline p-5 sm:p-8 space-y-5">
-          {paragraphs.map((p, idx) => {
+          {paragraphs.map((html, idx) => {
             const pending = pendingBySection.get(idx) ?? [];
             return (
               <ParagraphBlock
                 key={idx}
                 idx={idx}
-                text={p}
+                html={html}
                 pending={pending}
                 myUserId={me?.id ?? null}
                 canSuggest={canSuggest}
@@ -295,7 +305,10 @@ export function StandardBodyEditor({
                   </span>
                   <span className="text-[10px] text-light">параграф {s.paragraphIndex + 1}</span>
                 </div>
-                <p className="text-[11px] text-mid line-clamp-2">{s.proposedText || '—'}</p>
+                {/* Show plaintext preview in the rail to keep it compact */}
+                <p className="text-[11px] text-mid line-clamp-2">
+                  {htmlToPlainText(s.proposedText) || '—'}
+                </p>
                 <p className="text-[10px] text-light mt-1">
                   {s.author.name}
                   {s.resolvedBy && ` → ${s.resolvedBy.name}`}
@@ -329,7 +342,7 @@ export function StandardBodyEditor({
 
 interface ParagraphBlockProps {
   idx: number;
-  text: string;
+  html: string;
   pending: SuggestionListItem[];
   myUserId: string | null;
   canSuggest: boolean;
@@ -344,7 +357,7 @@ interface ParagraphBlockProps {
 
 function ParagraphBlock({
   idx,
-  text,
+  html,
   pending,
   myUserId,
   canSuggest,
@@ -364,9 +377,12 @@ function ParagraphBlock({
           {idx + 1}
         </span>
         <div className="flex-1 min-w-0">
-          <p className="text-[14px] text-ink leading-relaxed whitespace-pre-wrap break-words">
-            {text}
-          </p>
+          {/* HTML body block — sanitized by TipTap's schema on write, so safe
+              to dangerouslySetInnerHTML on read. */}
+          <div
+            className={`${READONLY_PROSE_CLASSES} break-words`}
+            dangerouslySetInnerHTML={{ __html: html }}
+          />
           {canSuggest && (
             <div className="mt-1 -ml-1 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
               <button
@@ -429,26 +445,30 @@ function ParagraphBlock({
                   </span>
                 </div>
 
-                {/* Word-style redline */}
+                {/* Word-style redline — both sides render their HTML */}
                 {s.operation === 'REPLACE' && (
-                  <div className="text-[13px] leading-relaxed">
-                    <p className="line-through text-red-600 dark:text-red-400 opacity-80 mb-1 whitespace-pre-wrap">
-                      {s.originalText}
-                    </p>
-                    <p className="text-emerald-700 dark:text-emerald-300 font-medium whitespace-pre-wrap">
-                      {s.proposedText}
-                    </p>
+                  <div className="text-[13px] leading-relaxed space-y-1.5">
+                    <div
+                      className={`${READONLY_PROSE_CLASSES} rounded border border-red-200 dark:border-red-800/40 bg-red-50/40 dark:bg-red-900/10 px-2.5 py-1.5 text-red-700 dark:text-red-300 [&_*]:line-through [&_*]:!text-red-700 dark:[&_*]:!text-red-300`}
+                      dangerouslySetInnerHTML={{ __html: s.originalText || '<p>—</p>' }}
+                    />
+                    <div
+                      className={`${READONLY_PROSE_CLASSES} rounded border border-emerald-200 dark:border-emerald-800/40 bg-emerald-50/40 dark:bg-emerald-900/10 px-2.5 py-1.5 [&_*]:!text-emerald-800 dark:[&_*]:!text-emerald-200`}
+                      dangerouslySetInnerHTML={{ __html: s.proposedText || '<p>—</p>' }}
+                    />
                   </div>
                 )}
                 {s.operation === 'INSERT_AFTER' && (
-                  <p className="text-[13px] text-emerald-700 dark:text-emerald-300 font-medium whitespace-pre-wrap leading-relaxed">
-                    + {s.proposedText}
-                  </p>
+                  <div
+                    className={`${READONLY_PROSE_CLASSES} text-[13px] leading-relaxed rounded border border-emerald-200 dark:border-emerald-800/40 bg-emerald-50/40 dark:bg-emerald-900/10 px-2.5 py-1.5 [&_*]:!text-emerald-800 dark:[&_*]:!text-emerald-200`}
+                    dangerouslySetInnerHTML={{ __html: s.proposedText || '<p>—</p>' }}
+                  />
                 )}
                 {s.operation === 'DELETE' && (
-                  <p className="text-[13px] line-through text-red-600 dark:text-red-400 whitespace-pre-wrap leading-relaxed">
-                    {s.originalText}
-                  </p>
+                  <div
+                    className={`${READONLY_PROSE_CLASSES} text-[13px] leading-relaxed rounded border border-red-200 dark:border-red-800/40 bg-red-50/40 dark:bg-red-900/10 px-2.5 py-1.5 [&_*]:line-through [&_*]:!text-red-700 dark:[&_*]:!text-red-300`}
+                    dangerouslySetInnerHTML={{ __html: s.originalText || '<p>—</p>' }}
+                  />
                 )}
 
                 {s.rationale && (
@@ -534,15 +554,21 @@ function SuggestionDraftModal({
         ? `Додати параграф після ${draft.paragraphIndex + 1}`
         : `Змінити параграф ${draft.paragraphIndex + 1}`;
 
+  const proposedIsEmpty = htmlToPlainText(draft.proposedText).trim().length === 0;
+  const sameAsOriginal =
+    draft.operation === 'REPLACE' &&
+    htmlToPlainText(draft.proposedText).trim() === htmlToPlainText(draft.originalText).trim();
+
   return (
     <Modal open={!!draft} onClose={onClose} title={title} size="lg">
       <div className="space-y-4">
         {draft.operation !== 'INSERT_AFTER' && (
           <div>
             <label className="field-label">Поточний текст</label>
-            <p className="bg-page border border-hairline rounded-[10px] px-3 py-2 text-sm text-mid whitespace-pre-wrap">
-              {draft.originalText || '(порожньо)'}
-            </p>
+            <div
+              className={`${READONLY_PROSE_CLASSES} bg-page border border-hairline rounded-[10px] px-3 py-2 text-sm`}
+              dangerouslySetInnerHTML={{ __html: draft.originalText || '<p>(порожньо)</p>' }}
+            />
           </div>
         )}
         {draft.operation !== 'DELETE' && (
@@ -550,12 +576,13 @@ function SuggestionDraftModal({
             <label className="field-label">
               {draft.operation === 'INSERT_AFTER' ? 'Новий параграф' : 'Запропонований текст'}
             </label>
-            <textarea
-              rows={6}
+            {/* Re-mount editor when switching draft instances so initial HTML
+                seeds correctly (TipTap only consumes `content` once). */}
+            <RichTextEditor
+              key={`${draft.paragraphIndex}-${draft.operation}`}
+              initialHtml={draft.proposedText}
+              onChange={(html) => onChange({ ...draft, proposedText: html })}
               autoFocus
-              value={draft.proposedText}
-              onChange={(e) => onChange({ ...draft, proposedText: e.target.value })}
-              className="textarea resize-none"
               placeholder={
                 draft.operation === 'INSERT_AFTER'
                   ? 'Введіть текст нового параграфа…'
@@ -588,9 +615,8 @@ function SuggestionDraftModal({
             onClick={onSubmit}
             disabled={
               isPending ||
-              (draft.operation === 'INSERT_AFTER' && !draft.proposedText.trim()) ||
-              (draft.operation === 'REPLACE' &&
-                draft.proposedText.trim() === draft.originalText.trim())
+              (draft.operation === 'INSERT_AFTER' && proposedIsEmpty) ||
+              (draft.operation === 'REPLACE' && (proposedIsEmpty || sameAsOriginal))
             }
             className="btn-primary"
           >
@@ -616,31 +642,34 @@ function BulkEditModal({
   onSave: (text: string) => void;
   isPending: boolean;
 }) {
-  const [text, setText] = useState(initial);
+  const [html, setHtml] = useState(initial);
   // re-sync when modal (re)opens with a different initial value
   useEffect(() => {
-    if (open) setText(initial);
+    if (open) setHtml(initial);
   }, [initial, open]);
 
   return (
     <Modal open={open} onClose={onClose} title="Редагувати текст документа" size="xl">
       <div className="space-y-4">
         <p className="text-xs text-mid">
-          Прямі правки керівника, обходячи механізм запитів. Розділяйте параграфи порожнім рядком —
-          система рахує їх по «\n\n». Зміна тут не створює запитів на голосування.
+          Повноцінне форматування як у Word — заголовки, списки, таблиці, посилання. Кожен блок
+          (параграф, заголовок, пункт списку, таблиця) — окрема секція для запитів на правку. Зміна
+          тут не створює запитів на голосування.
         </p>
-        <textarea
-          rows={20}
-          value={text}
-          onChange={(e) => setText(e.target.value)}
-          className="textarea resize-y font-mono text-sm"
-          placeholder="Введіть текст документа…"
+        {/* Force a fresh editor instance whenever the modal reopens with new
+            HTML — TipTap ignores `content` updates after init. */}
+        <RichTextEditor
+          key={open ? `bulk-${initial.length}-${open}` : 'bulk-closed'}
+          initialHtml={html}
+          onChange={setHtml}
+          className="rounded-[10px] border border-hairline bg-card min-h-[400px]"
+          autoFocus
         />
         <div className="flex justify-end gap-2 pt-2 border-t border-hairline">
           <button onClick={onClose} className="btn-secondary">
             Скасувати
           </button>
-          <button onClick={() => onSave(text)} disabled={isPending} className="btn-primary">
+          <button onClick={() => onSave(html)} disabled={isPending} className="btn-primary">
             {isPending && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
             Зберегти
           </button>

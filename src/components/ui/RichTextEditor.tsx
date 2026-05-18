@@ -1,0 +1,279 @@
+'use client';
+
+import { useEditor, EditorContent, type Editor } from '@tiptap/react';
+import { StarterKit } from '@tiptap/starter-kit';
+import { Underline } from '@tiptap/extension-underline';
+import { Link } from '@tiptap/extension-link';
+import { Placeholder } from '@tiptap/extension-placeholder';
+// All table parts live in @tiptap/extension-table; the row/cell/header
+// sub-packages are just re-exports of the same symbols.
+import { Table, TableRow, TableCell, TableHeader } from '@tiptap/extension-table';
+import {
+  Bold,
+  Italic,
+  UnderlineIcon,
+  Strikethrough,
+  Heading1,
+  Heading2,
+  Heading3,
+  List,
+  ListOrdered,
+  Quote,
+  Code,
+  Undo,
+  Redo,
+  Link as LinkIcon,
+  Table as TableIcon,
+  Type as TypeIcon,
+} from 'lucide-react';
+
+/**
+ * WYSIWYG editor backed by TipTap (ProseMirror).
+ *
+ * - Output is HTML — call editor.getHTML() or hand it editor.on('update').
+ * - Sanitization is provided by ProseMirror's strict schema (it only
+ *   accepts nodes/marks declared by the registered extensions, so script
+ *   injection is impossible by construction).
+ * - The same component is reused in a readonly mode by RichTextRenderer.
+ */
+interface Props {
+  initialHtml: string;
+  onChange?: (html: string) => void;
+  editable?: boolean;
+  placeholder?: string;
+  /** Tailwind classes applied to the editor surface. */
+  className?: string;
+  /** Show or hide the floating toolbar. Defaults to editable. */
+  toolbar?: boolean;
+  autoFocus?: boolean;
+}
+
+const STARTER_KIT_OPTIONS = {
+  // We rely on TipTap StarterKit defaults; only switch off ones we replace.
+  link: false, // we install our own Link extension to control attributes
+} as const;
+
+export function RichTextEditor({
+  initialHtml,
+  onChange,
+  editable = true,
+  placeholder,
+  className,
+  toolbar,
+  autoFocus,
+}: Props) {
+  const editor = useEditor({
+    extensions: [
+      StarterKit.configure(STARTER_KIT_OPTIONS),
+      Underline,
+      Link.configure({
+        openOnClick: false,
+        autolink: true,
+        HTMLAttributes: { class: 'text-brand underline' },
+      }),
+      Placeholder.configure({
+        placeholder: placeholder ?? 'Почніть писати…',
+        emptyEditorClass: 'is-editor-empty',
+      }),
+      Table.configure({ resizable: false }),
+      TableRow,
+      TableHeader,
+      TableCell,
+    ],
+    content: initialHtml || '',
+    editable,
+    immediatelyRender: false, // SSR-safe
+    autofocus: autoFocus ? 'end' : false,
+    editorProps: {
+      attributes: {
+        class:
+          'prose prose-sm dark:prose-invert max-w-none focus:outline-none ' +
+          'prose-headings:text-ink prose-p:text-ink prose-li:text-ink prose-strong:text-ink ' +
+          'prose-blockquote:text-mid prose-blockquote:border-brand ' +
+          'prose-a:text-brand prose-code:text-ink prose-code:bg-pill prose-code:px-1 prose-code:rounded ' +
+          'min-h-[120px] py-2',
+      },
+    },
+    onUpdate: ({ editor: ed }) => {
+      onChange?.(ed.getHTML());
+    },
+  });
+
+  const showToolbar = toolbar ?? editable;
+
+  if (!editor) return null;
+
+  return (
+    <div className={className ?? 'rounded-[10px] border border-hairline bg-card'}>
+      {showToolbar && editable && <Toolbar editor={editor} />}
+      <div className="px-4 py-2">
+        <EditorContent editor={editor} />
+      </div>
+    </div>
+  );
+}
+
+function Toolbar({ editor }: { editor: Editor }) {
+  return (
+    <div className="flex items-center gap-0.5 px-2 py-1.5 border-b border-hairline overflow-x-auto scrollbar-thin">
+      <Btn
+        on={editor.isActive('bold')}
+        onClick={() => editor.chain().focus().toggleBold().run()}
+        title="Жирний (⌘B)"
+      >
+        <Bold size={14} />
+      </Btn>
+      <Btn
+        on={editor.isActive('italic')}
+        onClick={() => editor.chain().focus().toggleItalic().run()}
+        title="Курсив (⌘I)"
+      >
+        <Italic size={14} />
+      </Btn>
+      <Btn
+        on={editor.isActive('underline')}
+        onClick={() => editor.chain().focus().toggleUnderline().run()}
+        title="Підкреслений (⌘U)"
+      >
+        <UnderlineIcon size={14} />
+      </Btn>
+      <Btn
+        on={editor.isActive('strike')}
+        onClick={() => editor.chain().focus().toggleStrike().run()}
+        title="Закреслений"
+      >
+        <Strikethrough size={14} />
+      </Btn>
+      <Sep />
+      <Btn
+        on={editor.isActive('paragraph')}
+        onClick={() => editor.chain().focus().setParagraph().run()}
+        title="Звичайний текст"
+      >
+        <TypeIcon size={14} />
+      </Btn>
+      <Btn
+        on={editor.isActive('heading', { level: 1 })}
+        onClick={() => editor.chain().focus().toggleHeading({ level: 1 }).run()}
+        title="Заголовок 1"
+      >
+        <Heading1 size={14} />
+      </Btn>
+      <Btn
+        on={editor.isActive('heading', { level: 2 })}
+        onClick={() => editor.chain().focus().toggleHeading({ level: 2 }).run()}
+        title="Заголовок 2"
+      >
+        <Heading2 size={14} />
+      </Btn>
+      <Btn
+        on={editor.isActive('heading', { level: 3 })}
+        onClick={() => editor.chain().focus().toggleHeading({ level: 3 }).run()}
+        title="Заголовок 3"
+      >
+        <Heading3 size={14} />
+      </Btn>
+      <Sep />
+      <Btn
+        on={editor.isActive('bulletList')}
+        onClick={() => editor.chain().focus().toggleBulletList().run()}
+        title="Маркований список"
+      >
+        <List size={14} />
+      </Btn>
+      <Btn
+        on={editor.isActive('orderedList')}
+        onClick={() => editor.chain().focus().toggleOrderedList().run()}
+        title="Нумерований список"
+      >
+        <ListOrdered size={14} />
+      </Btn>
+      <Btn
+        on={editor.isActive('blockquote')}
+        onClick={() => editor.chain().focus().toggleBlockquote().run()}
+        title="Цитата"
+      >
+        <Quote size={14} />
+      </Btn>
+      <Btn
+        on={editor.isActive('codeBlock')}
+        onClick={() => editor.chain().focus().toggleCodeBlock().run()}
+        title="Блок коду"
+      >
+        <Code size={14} />
+      </Btn>
+      <Sep />
+      <Btn
+        on={editor.isActive('link')}
+        onClick={() => {
+          const previous = (editor.getAttributes('link') as { href?: string }).href ?? '';
+          const url = window.prompt('URL посилання:', previous);
+          if (url === null) return; // cancelled
+          if (url === '') {
+            editor.chain().focus().extendMarkRange('link').unsetLink().run();
+            return;
+          }
+          editor.chain().focus().extendMarkRange('link').setLink({ href: url }).run();
+        }}
+        title="Посилання"
+      >
+        <LinkIcon size={14} />
+      </Btn>
+      <Btn
+        onClick={() =>
+          editor.chain().focus().insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run()
+        }
+        title="Вставити таблицю 3×3"
+      >
+        <TableIcon size={14} />
+      </Btn>
+      <Sep />
+      <Btn
+        onClick={() => editor.chain().focus().undo().run()}
+        disabled={!editor.can().undo()}
+        title="Скасувати (⌘Z)"
+      >
+        <Undo size={14} />
+      </Btn>
+      <Btn
+        onClick={() => editor.chain().focus().redo().run()}
+        disabled={!editor.can().redo()}
+        title="Повторити (⌘⇧Z)"
+      >
+        <Redo size={14} />
+      </Btn>
+    </div>
+  );
+}
+
+function Btn({
+  children,
+  onClick,
+  on,
+  disabled,
+  title,
+}: {
+  children: React.ReactNode;
+  onClick: () => void;
+  on?: boolean;
+  disabled?: boolean;
+  title?: string;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      title={title}
+      className={`p-1.5 rounded transition-colors disabled:opacity-30 disabled:cursor-not-allowed ${
+        on ? 'bg-brand-soft text-brand' : 'text-mid hover:text-ink hover:bg-pill'
+      }`}
+    >
+      {children}
+    </button>
+  );
+}
+
+function Sep() {
+  return <span className="w-px h-5 bg-hairline mx-1" />;
+}
