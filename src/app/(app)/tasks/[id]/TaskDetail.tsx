@@ -65,7 +65,7 @@ export function TaskDetail({ id }: { id: string }) {
   const canDelete = session?.user.globalRole === 'ADMIN' || task.createdById === session?.user.id;
 
   return (
-    <div className="space-y-5 pg-enter max-w-4xl">
+    <div className="space-y-5 pg-enter">
       {/* Breadcrumb */}
       <nav className="flex items-center gap-2 text-sm text-mid">
         <Link href="/tasks" className="hover:text-brand">
