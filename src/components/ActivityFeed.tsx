@@ -102,14 +102,18 @@ export function ActivityFeed({
   entity,
   entityId,
   title = 'Журнал змін',
-  collapsible = false,
-  defaultOpen = true,
+  collapsible = true,
+  defaultOpen = false,
 }: {
   entity: Entity;
   entityId: string;
   title?: string;
-  /** Render header as a click-toggle that hides the list. */
+  /** Render header as a click-toggle that hides the list. Default true. */
   collapsible?: boolean;
+  /** Whether the feed starts expanded. Default false — feeds are noisy
+   *  by nature, prefer the page header staying calm until the user
+   *  opts in to seeing changes.
+   */
   defaultOpen?: boolean;
 }) {
   const [open, setOpen] = useState(defaultOpen);

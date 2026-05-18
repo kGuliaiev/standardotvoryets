@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { trpc } from '@/lib/trpc/client';
 import { useSession } from 'next-auth/react';
+import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { Pencil, ChevronDown } from 'lucide-react';
 import { StatusBadge, type StandardStatus } from '@/components/ui/StatusBadge';
@@ -67,13 +68,35 @@ const STATUS_LABELS: Record<StandardStatus, string> = {
   ARCHIVED: 'Архів',
 };
 
+const VALID_TABS = new Set<Tab>([
+  'body',
+  'documents',
+  'comments',
+  'tasks',
+  'members',
+  'voting',
+  'history',
+]);
+
 export function StandardDetail({ id }: { id: string }) {
   const { data: session } = useSession();
-  const [activeTab, setActiveTab] = useState<Tab>('body');
+  const searchParams = useSearchParams();
+  // Honor ?tab=<id> from incoming links (notifications deep-link here).
+  const queryTab = searchParams.get('tab');
+  const initialTab: Tab = queryTab && VALID_TABS.has(queryTab as Tab) ? (queryTab as Tab) : 'body';
+  const [activeTab, setActiveTab] = useState<Tab>(initialTab);
   const [stepperOpen, setStepperOpen] = useLocalStorageState<boolean>(
     `standard.${id}.stepperOpen`,
     false,
   );
+
+  // If the URL changes (e.g. user clicks another notification while on the
+  // same standard page), follow it.
+  useEffect(() => {
+    if (queryTab && VALID_TABS.has(queryTab as Tab)) {
+      setActiveTab(queryTab as Tab);
+    }
+  }, [queryTab]);
 
   const { data: standard, isLoading, refetch } = trpc.standard.byId.useQuery({ id });
   const { data: currentVoting } = trpc.vote.current.useQuery({ standardId: id });
@@ -323,33 +346,56 @@ export function StandardDetail({ id }: { id: string }) {
       </div>
 
       {/* Tabs */}
-      <div className="border-b border-hairline overflow-x-auto scrollbar-thin">
-        <nav className="flex gap-0 -mb-px min-w-max">
-          {TABS.map((tab) => (
-            <button
-              key={tab.id}
-              onClick={() => setActiveTab(tab.id)}
-              className={`px-4 sm:px-5 py-3 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${
-                activeTab === tab.id
-                  ? 'border-blue-600 text-blue-700'
-                  : 'border-transparent text-mid hover:text-ink hover:border-slate-300'
-              }`}
-            >
-              {tab.label}
-              {tab.id === 'documents' && standard.documents.length > 0 && (
-                <span className="ml-1.5 text-xs bg-pill text-mid rounded-full px-1.5 py-0.5">
-                  {standard.documents.length}
-                </span>
-              )}
-              {tab.id === 'tasks' && openTasks.length > 0 && (
-                <span className="ml-1.5 text-xs bg-amber-100 text-amber-700 rounded-full px-1.5 py-0.5">
-                  {openTasks.length}
-                </span>
-              )}
-            </button>
-          ))}
-        </nav>
-      </div>
+      {(() => {
+        // Counts shown as small chips next to each tab label
+        const counts: Partial<Record<Tab, number>> = {
+          documents: standard.documents.length,
+          comments: standard.comments.length,
+          tasks: tasks?.length ?? 0,
+          members: standard.workingGroup.members.length,
+          voting: (votingHistory?.length ?? 0) + (currentVoting ? 1 : 0),
+          history: standard.statusHistory.length,
+        };
+        // Distinct tone for tasks: amber when there are OPEN ones (signals
+        // attention); neutral when only DONE/CANCELLED remain.
+        const tabTone: Partial<Record<Tab, 'neutral' | 'amber'>> = {
+          tasks: openTasks.length > 0 ? 'amber' : 'neutral',
+        };
+        return (
+          <div className="border-b border-hairline overflow-x-auto scrollbar-thin">
+            <nav className="flex gap-0 -mb-px min-w-max">
+              {TABS.map((tab) => {
+                const count = counts[tab.id];
+                const tone = tabTone[tab.id] ?? 'neutral';
+                return (
+                  <button
+                    key={tab.id}
+                    onClick={() => setActiveTab(tab.id)}
+                    className={`px-4 sm:px-5 py-3 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${
+                      activeTab === tab.id
+                        ? 'border-blue-600 text-blue-700'
+                        : 'border-transparent text-mid hover:text-ink hover:border-slate-300'
+                    }`}
+                  >
+                    {tab.label}
+                    {typeof count === 'number' && count > 0 && (
+                      <span
+                        className={`ml-1.5 text-xs rounded-full px-1.5 py-0.5 tabular-nums ${
+                          tone === 'amber'
+                            ? 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300'
+                            : 'bg-pill text-mid'
+                        }`}
+                      >
+                        {count}
+                      </span>
+                    )}
+                  </button>
+                );
+              })}
+            </nav>
+          </div>
+        );
+      })()}
 
       {/* Description (always visible, above tabs) */}
       {standard.description && (

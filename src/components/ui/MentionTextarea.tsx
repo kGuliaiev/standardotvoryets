@@ -1,6 +1,7 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { Avatar } from '@/components/ui/Avatar';
 
 export interface MentionCandidate {
@@ -110,6 +111,72 @@ export function MentionTextarea({
     }
   }
 
+  // Position the dropdown via fixed coordinates + portal so it escapes
+  // any clipping ancestor (e.g. reply slot's narrow container which
+  // sits inside the comment thread's overflow-hidden card).
+  const [menuPos, setMenuPos] = useState<{ left: number; top: number; width: number } | null>(null);
+
+  useLayoutEffect(() => {
+    if (query === null || filtered.length === 0) {
+      setMenuPos(null);
+      return;
+    }
+    const update = () => {
+      const ta = ref.current;
+      if (!ta) return;
+      const r = ta.getBoundingClientRect();
+      const desiredWidth = Math.min(288, Math.max(220, r.width));
+      const leftRaw = r.left;
+      const maxLeft = window.innerWidth - desiredWidth - 8;
+      const left = Math.max(8, Math.min(leftRaw, maxLeft));
+      // Default below textarea; if there's no room, flip above
+      const belowSpace = window.innerHeight - r.bottom;
+      const top = belowSpace > 200 ? r.bottom + 4 : r.top - 4 - 220;
+      setMenuPos({ left, top, width: desiredWidth });
+    };
+    update();
+    window.addEventListener('resize', update);
+    window.addEventListener('scroll', update, true);
+    return () => {
+      window.removeEventListener('resize', update);
+      window.removeEventListener('scroll', update, true);
+    };
+  }, [query, filtered.length]);
+
+  const dropdown =
+    menuPos && query !== null && filtered.length > 0 && typeof document !== 'undefined'
+      ? createPortal(
+          <div
+            className="fixed z-[300] max-h-72 overflow-y-auto rounded-[10px] border border-hairline bg-card shadow-lg"
+            style={{ left: menuPos.left, top: menuPos.top, width: menuPos.width }}
+          >
+            <ul className="py-1">
+              {filtered.map((c, i) => (
+                <li key={c.id}>
+                  <button
+                    type="button"
+                    onMouseDown={(e) => {
+                      // mouseDown so blur doesn't fire first
+                      e.preventDefault();
+                      insertMention(c);
+                    }}
+                    onMouseEnter={() => setHighlight(i)}
+                    className={`w-full flex items-center gap-2 px-3 py-1.5 text-left text-sm ${
+                      i === highlight ? 'bg-pill text-ink' : 'text-mid hover:bg-pill'
+                    }`}
+                  >
+                    <Avatar name={c.name} avatarUrl={c.avatarUrl ?? undefined} size="xs" />
+                    <span className="flex-1 truncate font-medium">{c.name}</span>
+                    {c.hint && <span className="text-[10px] text-light shrink-0">{c.hint}</span>}
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </div>,
+          document.body,
+        )
+      : null;
+
   return (
     <div className="relative">
       <textarea
@@ -122,35 +189,7 @@ export function MentionTextarea({
         autoFocus={autoFocus}
         className={className ?? 'textarea resize-none w-full'}
       />
-      {query !== null && filtered.length > 0 && (
-        <div
-          className="absolute left-2 z-20 mt-1 w-72 max-h-72 overflow-y-auto rounded-[10px] border border-hairline bg-card shadow-lg"
-          style={{ top: '100%' }}
-        >
-          <ul className="py-1">
-            {filtered.map((c, i) => (
-              <li key={c.id}>
-                <button
-                  type="button"
-                  onMouseDown={(e) => {
-                    // mouseDown so blur doesn't fire first
-                    e.preventDefault();
-                    insertMention(c);
-                  }}
-                  onMouseEnter={() => setHighlight(i)}
-                  className={`w-full flex items-center gap-2 px-3 py-1.5 text-left text-sm ${
-                    i === highlight ? 'bg-pill text-ink' : 'text-mid hover:bg-pill'
-                  }`}
-                >
-                  <Avatar name={c.name} avatarUrl={c.avatarUrl ?? undefined} size="xs" />
-                  <span className="flex-1 truncate font-medium">{c.name}</span>
-                  {c.hint && <span className="text-[10px] text-light shrink-0">{c.hint}</span>}
-                </button>
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
+      {dropdown}
     </div>
   );
 }
