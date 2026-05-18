@@ -46,8 +46,17 @@ FROM node:${NODE_VERSION} AS runner
 RUN corepack enable && corepack prepare pnpm@9.15.9 --activate
 # postgresql-client provides pg_dump for the in-process backup job.
 # Debian-slim images don't have it preinstalled.
+# Add the official PostgreSQL apt repo so we can pin pg_dump to the
+# same major as the production server (Railway defaults to Postgres 16).
+# A version mismatch makes pg_dump silently emit a near-empty file.
 RUN apt-get update \
-  && apt-get install -y --no-install-recommends postgresql-client \
+  && apt-get install -y --no-install-recommends curl ca-certificates gnupg \
+  && install -d /usr/share/postgresql-common/pgdg \
+  && curl -fsSL https://www.postgresql.org/media/keys/ACCC4CF8.asc -o /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc \
+  && echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc] https://apt.postgresql.org/pub/repos/apt bookworm-pgdg main" > /etc/apt/sources.list.d/pgdg.list \
+  && apt-get update \
+  && apt-get install -y --no-install-recommends postgresql-client-16 \
+  && apt-get purge -y --auto-remove curl gnupg \
   && rm -rf /var/lib/apt/lists/*
 WORKDIR /app
 ENV NODE_ENV=production

@@ -376,7 +376,13 @@ export async function runDatabaseBackup(opts: { retentionDays?: number; now?: Da
     dump.on('error', (e) => reject(new Error(`pg_dump spawn failed: ${e.message}`)));
     gzip.on('error', (e) => reject(new Error(`gzip spawn failed: ${e.message}`)));
     dump.on('close', (code) => {
-      if (code !== 0) reject(new Error(`pg_dump exit ${code}: ${dumpErr || gzipErr}`));
+      if (code !== 0) {
+        reject(new Error(`pg_dump exit ${code}: ${dumpErr || gzipErr}`));
+      } else if (dumpErr) {
+        // pg_dump exited 0 but wrote something to stderr — surface it
+        // (often "WARNING" lines that signal real problems).
+        console.warn('[backup] pg_dump stderr:', dumpErr);
+      }
     });
     gzip.on('close', (code) => {
       if (code !== 0) reject(new Error(`gzip exit ${code}: ${gzipErr || dumpErr}`));
@@ -386,7 +392,7 @@ export async function runDatabaseBackup(opts: { retentionDays?: number; now?: Da
   if (buffer.length < 1024) {
     return {
       ok: false,
-      reason: `Dump suspiciously small (${buffer.length} bytes)`,
+      reason: `Dump suspiciously small (${buffer.length} bytes). Possible causes: pg_dump version mismatch with server, missing perms on schema, or unreachable host. Try \`docker exec <container> pg_dump --version\` and compare with server's SELECT version();`,
       ranAt: now.toISOString(),
     };
   }
