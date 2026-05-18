@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useSession } from 'next-auth/react';
 import { trpc } from '@/lib/trpc/client';
 import { Avatar } from '@/components/ui/Avatar';
@@ -17,6 +17,7 @@ import {
   Edit3,
   Loader2,
   AlertCircle,
+  FileUp,
 } from 'lucide-react';
 import { can } from '@/lib/rbac';
 import type { GlobalRole, WorkingGroupRole } from '@prisma/client';
@@ -187,25 +188,36 @@ export function StandardBodyEditor({
   }
 
   if (!bodyText && canEditMeta) {
-    // Empty body — invite the leader to seed it
+    // Empty body — invite the leader to seed it (manually or via .docx import)
     return (
-      <div className="bg-card rounded-xl border border-hairline p-8 text-center space-y-3">
+      <div className="bg-card rounded-xl border border-hairline p-8 text-center space-y-4">
         <Edit3 className="w-8 h-8 text-mid mx-auto opacity-60" />
-        <p className="text-sm text-mid">Текст документа ще не додано.</p>
-        <button
-          onClick={() => {
-            setBulkText('');
-            setBulkOpen(true);
-          }}
-          className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-blue-700 text-white text-sm font-semibold hover:bg-blue-800"
-        >
-          <Plus className="w-4 h-4" />
-          Додати текст
-        </button>
+        <p className="text-sm text-mid">
+          Текст документа ще не додано. Імпортуйте .docx або почніть з нуля.
+        </p>
+        <div className="flex items-center justify-center gap-2 flex-wrap">
+          <DocxImportButton
+            standardId={standardId}
+            variant="primary"
+            onImported={(html) => updateBodyMutation.mutate({ standardId, bodyText: html })}
+            disabled={updateBodyMutation.isPending}
+          />
+          <button
+            onClick={() => {
+              setBulkText('');
+              setBulkOpen(true);
+            }}
+            className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg border border-hairline text-sm font-semibold text-ink hover:bg-pill"
+          >
+            <Plus className="w-4 h-4" />
+            Почати з нуля
+          </button>
+        </div>
 
         <BulkEditModal
           open={bulkOpen}
           initial={bulkText}
+          standardId={standardId}
           onClose={() => setBulkOpen(false)}
           onSave={(text) => updateBodyMutation.mutate({ standardId, bodyText: text })}
           isPending={updateBodyMutation.isPending}
@@ -332,6 +344,7 @@ export function StandardBodyEditor({
       <BulkEditModal
         open={bulkOpen}
         initial={bulkText}
+        standardId={standardId}
         onClose={() => setBulkOpen(false)}
         onSave={(text) => updateBodyMutation.mutate({ standardId, bodyText: text })}
         isPending={updateBodyMutation.isPending}
@@ -632,34 +645,53 @@ function SuggestionDraftModal({
 function BulkEditModal({
   open,
   initial,
+  standardId,
   onClose,
   onSave,
   isPending,
 }: {
   open: boolean;
   initial: string;
+  standardId: string;
   onClose: () => void;
   onSave: (text: string) => void;
   isPending: boolean;
 }) {
   const [html, setHtml] = useState(initial);
+  // The editor seeds `content` only once at mount; bumping this key
+  // forces a remount when an import replaces the buffer mid-session.
+  const [editorKey, setEditorKey] = useState(0);
   // re-sync when modal (re)opens with a different initial value
   useEffect(() => {
-    if (open) setHtml(initial);
+    if (open) {
+      setHtml(initial);
+      setEditorKey((k) => k + 1);
+    }
   }, [initial, open]);
 
   return (
     <Modal open={open} onClose={onClose} title="Редагувати текст документа" size="xl">
       <div className="space-y-4">
-        <p className="text-xs text-mid">
-          Повноцінне форматування як у Word — заголовки, списки, таблиці, посилання. Кожен блок
-          (параграф, заголовок, пункт списку, таблиця) — окрема секція для запитів на правку. Зміна
-          тут не створює запитів на голосування.
-        </p>
-        {/* Force a fresh editor instance whenever the modal reopens with new
-            HTML — TipTap ignores `content` updates after init. */}
+        <div className="flex items-start justify-between gap-3 flex-wrap">
+          <p className="text-xs text-mid flex-1 min-w-[280px]">
+            Повноцінне форматування як у Word — заголовки, списки, таблиці, посилання. Кожен блок
+            (параграф, заголовок, пункт списку, таблиця) — окрема секція для запитів на правку.
+            Зміна тут не створює запитів на голосування.
+          </p>
+          <DocxImportButton
+            standardId={standardId}
+            variant="secondary"
+            onImported={(imported) => {
+              setHtml(imported);
+              setEditorKey((k) => k + 1);
+            }}
+          />
+        </div>
+        {/* Force a fresh editor instance whenever the modal reopens or an
+            import replaces the buffer — TipTap ignores `content` updates
+            after init. */}
         <RichTextEditor
-          key={open ? `bulk-${initial.length}-${open}` : 'bulk-closed'}
+          key={`bulk-${editorKey}`}
           initialHtml={html}
           onChange={setHtml}
           className="rounded-[10px] border border-hairline bg-card min-h-[400px]"
@@ -676,5 +708,97 @@ function BulkEditModal({
         </div>
       </div>
     </Modal>
+  );
+}
+
+/**
+ * File picker + upload + .docx→HTML conversion via /api/standards/[id]/import-body.
+ *
+ * Two visual variants:
+ *   - `primary` — the standalone empty-state CTA
+ *   - `secondary` — the inline button inside the bulk edit modal
+ */
+function DocxImportButton({
+  standardId,
+  variant,
+  onImported,
+  disabled,
+}: {
+  standardId: string;
+  variant: 'primary' | 'secondary';
+  onImported: (html: string) => void;
+  disabled?: boolean;
+}) {
+  const inputRef = useRef<HTMLInputElement>(null);
+  const [busy, setBusy] = useState(false);
+
+  async function handleFile(file: File) {
+    if (!file) return;
+    if (!file.name.toLowerCase().endsWith('.docx')) {
+      alert('Підтримуються лише файли .docx (Microsoft Word).');
+      return;
+    }
+    setBusy(true);
+    try {
+      const form = new FormData();
+      form.append('file', file);
+      const res = await fetch(`/api/standards/${standardId}/import-body`, {
+        method: 'POST',
+        body: form,
+      });
+      if (!res.ok) {
+        const err = (await res.json().catch(() => ({}))) as { error?: string };
+        alert(err.error ?? 'Не вдалося імпортувати документ');
+        return;
+      }
+      const data = (await res.json()) as { html: string; warnings?: string[] };
+      if (data.warnings && data.warnings.length > 0) {
+        // Show non-fatal conversion warnings so the user knows some content
+        // (e.g. embedded objects) may have been dropped.
+        // Quietly logged to the console as well for debugging.
+        // eslint-disable-next-line no-console
+        console.warn('[import-body] warnings:', data.warnings);
+      }
+      onImported(data.html);
+    } finally {
+      setBusy(false);
+      if (inputRef.current) inputRef.current.value = '';
+    }
+  }
+
+  const baseClass =
+    variant === 'primary'
+      ? 'inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-blue-700 text-white text-sm font-semibold hover:bg-blue-800 disabled:opacity-60 disabled:cursor-not-allowed'
+      : 'inline-flex items-center gap-1.5 px-2.5 py-1 rounded border border-hairline text-xs font-semibold text-ink hover:bg-pill disabled:opacity-60 disabled:cursor-not-allowed';
+
+  return (
+    <>
+      <input
+        ref={inputRef}
+        type="file"
+        accept=".docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+        hidden
+        onChange={(e) => {
+          const f = e.target.files?.[0];
+          if (f) void handleFile(f);
+        }}
+      />
+      <button
+        type="button"
+        disabled={busy || disabled}
+        onClick={() => inputRef.current?.click()}
+        className={baseClass}
+        title="Завантажити .docx — перетвориться в форматований текст"
+      >
+        {busy ? (
+          <Loader2
+            className={variant === 'primary' ? 'w-4 h-4 animate-spin' : 'w-3 h-3 animate-spin'}
+          />
+        ) : (
+          <FileUp className={variant === 'primary' ? 'w-4 h-4' : 'w-3 h-3'} />
+        )}
+        Імпортувати з Word
+      </button>
+    </>
   );
 }
