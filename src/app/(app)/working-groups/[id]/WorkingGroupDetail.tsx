@@ -681,7 +681,7 @@ export function WorkingGroupDetail({ id }: Props) {
             ) : (
               <div className="overflow-x-auto scrollbar-thin">
                 <table className="w-full text-sm min-w-[640px]">
-                  <thead className="bg-[#FAFBFD] border-b border-hairline">
+                  <thead className="bg-page border-b border-hairline">
                     <tr className="text-left text-[10px] text-light uppercase tracking-wide">
                       <th className="px-5 py-2.5 font-bold">
                         <SortableHeader columnKey="name" sort={docSort} onSort={setDocSort}>
@@ -723,7 +723,7 @@ export function WorkingGroupDetail({ id }: Props) {
                       };
                       const ext = d.filename.split('.').pop()?.toUpperCase().slice(0, 4) ?? '';
                       return (
-                        <tr key={d.id} className="hover:bg-[#FAFBFD]">
+                        <tr key={d.id} className="hover:bg-page">
                           <td className="px-5 py-3">
                             <div className="flex items-center gap-3">
                               <div className="w-8 h-8 bg-brand-soft text-brand rounded-[8px] flex items-center justify-center text-[10px] font-bold shrink-0">
@@ -796,7 +796,7 @@ export function WorkingGroupDetail({ id }: Props) {
             ) : (
               <div className="overflow-x-auto scrollbar-thin">
                 <table className="w-full text-sm min-w-[640px]">
-                  <thead className="bg-[#FAFBFD] border-b border-hairline">
+                  <thead className="bg-page border-b border-hairline">
                     <tr className="text-left text-[10px] text-light uppercase tracking-wide">
                       <th className="px-5 py-2.5 font-bold">Засідання</th>
                       <th className="px-3 py-2.5 font-bold">Дата засідання</th>
@@ -807,7 +807,7 @@ export function WorkingGroupDetail({ id }: Props) {
                   </thead>
                   <tbody className="divide-y divide-hairline">
                     {docsBundle.protocols.map((p) => (
-                      <tr key={p.id} className="hover:bg-[#FAFBFD]">
+                      <tr key={p.id} className="hover:bg-page">
                         <td className="px-5 py-3 font-medium text-ink">
                           <Link href={`/meetings/${p.id}`} className="hover:text-brand">
                             {p.meetingTitle}
