@@ -168,6 +168,7 @@ model User {
   accounts        Account[]
   standards            Standard[]
   standardBodiesEdited Standard[]              @relation("StandardBodyEditor")
+  documentBodiesEdited Document[]              @relation("DocumentBodyEditor")
   suggestionsCreated   StandardSuggestion[]    @relation("SuggestionAuthor")
   suggestionsResolved  StandardSuggestion[]    @relation("SuggestionResolver")
   suggestionReactions  SuggestionReaction[]
@@ -348,11 +349,19 @@ model Standard {
 // Collaborative edit suggestion against a Standard's bodyText.
 // Any WG member can create one; LEADER/DEPUTY/SECRETARY resolve.
 // Other members may LIKE/DISLIKE for advisory weight (no quorum gate).
+/// Suggestion attached either to a Standard's bodyText or a Document's
+/// bodyHtml. Exactly one of standardId / documentId is set — enforced in
+/// application code at the router layer.
 model StandardSuggestion {
   id              String              @id @default(cuid())
-  standardId      String
+  /// Set when the edit targets a Standard's bodyText. Mutually exclusive
+  /// with documentId.
+  standardId      String?
+  /// Set when the edit targets a Document's bodyHtml. Mutually exclusive
+  /// with standardId.
+  documentId      String?
   authorId        String
-  paragraphIndex  Int                 // 0-based index into split(/\n\n+/) of bodyText at creation time
+  paragraphIndex  Int                 // 0-based index into split blocks at creation time
   originalText    String              // snapshot of paragraph as it was when suggestion made
   proposedText    String              // empty string = "delete this paragraph"
   operation       SuggestionOp        @default(REPLACE)
@@ -363,12 +372,14 @@ model StandardSuggestion {
   resolvedById    String?
   resolveNote     String?
 
-  standard        Standard            @relation(fields: [standardId], references: [id], onDelete: Cascade)
+  standard        Standard?           @relation(fields: [standardId], references: [id], onDelete: Cascade)
+  document        Document?           @relation(fields: [documentId], references: [id], onDelete: Cascade)
   author          User                @relation("SuggestionAuthor", fields: [authorId], references: [id])
   resolvedBy      User?               @relation("SuggestionResolver", fields: [resolvedById], references: [id])
   reactions       SuggestionReaction[]
 
   @@index([standardId, status])
+  @@index([documentId, status])
   @@map("standard_suggestions")
 }
 
@@ -443,8 +454,20 @@ model Document {
   note         String? // "What changed in this version"
   createdAt    DateTime     @default(now())
 
+  /// When true, members can propose paragraph-level edits via the
+  /// suggestion mechanism (only meaningful for .docx — bodyHtml below is
+  /// populated only in that case).
+  allowEdits   Boolean      @default(false)
+  /// HTML extracted from the uploaded .docx (via mammoth) when allowEdits
+  /// is set. Same TipTap-compatible schema as Standard.bodyText.
+  bodyHtml         String?       @db.Text
+  bodyUpdatedAt    DateTime?
+  bodyUpdatedById  String?
+  bodyUpdatedBy    User?         @relation("DocumentBodyEditor", fields: [bodyUpdatedById], references: [id])
+
   standard   Standard @relation(fields: [standardId], references: [id], onDelete: Cascade)
   uploadedBy User     @relation(fields: [uploadedById], references: [id])
+  suggestions StandardSuggestion[]
 
   @@map("documents")
 }

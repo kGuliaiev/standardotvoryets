@@ -910,6 +910,10 @@ export async function notifySuggestionNew(
       },
     });
     if (!s) return;
+    // Suggestions on uploaded documents currently skip the notification
+    // flow (see suggestion.create in the router). When the parent is a
+    // document, `s.standard` is null and we silently bail.
+    if (!s.standard) return;
 
     const leadership = await wgLeadershipRecipients(db, s.standard.workingGroupId);
     if (leadership.length === 0) return;
@@ -947,6 +951,8 @@ export async function notifySuggestionResolved(
       },
     });
     if (!s) return;
+    // Document-targeted suggestions skip the notification flow.
+    if (!s.standard) return;
     if (s.authorId === actorUserId) return; // resolved their own — no self-ping
 
     const recipients = await singleUserRecipient(db, s.authorId);

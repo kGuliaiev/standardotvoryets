@@ -1,9 +1,9 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { trpc } from '@/lib/trpc/client';
 import { Modal } from '@/components/ui/Modal';
-import { Loader2, UploadCloud, FileText } from 'lucide-react';
+import { Loader2, UploadCloud, FileText, Pencil } from 'lucide-react';
 
 interface DocumentUploadModalProps {
   open: boolean;
@@ -51,6 +51,9 @@ export function DocumentUploadModal({
   const [version, setVersion] = useState('v1.0');
   const [type, setType] = useState<(typeof TYPE_OPTIONS)[number]['value']>('DRAFT_STANDARD');
   const [isCurrent, setIsCurrent] = useState(true);
+  // Default OFF: most uploads are reference material; the leader opts in
+  // for documents they want the WG to collaboratively edit.
+  const [allowEdits, setAllowEdits] = useState(false);
   const [note, setNote] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [progress, setProgress] = useState<'idle' | 'getting-url' | 'uploading' | 'confirming'>(
@@ -63,11 +66,27 @@ export function DocumentUploadModal({
       setVersion('v1.0');
       setType('DRAFT_STANDARD');
       setIsCurrent(true);
+      setAllowEdits(false);
       setNote('');
       setError(null);
       setProgress('idle');
     }
   }, [open]);
+
+  // Only .docx can be inlined as editable HTML — the server will convert
+  // it via mammoth. For PDF/XLSX/etc. we disable the option.
+  const fileIsDocx = useMemo(() => {
+    if (!file) return false;
+    return (
+      file.name.toLowerCase().endsWith('.docx') ||
+      file.type === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+    );
+  }, [file]);
+  useEffect(() => {
+    // Reset the flag automatically when the user swaps to a non-docx
+    // file so we don't ship a stale `true` to the server.
+    if (!fileIsDocx && allowEdits) setAllowEdits(false);
+  }, [fileIsDocx, allowEdits]);
 
   // Server-side proxy upload — keeps the browser away from S3 CORS pain.
   // See src/app/api/standards/[id]/documents/route.ts for the handler.
@@ -110,6 +129,7 @@ export function DocumentUploadModal({
       form.append('type', type);
       form.append('version', version.trim());
       form.append('isCurrent', String(isCurrent));
+      form.append('allowEdits', String(allowEdits && fileIsDocx));
       if (note.trim()) form.append('note', note.trim());
 
       const resp = await fetch(`/api/standards/${standardId}/documents`, {
@@ -208,15 +228,38 @@ export function DocumentUploadModal({
           />
         </div>
 
-        <label className="flex items-center gap-2 text-sm cursor-pointer">
-          <input
-            type="checkbox"
-            checked={isCurrent}
-            onChange={(e) => setIsCurrent(e.target.checked)}
-            className="w-4 h-4 accent-brand"
-          />
-          <span className="text-ink">Позначити як актуальну версію</span>
-        </label>
+        <div className="space-y-2">
+          <label className="flex items-center gap-2 text-sm cursor-pointer">
+            <input
+              type="checkbox"
+              checked={isCurrent}
+              onChange={(e) => setIsCurrent(e.target.checked)}
+              className="w-4 h-4 accent-brand"
+            />
+            <span className="text-ink">Позначити як актуальну версію</span>
+          </label>
+          <label
+            className={`flex items-start gap-2 text-sm ${fileIsDocx ? 'cursor-pointer' : 'cursor-not-allowed opacity-60'}`}
+            title={
+              fileIsDocx
+                ? 'Документ можна буде відкривати у редакторі та лишати запити на правки'
+                : 'Доступно лише для файлів .docx (Microsoft Word)'
+            }
+          >
+            <input
+              type="checkbox"
+              checked={allowEdits}
+              disabled={!fileIsDocx}
+              onChange={(e) => setAllowEdits(e.target.checked)}
+              className="w-4 h-4 accent-brand mt-0.5"
+            />
+            <span className="text-ink flex items-center gap-1.5">
+              <Pencil className="w-3.5 h-3.5 text-mid" />
+              Дозволити правки (колаборативне редагування)
+              {!fileIsDocx && <span className="text-[11px] text-light">— тільки для .docx</span>}
+            </span>
+          </label>
+        </div>
 
         {error && (
           <p className="text-sm text-red-600 bg-red-50 rounded-[10px] px-3 py-2">{error}</p>

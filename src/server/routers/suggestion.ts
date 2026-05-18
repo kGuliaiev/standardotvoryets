@@ -1,15 +1,26 @@
 /**
- * Collaborative editing of a standard's body text via discrete
- * "suggestions" (paragraph-level edits that the WG leader resolves).
+ * Collaborative editing of an HTML body (TipTap-formatted) via discrete
+ * "suggestions" — paragraph-level edits that a leader resolves.
+ *
+ * The body can live in two places:
+ *   - `Standard.bodyText` (the main collaborative document of each
+ *     standard)
+ *   - `Document.bodyHtml`  (any uploaded .docx the leader flagged as
+ *     "allow edits" — see DocumentUploadModal + import-body conversion)
+ *
+ * Every mutation takes an exclusive `standardId` OR `documentId` so the
+ * same UI component drives both flows. Internally we look up the
+ * working group via the corresponding parent, apply RBAC against it,
+ * and route reads/writes to the right table.
  *
  * Lifecycle:
  *   create  → status=PENDING. Author is any WG member.
  *   react   → LIKE/DISLIKE per user. Toggles on/off.
- *   accept  → status=ACCEPTED, applies to bodyText. LEADER/DEPUTY/SECRETARY only.
+ *   accept  → status=ACCEPTED, body updated. LEADER/DEPUTY/SECRETARY only.
  *   reject  → status=REJECTED. Leader only.
  *
- * Concurrency: applyAccept reads the latest bodyText, splits by /\n\n+/,
- * checks that the paragraph at paragraphIndex still equals originalText.
+ * Concurrency: applyAccept reads the current body, splits into blocks,
+ * checks that the block at paragraphIndex still equals originalText.
  * If it drifted (some other suggestion was accepted in between), we
  * return a CONFLICT error so the leader can re-review.
  */
@@ -20,7 +31,7 @@ import { createTRPCRouter, protectedProcedure } from '@/server/trpc';
 import { can } from '@/lib/rbac';
 import { logActivity } from '@/server/audit';
 import { notifySuggestionNew, notifySuggestionResolved } from '@/server/notify';
-import type { GlobalRole, WorkingGroupRole } from '@prisma/client';
+import type { GlobalRole, WorkingGroupRole, PrismaClient } from '@prisma/client';
 
 function userCtx(session: {
   user: { globalRole: string; memberships: { workingGroupId: string; role: string }[] };
@@ -96,33 +107,88 @@ function joinParagraphs(blocks: string[]): string {
   return blocks.join('');
 }
 
+/**
+ * Target schema: exactly one of standardId / documentId. Zod can't
+ * express XOR cleanly, so we mark both optional and refine the union
+ * downstream. Helpers below resolve a target to its workingGroupId.
+ */
+const targetInput = z
+  .object({
+    standardId: z.string().cuid().optional(),
+    documentId: z.string().cuid().optional(),
+  })
+  .refine((d) => Boolean(d.standardId) !== Boolean(d.documentId), {
+    message: 'Specify exactly one of standardId or documentId',
+  });
+
+type ResolvedTarget =
+  | { kind: 'standard'; standardId: string; workingGroupId: string; body: string | null }
+  | { kind: 'document'; documentId: string; workingGroupId: string; body: string | null };
+
+async function resolveTarget(
+  db: PrismaClient,
+  input: { standardId?: string; documentId?: string },
+): Promise<ResolvedTarget> {
+  if (input.standardId) {
+    const std = await db.standard.findUniqueOrThrow({
+      where: { id: input.standardId },
+      select: { workingGroupId: true, bodyText: true },
+    });
+    return {
+      kind: 'standard',
+      standardId: input.standardId,
+      workingGroupId: std.workingGroupId,
+      body: std.bodyText,
+    };
+  }
+  // documentId path
+  const doc = await db.document.findUniqueOrThrow({
+    where: { id: input.documentId! },
+    select: {
+      bodyHtml: true,
+      allowEdits: true,
+      standard: { select: { workingGroupId: true } },
+    },
+  });
+  if (!doc.allowEdits) {
+    throw new TRPCError({
+      code: 'FORBIDDEN',
+      message: 'Цей документ не позначений як такий, що допускає правки.',
+    });
+  }
+  return {
+    kind: 'document',
+    documentId: input.documentId!,
+    workingGroupId: doc.standard.workingGroupId,
+    body: doc.bodyHtml,
+  };
+}
+
 export const suggestionRouter = createTRPCRouter({
-  // ── list (everyone with read access to the standard) ─────────────────
+  // ── list (everyone with read access to the parent's working group) ────
   list: protectedProcedure
     .input(
-      z.object({
-        standardId: z.string().cuid(),
-        status: z.enum(['PENDING', 'ACCEPTED', 'REJECTED']).optional(),
-      }),
+      targetInput.and(z.object({ status: z.enum(['PENDING', 'ACCEPTED', 'REJECTED']).optional() })),
     )
     .query(async ({ ctx, input }) => {
-      const std = await ctx.db.standard.findUniqueOrThrow({
-        where: { id: input.standardId },
-        select: { workingGroupId: true },
-      });
+      const target = await resolveTarget(ctx.db, input);
       const u = userCtx(ctx.session);
       const isAdmin = ctx.session.user.globalRole === 'ADMIN';
       const isDirector = ctx.session.user.globalRole === 'DIRECTOR';
-      const isMember = u.memberships.some((m) => m.workingGroupId === std.workingGroupId);
+      const isMember = u.memberships.some((m) => m.workingGroupId === target.workingGroupId);
       if (!isAdmin && !isDirector && !isMember) {
         throw new TRPCError({ code: 'FORBIDDEN' });
       }
 
+      const where = {
+        ...(target.kind === 'standard'
+          ? { standardId: target.standardId }
+          : { documentId: target.documentId }),
+        ...(input.status ? { status: input.status } : {}),
+      };
+
       return ctx.db.standardSuggestion.findMany({
-        where: {
-          standardId: input.standardId,
-          ...(input.status ? { status: input.status } : {}),
-        },
+        where,
         include: {
           author: { select: { id: true, name: true, avatarUrl: true, rank: true } },
           resolvedBy: { select: { id: true, name: true } },
@@ -135,28 +201,28 @@ export const suggestionRouter = createTRPCRouter({
   // ── create (any WG member) ────────────────────────────────────────────
   create: protectedProcedure
     .input(
-      z.object({
-        standardId: z.string().cuid(),
-        paragraphIndex: z.number().int().min(0),
-        originalText: z.string().max(20_000),
-        proposedText: z.string().max(20_000),
-        operation: z.enum(['REPLACE', 'INSERT_AFTER', 'DELETE']).default('REPLACE'),
-        rationale: z.string().max(1000).optional(),
-      }),
+      targetInput.and(
+        z.object({
+          paragraphIndex: z.number().int().min(0),
+          originalText: z.string().max(20_000),
+          proposedText: z.string().max(20_000),
+          operation: z.enum(['REPLACE', 'INSERT_AFTER', 'DELETE']).default('REPLACE'),
+          rationale: z.string().max(1000).optional(),
+        }),
+      ),
     )
     .mutation(async ({ ctx, input }) => {
-      const std = await ctx.db.standard.findUniqueOrThrow({
-        where: { id: input.standardId },
-        select: { workingGroupId: true, code: true, title: true },
-      });
-      if (!can(userCtx(ctx.session), 'comment:add', std.workingGroupId)) {
+      const target = await resolveTarget(ctx.db, input);
+      if (!can(userCtx(ctx.session), 'comment:add', target.workingGroupId)) {
         // Reusing comment:add: any member of the WG can suggest.
         throw new TRPCError({ code: 'FORBIDDEN' });
       }
 
       const created = await ctx.db.standardSuggestion.create({
         data: {
-          standardId: input.standardId,
+          ...(target.kind === 'standard'
+            ? { standardId: target.standardId }
+            : { documentId: target.documentId }),
           authorId: ctx.session.user.id,
           paragraphIndex: input.paragraphIndex,
           originalText: input.originalText,
@@ -172,9 +238,17 @@ export const suggestionRouter = createTRPCRouter({
         entity: 'StandardSuggestion',
         entityId: created.id,
         after: created,
-        note: `Запропоновано правку до стандарту ${std.code}`,
+        note:
+          target.kind === 'standard'
+            ? 'Запропоновано правку до тексту стандарту'
+            : 'Запропоновано правку до документа',
       });
-      await notifySuggestionNew(ctx.db, created.id, ctx.session.user.id);
+      // Only fire notifications for standard-level suggestions for now —
+      // document-level edits are scoped tighter and we don't want to
+      // flood inboxes during the rollout.
+      if (target.kind === 'standard') {
+        await notifySuggestionNew(ctx.db, created.id, ctx.session.user.id);
+      }
       return created;
     }),
 
@@ -190,9 +264,16 @@ export const suggestionRouter = createTRPCRouter({
     .mutation(async ({ ctx, input }) => {
       const sug = await ctx.db.standardSuggestion.findUniqueOrThrow({
         where: { id: input.suggestionId },
-        select: { standardId: true, standard: { select: { workingGroupId: true } } },
+        select: {
+          standard: { select: { workingGroupId: true } },
+          document: { select: { standard: { select: { workingGroupId: true } } } },
+        },
       });
-      if (!can(userCtx(ctx.session), 'comment:add', sug.standard.workingGroupId)) {
+      const workingGroupId = sug.standard?.workingGroupId ?? sug.document?.standard.workingGroupId;
+      if (!workingGroupId) {
+        throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: 'Suggestion has no parent' });
+      }
+      if (!can(userCtx(ctx.session), 'comment:add', workingGroupId)) {
         throw new TRPCError({ code: 'FORBIDDEN' });
       }
       if (input.type === null) {
@@ -225,9 +306,23 @@ export const suggestionRouter = createTRPCRouter({
     .mutation(async ({ ctx, input }) => {
       const sug = await ctx.db.standardSuggestion.findUniqueOrThrow({
         where: { id: input.id },
-        include: { standard: { select: { id: true, workingGroupId: true, bodyText: true } } },
+        include: {
+          standard: { select: { id: true, workingGroupId: true, bodyText: true } },
+          document: {
+            select: {
+              id: true,
+              bodyHtml: true,
+              standard: { select: { workingGroupId: true } },
+            },
+          },
+        },
       });
-      if (!can(userCtx(ctx.session), 'standard:editMeta', sug.standard.workingGroupId)) {
+      const workingGroupId = sug.standard?.workingGroupId ?? sug.document?.standard.workingGroupId;
+      const currentBody = sug.standard?.bodyText ?? sug.document?.bodyHtml ?? null;
+      if (!workingGroupId) {
+        throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: 'Suggestion has no parent' });
+      }
+      if (!can(userCtx(ctx.session), 'standard:editMeta', workingGroupId)) {
         throw new TRPCError({ code: 'FORBIDDEN' });
       }
       if (sug.status !== 'PENDING') {
@@ -235,7 +330,7 @@ export const suggestionRouter = createTRPCRouter({
       }
 
       // Re-read current paragraphs and verify drift
-      const paras = splitParagraphs(sug.standard.bodyText);
+      const paras = splitParagraphs(currentBody);
       const target = paras[sug.paragraphIndex];
       if (target === undefined) {
         throw new TRPCError({
@@ -263,14 +358,23 @@ export const suggestionRouter = createTRPCRouter({
       const nextBody = joinParagraphs(nextParas.filter((p) => p.trim().length > 0));
 
       await ctx.db.$transaction([
-        ctx.db.standard.update({
-          where: { id: sug.standardId },
-          data: {
-            bodyText: nextBody,
-            bodyUpdatedAt: new Date(),
-            bodyUpdatedById: ctx.session.user.id,
-          },
-        }),
+        sug.standardId
+          ? ctx.db.standard.update({
+              where: { id: sug.standardId },
+              data: {
+                bodyText: nextBody,
+                bodyUpdatedAt: new Date(),
+                bodyUpdatedById: ctx.session.user.id,
+              },
+            })
+          : ctx.db.document.update({
+              where: { id: sug.documentId! },
+              data: {
+                bodyHtml: nextBody,
+                bodyUpdatedAt: new Date(),
+                bodyUpdatedById: ctx.session.user.id,
+              },
+            }),
         ctx.db.standardSuggestion.update({
           where: { id: sug.id },
           data: {
@@ -291,7 +395,9 @@ export const suggestionRouter = createTRPCRouter({
         after: { status: 'ACCEPTED' },
         note: input.note ?? 'Правку прийнято',
       });
-      await notifySuggestionResolved(ctx.db, sug.id, 'ACCEPTED', ctx.session.user.id);
+      if (sug.standardId) {
+        await notifySuggestionResolved(ctx.db, sug.id, 'ACCEPTED', ctx.session.user.id);
+      }
       return { ok: true };
     }),
 
@@ -301,9 +407,16 @@ export const suggestionRouter = createTRPCRouter({
     .mutation(async ({ ctx, input }) => {
       const sug = await ctx.db.standardSuggestion.findUniqueOrThrow({
         where: { id: input.id },
-        include: { standard: { select: { workingGroupId: true } } },
+        include: {
+          standard: { select: { workingGroupId: true } },
+          document: { select: { standard: { select: { workingGroupId: true } } } },
+        },
       });
-      if (!can(userCtx(ctx.session), 'standard:editMeta', sug.standard.workingGroupId)) {
+      const workingGroupId = sug.standard?.workingGroupId ?? sug.document?.standard.workingGroupId;
+      if (!workingGroupId) {
+        throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: 'Suggestion has no parent' });
+      }
+      if (!can(userCtx(ctx.session), 'standard:editMeta', workingGroupId)) {
         throw new TRPCError({ code: 'FORBIDDEN' });
       }
       if (sug.status !== 'PENDING') {
@@ -327,27 +440,45 @@ export const suggestionRouter = createTRPCRouter({
         after: { status: 'REJECTED' },
         note: input.note ?? 'Правку відхилено',
       });
-      await notifySuggestionResolved(ctx.db, sug.id, 'REJECTED', ctx.session.user.id);
+      if (sug.standardId) {
+        await notifySuggestionResolved(ctx.db, sug.id, 'REJECTED', ctx.session.user.id);
+      }
       return { ok: true };
     }),
 
   // ── updateBody (LEADER/DEPUTY/SECRETARY or ADMIN: direct edit) ───────
-  // Lets the leader bulk-edit the body when there are no pending edits.
-  // For routine work members should use create() instead.
   updateBody: protectedProcedure
-    .input(z.object({ standardId: z.string().cuid(), bodyText: z.string().max(200_000) }))
+    .input(targetInput.and(z.object({ bodyText: z.string().max(200_000) })))
     .mutation(async ({ ctx, input }) => {
-      const std = await ctx.db.standard.findUniqueOrThrow({
-        where: { id: input.standardId },
-        select: { workingGroupId: true, bodyText: true },
-      });
-      if (!can(userCtx(ctx.session), 'standard:editMeta', std.workingGroupId)) {
+      const target = await resolveTarget(ctx.db, input);
+      if (!can(userCtx(ctx.session), 'standard:editMeta', target.workingGroupId)) {
         throw new TRPCError({ code: 'FORBIDDEN' });
       }
-      const updated = await ctx.db.standard.update({
-        where: { id: input.standardId },
+      const before = { bodyText: target.body ?? '' };
+      if (target.kind === 'standard') {
+        const updated = await ctx.db.standard.update({
+          where: { id: target.standardId },
+          data: {
+            bodyText: input.bodyText,
+            bodyUpdatedAt: new Date(),
+            bodyUpdatedById: ctx.session.user.id,
+          },
+        });
+        await logActivity(ctx.db, {
+          userId: ctx.session.user.id,
+          action: 'UPDATE',
+          entity: 'Standard',
+          entityId: target.standardId,
+          before,
+          after: { bodyText: updated.bodyText ?? '' },
+          note: 'Оновлено текст документа',
+        });
+        return updated;
+      }
+      const updated = await ctx.db.document.update({
+        where: { id: target.documentId },
         data: {
-          bodyText: input.bodyText,
+          bodyHtml: input.bodyText,
           bodyUpdatedAt: new Date(),
           bodyUpdatedById: ctx.session.user.id,
         },
@@ -355,10 +486,10 @@ export const suggestionRouter = createTRPCRouter({
       await logActivity(ctx.db, {
         userId: ctx.session.user.id,
         action: 'UPDATE',
-        entity: 'Standard',
-        entityId: input.standardId,
-        before: { bodyText: std.bodyText ?? '' },
-        after: { bodyText: updated.bodyText ?? '' },
+        entity: 'Document',
+        entityId: target.documentId,
+        before,
+        after: { bodyText: updated.bodyHtml ?? '' },
         note: 'Оновлено текст документа',
       });
       return updated;
@@ -366,42 +497,62 @@ export const suggestionRouter = createTRPCRouter({
 
   // ── replaceBody: import-style atomic body swap ────────────────────────
   // Same permission as updateBody, but also drops every existing
-  // suggestion on this standard in a single transaction. Use this when
-  // the body is being completely replaced (e.g. .docx import) — leftover
-  // suggestions would point at paragraph indices that no longer exist
-  // and produce confusing CONFLICT errors when the leader tries to
-  // resolve them.
+  // suggestion on this target in a single transaction. Use this when
+  // the body is being completely replaced (e.g. .docx import) —
+  // leftover suggestions would point at paragraph indices that no
+  // longer exist and produce confusing CONFLICT errors when the leader
+  // tries to resolve them.
   replaceBody: protectedProcedure
-    .input(z.object({ standardId: z.string().cuid(), bodyText: z.string().max(200_000) }))
+    .input(targetInput.and(z.object({ bodyText: z.string().max(200_000) })))
     .mutation(async ({ ctx, input }) => {
-      const std = await ctx.db.standard.findUniqueOrThrow({
-        where: { id: input.standardId },
-        select: { workingGroupId: true, bodyText: true },
-      });
-      if (!can(userCtx(ctx.session), 'standard:editMeta', std.workingGroupId)) {
+      const target = await resolveTarget(ctx.db, input);
+      if (!can(userCtx(ctx.session), 'standard:editMeta', target.workingGroupId)) {
         throw new TRPCError({ code: 'FORBIDDEN' });
+      }
+      const before = { bodyText: target.body ?? '' };
+
+      if (target.kind === 'standard') {
+        const [deleted, updated] = await ctx.db.$transaction([
+          ctx.db.standardSuggestion.deleteMany({ where: { standardId: target.standardId } }),
+          ctx.db.standard.update({
+            where: { id: target.standardId },
+            data: {
+              bodyText: input.bodyText,
+              bodyUpdatedAt: new Date(),
+              bodyUpdatedById: ctx.session.user.id,
+            },
+          }),
+        ]);
+        await logActivity(ctx.db, {
+          userId: ctx.session.user.id,
+          action: 'UPDATE',
+          entity: 'Standard',
+          entityId: target.standardId,
+          before,
+          after: { bodyText: updated.bodyText ?? '' },
+          note: `Замінено текст документа (імпорт). Видалено правок: ${deleted.count}.`,
+        });
+        return { ...updated, droppedSuggestionCount: deleted.count };
       }
 
       const [deleted, updated] = await ctx.db.$transaction([
-        // Reactions cascade via Prisma's onDelete: Cascade on SuggestionReaction.
-        ctx.db.standardSuggestion.deleteMany({ where: { standardId: input.standardId } }),
-        ctx.db.standard.update({
-          where: { id: input.standardId },
+        ctx.db.standardSuggestion.deleteMany({ where: { documentId: target.documentId } }),
+        ctx.db.document.update({
+          where: { id: target.documentId },
           data: {
-            bodyText: input.bodyText,
+            bodyHtml: input.bodyText,
             bodyUpdatedAt: new Date(),
             bodyUpdatedById: ctx.session.user.id,
           },
         }),
       ]);
-
       await logActivity(ctx.db, {
         userId: ctx.session.user.id,
         action: 'UPDATE',
-        entity: 'Standard',
-        entityId: input.standardId,
-        before: { bodyText: std.bodyText ?? '' },
-        after: { bodyText: updated.bodyText ?? '' },
+        entity: 'Document',
+        entityId: target.documentId,
+        before,
+        after: { bodyText: updated.bodyHtml ?? '' },
         note: `Замінено текст документа (імпорт). Видалено правок: ${deleted.count}.`,
       });
       return { ...updated, droppedSuggestionCount: deleted.count };

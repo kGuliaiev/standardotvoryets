@@ -26,9 +26,25 @@ import type { RouterOutputs } from '@/lib/trpc/client';
 
 type SuggestionListItem = RouterOutputs['suggestion']['list'][number];
 
+/**
+ * The collaborative editor used to live only on a Standard. Now it also
+ * powers per-document editing for uploaded .docx files that the leader
+ * flagged as "allow edits". The data flow is identical — TipTap HTML
+ * body + paragraph-indexed suggestions — only the target table differs.
+ */
+export type BodyEditorTarget =
+  | { kind: 'standard'; standardId: string; workingGroupId: string }
+  | {
+      kind: 'document';
+      documentId: string;
+      /** The parent standard is still needed for permission lookups and to
+       *  invalidate the right query when the body changes. */
+      parentStandardId: string;
+      workingGroupId: string;
+    };
+
 interface Props {
-  standardId: string;
-  workingGroupId: string;
+  target: BodyEditorTarget;
   bodyText: string | null;
   bodyUpdatedAt: Date | string | null;
   bodyUpdatedBy: { name: string } | null;
@@ -56,13 +72,7 @@ const READONLY_PROSE_CLASSES =
   'prose-a:text-brand prose-code:text-ink prose-code:bg-pill prose-code:px-1 prose-code:rounded ' +
   'prose-p:my-0 prose-headings:my-0';
 
-export function StandardBodyEditor({
-  standardId,
-  workingGroupId,
-  bodyText,
-  bodyUpdatedAt,
-  bodyUpdatedBy,
-}: Props) {
+export function StandardBodyEditor({ target, bodyText, bodyUpdatedAt, bodyUpdatedBy }: Props) {
   const { data: session } = useSession();
   const utils = trpc.useUtils();
   const me = session?.user;
@@ -77,29 +87,40 @@ export function StandardBodyEditor({
     };
   }, [me]);
 
-  const canEditMeta = userCtx ? can(userCtx, 'standard:editMeta', workingGroupId) : false;
-  const canSuggest = userCtx ? can(userCtx, 'comment:add', workingGroupId) : false;
+  const canEditMeta = userCtx ? can(userCtx, 'standard:editMeta', target.workingGroupId) : false;
+  const canSuggest = userCtx ? can(userCtx, 'comment:add', target.workingGroupId) : false;
 
   // Body is HTML emitted by TipTap (legacy plain-text bodies are migrated to
   // <p>-wrapped HTML transparently inside splitHtmlBlocks).
   const normalizedBody = useMemo(() => normalizeBodyHtml(bodyText), [bodyText]);
   const paragraphs = useMemo(() => splitHtmlBlocks(normalizedBody), [normalizedBody]);
 
+  // Single object the suggestion router uses to identify the target.
+  // Memoised so the tRPC query key stays stable across renders.
+  const targetInput = useMemo(
+    () =>
+      target.kind === 'standard'
+        ? ({ standardId: target.standardId } as const)
+        : ({ documentId: target.documentId } as const),
+    [target],
+  );
+  /** The parent standard ID — used to invalidate `standard.byId` so the
+   *  surrounding page (documents list, body header) refetches when this
+   *  editor mutates something. */
+  const parentStandardId = target.kind === 'standard' ? target.standardId : target.parentStandardId;
+
   // Poll every 5s so a suggestion submitted by one collaborator shows up
   // on everyone else's open document without a manual refresh. The query
   // payload is tiny (just open + recent resolved edits) so the bandwidth
   // cost is negligible. Polling pauses automatically when the tab is in
   // the background.
-  const { data: suggestions } = trpc.suggestion.list.useQuery(
-    { standardId },
-    {
-      staleTime: 0,
-      refetchOnMount: 'always',
-      refetchOnWindowFocus: true,
-      refetchInterval: 5_000,
-      refetchIntervalInBackground: false,
-    },
-  );
+  const { data: suggestions } = trpc.suggestion.list.useQuery(targetInput, {
+    staleTime: 0,
+    refetchOnMount: 'always',
+    refetchOnWindowFocus: true,
+    refetchInterval: 5_000,
+    refetchIntervalInBackground: false,
+  });
   const pendingBySection = useMemo(() => {
     const map = new Map<number, SuggestionListItem[]>();
     for (const s of suggestions ?? []) {
@@ -130,36 +151,39 @@ export function StandardBodyEditor({
     [suggestions],
   );
 
+  const invalidateSuggestions = () => void utils.suggestion.list.invalidate(targetInput);
+  const invalidateBody = () => void utils.standard.byId.invalidate({ id: parentStandardId });
+
   const createMutation = trpc.suggestion.create.useMutation({
     onSuccess: () => {
-      void utils.suggestion.list.invalidate({ standardId });
+      invalidateSuggestions();
       setDraft(null);
     },
   });
   const reactMutation = trpc.suggestion.react.useMutation({
-    onSuccess: () => void utils.suggestion.list.invalidate({ standardId }),
+    onSuccess: () => invalidateSuggestions(),
   });
   const acceptMutation = trpc.suggestion.accept.useMutation({
     onSuccess: () => {
-      void utils.suggestion.list.invalidate({ standardId });
-      void utils.standard.byId.invalidate({ id: standardId });
+      invalidateSuggestions();
+      invalidateBody();
     },
     onError: (e) => alert(e.message),
   });
   const rejectMutation = trpc.suggestion.reject.useMutation({
-    onSuccess: () => void utils.suggestion.list.invalidate({ standardId }),
+    onSuccess: () => invalidateSuggestions(),
   });
   const updateBodyMutation = trpc.suggestion.updateBody.useMutation({
     onSuccess: () => {
-      void utils.standard.byId.invalidate({ id: standardId });
+      invalidateBody();
       setBulkOpen(false);
     },
     onError: (e) => alert(e.message),
   });
   const replaceBodyMutation = trpc.suggestion.replaceBody.useMutation({
     onSuccess: () => {
-      void utils.standard.byId.invalidate({ id: standardId });
-      void utils.suggestion.list.invalidate({ standardId });
+      invalidateBody();
+      invalidateSuggestions();
       setBulkOpen(false);
       setPendingImport(null);
     },
@@ -192,7 +216,7 @@ export function StandardBodyEditor({
   function submitDraft() {
     if (!draft) return;
     createMutation.mutate({
-      standardId,
+      ...targetInput,
       paragraphIndex: draft.paragraphIndex,
       originalText: draft.originalText,
       proposedText: draft.proposedText,
@@ -228,9 +252,9 @@ export function StandardBodyEditor({
         </p>
         <div className="flex items-center justify-center gap-2 flex-wrap">
           <DocxImportButton
-            standardId={standardId}
+            standardIdForUpload={parentStandardId}
             variant="primary"
-            onImported={(html) => updateBodyMutation.mutate({ standardId, bodyText: html })}
+            onImported={(html) => updateBodyMutation.mutate({ ...targetInput, bodyText: html })}
             disabled={updateBodyMutation.isPending}
           />
           <button
@@ -248,17 +272,24 @@ export function StandardBodyEditor({
         <BulkEditModal
           open={bulkOpen}
           initial={bulkText}
-          standardId={standardId}
+          standardIdForUpload={parentStandardId}
           bodyAlreadyExists={false}
           pendingSuggestionCount={0}
           onClose={() => setBulkOpen(false)}
-          onSave={(text) => updateBodyMutation.mutate({ standardId, bodyText: text })}
-          onReplace={(text) => updateBodyMutation.mutate({ standardId, bodyText: text })}
+          onSave={(text) => updateBodyMutation.mutate({ ...targetInput, bodyText: text })}
+          onReplace={(text) => updateBodyMutation.mutate({ ...targetInput, bodyText: text })}
           isPending={updateBodyMutation.isPending}
         />
       </div>
     );
   }
+
+  // Resolved at render time so export URL switches between
+  // /api/standards/[id]/export-body and /api/documents/[id]/export-body.
+  const exportUrl =
+    target.kind === 'standard'
+      ? `/api/standards/${target.standardId}/export-body`
+      : `/api/documents/${target.documentId}/export-body`;
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-[1fr_300px] gap-5 items-start">
@@ -277,7 +308,7 @@ export function StandardBodyEditor({
           </p>
           <div className="flex items-center gap-1.5 flex-wrap">
             <a
-              href={`/api/standards/${standardId}/export-body`}
+              href={exportUrl}
               download
               className="text-xs px-2.5 py-1 rounded border border-hairline text-mid hover:text-ink hover:bg-pill inline-flex items-center gap-1.5"
               title="Зберегти текст документа як файл Microsoft Word (.docx)"
@@ -287,7 +318,7 @@ export function StandardBodyEditor({
             </a>
             {canEditMeta && (
               <DocxImportButton
-                standardId={standardId}
+                standardIdForUpload={parentStandardId}
                 variant="header"
                 onImported={(html, filename) => setPendingImport({ html, filename })}
                 disabled={replaceBodyMutation.isPending}
@@ -399,12 +430,12 @@ export function StandardBodyEditor({
       <BulkEditModal
         open={bulkOpen}
         initial={bulkText}
-        standardId={standardId}
+        standardIdForUpload={parentStandardId}
         bodyAlreadyExists={!!bodyText}
         pendingSuggestionCount={pendingSuggestionCount}
         onClose={() => setBulkOpen(false)}
-        onSave={(text) => updateBodyMutation.mutate({ standardId, bodyText: text })}
-        onReplace={(text) => replaceBodyMutation.mutate({ standardId, bodyText: text })}
+        onSave={(text) => updateBodyMutation.mutate({ ...targetInput, bodyText: text })}
+        onReplace={(text) => replaceBodyMutation.mutate({ ...targetInput, bodyText: text })}
         isPending={updateBodyMutation.isPending || replaceBodyMutation.isPending}
       />
 
@@ -418,7 +449,7 @@ export function StandardBodyEditor({
         onCancel={() => setPendingImport(null)}
         onConfirm={() => {
           if (pendingImport) {
-            replaceBodyMutation.mutate({ standardId, bodyText: pendingImport.html });
+            replaceBodyMutation.mutate({ ...targetInput, bodyText: pendingImport.html });
           }
         }}
       />
@@ -731,7 +762,7 @@ function SuggestionDraftModal({
 function BulkEditModal({
   open,
   initial,
-  standardId,
+  standardIdForUpload,
   bodyAlreadyExists,
   pendingSuggestionCount,
   onClose,
@@ -741,7 +772,10 @@ function BulkEditModal({
 }: {
   open: boolean;
   initial: string;
-  standardId: string;
+  /** Used only to build the .docx import URL — the import endpoint just
+   *  converts the file and returns HTML, so we always hit the parent
+   *  standard route. */
+  standardIdForUpload: string;
   bodyAlreadyExists: boolean;
   pendingSuggestionCount: number;
   onClose: () => void;
@@ -784,7 +818,7 @@ function BulkEditModal({
             Зміна тут не створює запитів на голосування.
           </p>
           <DocxImportButton
-            standardId={standardId}
+            standardIdForUpload={standardIdForUpload}
             variant="secondary"
             onImported={(imported) => {
               setHtml(imported);
@@ -909,12 +943,18 @@ function ImportConfirmModal({
  *                   (Export / Edit-all) on the body tab
  */
 function DocxImportButton({
-  standardId,
+  standardIdForUpload,
   variant,
   onImported,
   disabled,
 }: {
-  standardId: string;
+  /** The conversion endpoint lives under /api/standards/[id]/import-body
+   *  for historical reasons; it only converts the .docx and returns
+   *  HTML, so any standard that the user can edit is a valid mount
+   *  point. The caller passes the parent-standard id regardless of
+   *  whether the target body lives on the standard itself or on one of
+   *  its documents. */
+  standardIdForUpload: string;
   variant: 'primary' | 'secondary' | 'header';
   onImported: (html: string, filename: string) => void;
   disabled?: boolean;
@@ -932,7 +972,7 @@ function DocxImportButton({
     try {
       const form = new FormData();
       form.append('file', file);
-      const res = await fetch(`/api/standards/${standardId}/import-body`, {
+      const res = await fetch(`/api/standards/${standardIdForUpload}/import-body`, {
         method: 'POST',
         body: form,
       });

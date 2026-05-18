@@ -23,6 +23,7 @@
 import { NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { PutObjectCommand } from '@aws-sdk/client-s3';
+import mammoth from 'mammoth';
 import { authOptions } from '@/server/auth';
 import { db } from '@/server/db';
 import { s3 } from '@/server/s3';
@@ -30,6 +31,8 @@ import { env } from '@/lib/env';
 import { can } from '@/lib/rbac';
 import { logActivity } from '@/server/audit';
 import type { GlobalRole, WorkingGroupRole, DocumentType } from '@prisma/client';
+
+const DOCX_MIME = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
@@ -86,6 +89,7 @@ export async function POST(req: Request, { params }: { params: { id: string } })
   const version = form.get('version');
   const isCurrentRaw = form.get('isCurrent');
   const note = form.get('note');
+  const allowEditsRaw = form.get('allowEdits');
 
   if (!(file instanceof File)) {
     return NextResponse.json({ error: 'file is required' }, { status: 400 });
@@ -103,7 +107,37 @@ export async function POST(req: Request, { params }: { params: { id: string } })
     return NextResponse.json({ error: 'Введіть версію' }, { status: 400 });
   }
   const isCurrent = isCurrentRaw === 'true' || isCurrentRaw === '1';
+  const allowEditsRequested = allowEditsRaw === 'true' || allowEditsRaw === '1';
   const noteStr = typeof note === 'string' && note.trim().length > 0 ? note.trim() : undefined;
+
+  // Convert .docx → HTML for collaborative editing if the uploader
+  // ticked the box. Anything else (PDF, XLSX, ODT) can't be inlined as
+  // TipTap content, so we ignore the flag and tell mammoth to skip.
+  const isDocx = file.name.toLowerCase().endsWith('.docx') || file.type === DOCX_MIME;
+  const shouldExtractBody = allowEditsRequested && isDocx;
+  let bodyHtml: string | null = null;
+  if (shouldExtractBody) {
+    try {
+      // Read buffer once up-front so we can stream the same bytes to S3
+      // below without re-reading from the File object.
+      const ab = await file.arrayBuffer();
+      const buf = Buffer.from(ab);
+      const result = await mammoth.convertToHtml(
+        { buffer: buf },
+        {
+          ignoreEmptyParagraphs: false,
+          convertImage: mammoth.images.imgElement(() => Promise.resolve({ src: '' })),
+        },
+      );
+      bodyHtml = result.value.trim().length > 0 ? result.value : null;
+    } catch {
+      // If the conversion fails, keep allowEdits flag false rather than
+      // refuse the upload — the file itself is still useful as a
+      // download-only attachment.
+      bodyHtml = null;
+    }
+  }
+  const allowEdits = shouldExtractBody && Boolean(bodyHtml);
 
   const safeName = file.name.replace(/[^\w.\-(),Ѐ-ӿ]+/g, '_');
   const s3Key = `standards/${params.id}/${Date.now()}-${safeName}`;
@@ -150,6 +184,10 @@ export async function POST(req: Request, { params }: { params: { id: string } })
       version: version.trim(),
       note: noteStr,
       isCurrent,
+      allowEdits,
+      bodyHtml,
+      bodyUpdatedAt: allowEdits ? new Date() : null,
+      bodyUpdatedById: allowEdits ? session.user.id : null,
     },
   });
 

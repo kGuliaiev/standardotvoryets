@@ -8,7 +8,7 @@ interface ModalProps {
   onClose: () => void;
   title?: string;
   subtitle?: string;
-  size?: 'sm' | 'md' | 'lg' | 'xl';
+  size?: 'sm' | 'md' | 'lg' | 'xl' | 'full';
   children: React.ReactNode;
   footer?: React.ReactNode;
   closeOnOverlay?: boolean;
@@ -19,6 +19,10 @@ const SIZE_CLASSES: Record<NonNullable<ModalProps['size']>, string> = {
   md: 'md:max-w-lg',
   lg: 'md:max-w-2xl',
   xl: 'md:max-w-4xl',
+  // `full` reserves the viewport for fullscreen editor-style content
+  // (kept under the 7xl Tailwind cap so the panel still has breathing
+  // room on ultrawide displays).
+  full: 'md:max-w-7xl',
 };
 
 export function Modal({

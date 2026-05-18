@@ -153,6 +153,9 @@ export function StandardDetail({ id }: { id: string }) {
   const [editError, setEditError] = useState<string | null>(null);
   const [taskModalOpen, setTaskModalOpen] = useState(false);
   const [docModalOpen, setDocModalOpen] = useState(false);
+  // ID of the editable document whose collaborative editor is currently
+  // shown as a fullscreen modal (null = no editor open).
+  const [editDocId, setEditDocId] = useState<string | null>(null);
 
   const updateMutation = trpc.standard.update.useMutation({
     onSuccess: () => {
@@ -428,8 +431,7 @@ export function StandardDetail({ id }: { id: string }) {
           a statistics rail on the right. */}
       {activeTab === 'body' && (
         <StandardBodyEditor
-          standardId={id}
-          workingGroupId={wgId}
+          target={{ kind: 'standard', standardId: id, workingGroupId: wgId }}
           bodyText={standard.bodyText}
           bodyUpdatedAt={standard.bodyUpdatedAt}
           bodyUpdatedBy={standard.bodyUpdatedBy}
@@ -457,28 +459,99 @@ export function StandardDetail({ id }: { id: string }) {
                   <div className="py-12 text-center text-light text-sm">Документів немає</div>
                 ) : (
                   <div className="divide-y divide-hairline">
-                    {standard.documents.map((doc) => (
-                      <div key={doc.id} className="flex items-center gap-4 px-5 py-3.5">
-                        <div className="w-8 h-8 bg-blue-50 rounded-lg flex items-center justify-center flex-shrink-0">
-                          <span className="text-xs font-bold text-blue-600">
-                            {doc.filename.split('.').pop()?.toUpperCase().slice(0, 3)}
-                          </span>
+                    {standard.documents.map((doc) => {
+                      // Suggestion counts by status — only meaningful for
+                      // documents that allow edits, otherwise the array is
+                      // always empty.
+                      const suggCounts = (doc.suggestions ?? []).reduce(
+                        (acc, s) => {
+                          if (s.status === 'PENDING') acc.pending += 1;
+                          else if (s.status === 'ACCEPTED') acc.accepted += 1;
+                          else if (s.status === 'REJECTED') acc.rejected += 1;
+                          return acc;
+                        },
+                        { pending: 0, accepted: 0, rejected: 0 },
+                      );
+                      const suggTotal =
+                        suggCounts.pending + suggCounts.accepted + suggCounts.rejected;
+                      return (
+                        <div key={doc.id} className="flex items-center gap-4 px-5 py-3.5">
+                          <div className="w-8 h-8 bg-blue-50 rounded-lg flex items-center justify-center flex-shrink-0">
+                            <span className="text-xs font-bold text-blue-600">
+                              {doc.filename.split('.').pop()?.toUpperCase().slice(0, 3)}
+                            </span>
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-medium text-ink truncate">{doc.filename}</p>
+                            <p className="text-xs text-light flex items-center gap-1.5 flex-wrap">
+                              <span>{doc.type}</span>
+                              <span>·</span>
+                              <span>v{doc.version}</span>
+                              <span>·</span>
+                              <span>{formatBytes(doc.sizeBytes)}</span>
+                              <span>·</span>
+                              <span>{doc.uploadedBy.name}</span>
+                              {doc.allowEdits && suggTotal > 0 && (
+                                <>
+                                  <span>·</span>
+                                  <span className="inline-flex items-center gap-1">
+                                    <span title="Всього правок">
+                                      <strong>{suggTotal}</strong>{' '}
+                                      {suggTotal === 1
+                                        ? 'правка'
+                                        : suggTotal < 5
+                                          ? 'правки'
+                                          : 'правок'}
+                                      :
+                                    </span>
+                                    {suggCounts.pending > 0 && (
+                                      <span
+                                        className="text-amber-600 dark:text-amber-400"
+                                        title="Відкриті — очікують рішення лідера"
+                                      >
+                                        {suggCounts.pending} відкритих
+                                      </span>
+                                    )}
+                                    {suggCounts.accepted > 0 && (
+                                      <span
+                                        className="text-emerald-600 dark:text-emerald-400"
+                                        title="Прийнято"
+                                      >
+                                        {suggCounts.accepted} прийнято
+                                      </span>
+                                    )}
+                                    {suggCounts.rejected > 0 && (
+                                      <span
+                                        className="text-red-600 dark:text-red-400"
+                                        title="Відхилено"
+                                      >
+                                        {suggCounts.rejected} відхилено
+                                      </span>
+                                    )}
+                                  </span>
+                                </>
+                              )}
+                            </p>
+                          </div>
+                          {doc.isCurrent && (
+                            <span className="text-xs bg-green-50 text-green-700 border border-green-200 rounded-full px-2 py-0.5 flex-shrink-0">
+                              Актуальний
+                            </span>
+                          )}
+                          {doc.allowEdits && (
+                            <button
+                              onClick={() => setEditDocId(doc.id)}
+                              className="text-xs px-2.5 py-1 rounded border border-brand text-brand hover:bg-brand hover:text-white transition-colors inline-flex items-center gap-1 flex-shrink-0"
+                              title="Відкрити документ у колаборативному редакторі"
+                            >
+                              <Pencil className="w-3 h-3" />
+                              Редагувати
+                            </button>
+                          )}
+                          <DownloadButton documentId={doc.id} />
                         </div>
-                        <div className="flex-1 min-w-0">
-                          <p className="text-sm font-medium text-ink truncate">{doc.filename}</p>
-                          <p className="text-xs text-light">
-                            {doc.type} · v{doc.version} · {formatBytes(doc.sizeBytes)} ·{' '}
-                            {doc.uploadedBy.name}
-                          </p>
-                        </div>
-                        {doc.isCurrent && (
-                          <span className="text-xs bg-green-50 text-green-700 border border-green-200 rounded-full px-2 py-0.5 flex-shrink-0">
-                            Актуальний
-                          </span>
-                        )}
-                        <DownloadButton documentId={doc.id} />
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 )}
               </div>
@@ -955,6 +1028,37 @@ export function StandardDetail({ id }: { id: string }) {
         standardId={id}
         onSaved={() => void refetch()}
       />
+
+      {/* Per-document collaborative editor. Reuses StandardBodyEditor
+          with a `document` target — same UX as the standard's main body
+          but writes to Document.bodyHtml and shows that document's own
+          suggestion list. Opened as a fullscreen modal so the user
+          doesn't lose context of the surrounding standard page. */}
+      {editDocId &&
+        (() => {
+          const doc = standard.documents.find((d) => d.id === editDocId);
+          if (!doc?.allowEdits) return null;
+          return (
+            <Modal
+              open={!!editDocId}
+              onClose={() => setEditDocId(null)}
+              title={`Редагування: ${doc.filename}`}
+              size="full"
+            >
+              <StandardBodyEditor
+                target={{
+                  kind: 'document',
+                  documentId: doc.id,
+                  parentStandardId: id,
+                  workingGroupId: wgId,
+                }}
+                bodyText={doc.bodyHtml}
+                bodyUpdatedAt={doc.bodyUpdatedAt}
+                bodyUpdatedBy={doc.bodyUpdatedBy}
+              />
+            </Modal>
+          );
+        })()}
     </div>
   );
 }

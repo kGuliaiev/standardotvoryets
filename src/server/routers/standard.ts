@@ -117,7 +117,14 @@ export const standardRouter = createTRPCRouter({
           responsible: { select: { id: true, name: true, avatarUrl: true } },
           bodyUpdatedBy: { select: { id: true, name: true } },
           documents: {
-            include: { uploadedBy: { select: { id: true, name: true } } },
+            include: {
+              uploadedBy: { select: { id: true, name: true } },
+              bodyUpdatedBy: { select: { id: true, name: true } },
+              // Suggestion counts split by status so the documents list
+              // can show "5 правок: 2 прийнято / 1 відхилено / 2 нових"
+              // without an extra round-trip.
+              suggestions: { select: { id: true, status: true } },
+            },
             orderBy: { createdAt: 'desc' },
           },
           comments: {
