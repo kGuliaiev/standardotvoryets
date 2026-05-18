@@ -298,8 +298,10 @@ export function StandardBodyEditor({
           </div>
         </div>
 
-        {/* Body blocks (HTML, rendered via prose classes) */}
-        <article className="bg-card rounded-xl border border-hairline p-5 sm:p-8 space-y-5">
+        {/* Body blocks (HTML, rendered via prose classes).
+            space-y-1 ≈ Word's normal paragraph rhythm; hover actions
+            float on top of the text instead of expanding the layout. */}
+        <article className="bg-card rounded-xl border border-hairline p-5 sm:p-8 space-y-1">
           {paragraphs.map((html, idx) => {
             const pending = pendingBySection.get(idx) ?? [];
             return (
@@ -444,9 +446,15 @@ function ParagraphBlock({
 }: ParagraphBlockProps) {
   const hasPending = pending.length > 0;
   return (
-    <section className={`group ${hasPending ? 'border-l-2 border-amber-400 pl-3 -ml-3' : ''}`}>
+    <section
+      className={`group relative rounded ${
+        hasPending
+          ? 'border-l-2 border-amber-400 pl-3 -ml-3'
+          : 'hover:bg-pill/40 -mx-2 px-2 transition-colors'
+      }`}
+    >
       <div className="flex items-start gap-3">
-        <span className="text-[11px] text-light font-mono tabular-nums w-6 shrink-0 pt-1">
+        <span className="text-[10px] text-light font-mono tabular-nums w-5 shrink-0 pt-1 select-none">
           {idx + 1}
         </span>
         <div className="flex-1 min-w-0">
@@ -456,36 +464,40 @@ function ParagraphBlock({
             className={`${READONLY_PROSE_CLASSES} break-words`}
             dangerouslySetInnerHTML={{ __html: html }}
           />
-          {canSuggest && (
-            <div className="mt-1 -ml-1 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-              <button
-                onClick={onSuggestReplace}
-                className="text-[11px] px-2 py-0.5 rounded text-mid hover:text-brand hover:bg-pill inline-flex items-center gap-1"
-                title="Запропонувати правку цього параграфа"
-              >
-                <Pencil className="w-3 h-3" />
-                Змінити
-              </button>
-              <button
-                onClick={onSuggestInsert}
-                className="text-[11px] px-2 py-0.5 rounded text-mid hover:text-brand hover:bg-pill inline-flex items-center gap-1"
-                title="Запропонувати новий параграф після цього"
-              >
-                <Plus className="w-3 h-3" />
-                Додати після
-              </button>
-              <button
-                onClick={onSuggestDelete}
-                className="text-[11px] px-2 py-0.5 rounded text-mid hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/30 inline-flex items-center gap-1"
-                title="Запропонувати видалити цей параграф"
-              >
-                <XIcon className="w-3 h-3" />
-                Видалити
-              </button>
-            </div>
-          )}
         </div>
       </div>
+      {/* Floating action bar — overlays the text rather than pushing
+          layout, so paragraphs stay tightly packed when no one's
+          hovering. Becomes visible on hover OR when a child receives
+          focus (keyboard accessibility). */}
+      {canSuggest && (
+        <div className="absolute right-1 top-0.5 opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity bg-card/95 backdrop-blur-sm border border-hairline rounded shadow-sm flex items-center gap-0.5 px-0.5 py-0.5 z-10">
+          <button
+            onClick={onSuggestReplace}
+            className="p-1 rounded text-mid hover:text-brand hover:bg-pill"
+            title="Запропонувати правку цього параграфа"
+            aria-label="Змінити"
+          >
+            <Pencil className="w-3.5 h-3.5" />
+          </button>
+          <button
+            onClick={onSuggestInsert}
+            className="p-1 rounded text-mid hover:text-brand hover:bg-pill"
+            title="Запропонувати новий параграф після цього"
+            aria-label="Додати після"
+          >
+            <Plus className="w-3.5 h-3.5" />
+          </button>
+          <button
+            onClick={onSuggestDelete}
+            className="p-1 rounded text-mid hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/30"
+            title="Запропонувати видалити цей параграф"
+            aria-label="Видалити"
+          >
+            <XIcon className="w-3.5 h-3.5" />
+          </button>
+        </div>
+      )}
 
       {/* Pending suggestions for this paragraph */}
       {pending.length > 0 && (

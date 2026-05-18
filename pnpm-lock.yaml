@@ -88,6 +88,9 @@ importers:
       '@tiptap/extension-table-row':
         specifier: ^3.23.4
         version: 3.23.4(@tiptap/extension-table@3.23.4(@tiptap/core@3.23.4(@tiptap/pm@3.23.4))(@tiptap/pm@3.23.4))
+      '@tiptap/extension-text-align':
+        specifier: ^3.23.4
+        version: 3.23.4(@tiptap/core@3.23.4(@tiptap/pm@3.23.4))
       '@tiptap/extension-underline':
         specifier: ^3.23.4
         version: 3.23.4(@tiptap/core@3.23.4(@tiptap/pm@3.23.4))
@@ -2278,6 +2281,14 @@ packages:
     peerDependencies:
       '@tiptap/core': 3.23.4
       '@tiptap/pm': 3.23.4
+
+  '@tiptap/extension-text-align@3.23.4':
+    resolution:
+      {
+        integrity: sha512-A3WVhAs6YFlkfa7hNgps21QLfitNZyWFBBepQusX35sz6BlaHSy9GVrTR/JjGwGIxhNoqU2SGApvf2xTuX89gQ==,
+      }
+    peerDependencies:
+      '@tiptap/core': 3.23.4
 
   '@tiptap/extension-text@3.23.4':
     resolution:
@@ -8617,6 +8628,10 @@ snapshots:
     dependencies:
       '@tiptap/core': 3.23.4(@tiptap/pm@3.23.4)
       '@tiptap/pm': 3.23.4
+
+  '@tiptap/extension-text-align@3.23.4(@tiptap/core@3.23.4(@tiptap/pm@3.23.4))':
+    dependencies:
+      '@tiptap/core': 3.23.4(@tiptap/pm@3.23.4)
 
   '@tiptap/extension-text@3.23.4(@tiptap/core@3.23.4(@tiptap/pm@3.23.4))':
     dependencies:

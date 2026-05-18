@@ -54,6 +54,29 @@ function isElement(n: Node): n is HTMLElement {
   return n.nodeType === NodeType.ELEMENT_NODE;
 }
 
+/**
+ * Read `style="text-align: …"` off a block element and map it to docx
+ * AlignmentType. Returns undefined when no alignment is set so we don't
+ * stamp explicit "left" everywhere.
+ */
+function readAlignment(
+  el: HTMLElement,
+): (typeof AlignmentType)[keyof typeof AlignmentType] | undefined {
+  const style = el.getAttribute('style') ?? '';
+  const m = /text-align\s*:\s*(left|center|right|justify)/i.exec(style);
+  if (!m?.[1]) return undefined;
+  switch (m[1].toLowerCase()) {
+    case 'center':
+      return AlignmentType.CENTER;
+    case 'right':
+      return AlignmentType.RIGHT;
+    case 'justify':
+      return AlignmentType.JUSTIFIED;
+    default:
+      return AlignmentType.LEFT;
+  }
+}
+
 /** Decode the small set of entities node-html-parser leaves in text nodes. */
 function decodeEntities(s: string): string {
   return s
@@ -268,11 +291,13 @@ function htmlTableToDocx(el: HTMLElement): Table {
 
 function blockToParagraphs(el: HTMLElement): (Paragraph | Table)[] {
   const tag = el.tagName.toLowerCase();
+  const alignment = readAlignment(el);
   switch (tag) {
     case 'h1':
       return [
         new Paragraph({
           heading: HeadingLevel.HEADING_1,
+          alignment,
           spacing: { before: 240, after: 120 },
           children: collectRuns(el.childNodes, { bold: true }),
         }),
@@ -281,6 +306,7 @@ function blockToParagraphs(el: HTMLElement): (Paragraph | Table)[] {
       return [
         new Paragraph({
           heading: HeadingLevel.HEADING_2,
+          alignment,
           spacing: { before: 200, after: 100 },
           children: collectRuns(el.childNodes, { bold: true }),
         }),
@@ -289,6 +315,7 @@ function blockToParagraphs(el: HTMLElement): (Paragraph | Table)[] {
       return [
         new Paragraph({
           heading: HeadingLevel.HEADING_3,
+          alignment,
           spacing: { before: 160, after: 80 },
           children: collectRuns(el.childNodes, { bold: true }),
         }),
@@ -298,6 +325,7 @@ function blockToParagraphs(el: HTMLElement): (Paragraph | Table)[] {
     case 'h6':
       return [
         new Paragraph({
+          alignment,
           spacing: { before: 140, after: 70 },
           children: collectRuns(el.childNodes, { bold: true }),
         }),
@@ -305,6 +333,7 @@ function blockToParagraphs(el: HTMLElement): (Paragraph | Table)[] {
     case 'p':
       return [
         new Paragraph({
+          alignment,
           spacing: { after: 120 },
           children: collectRuns(el.childNodes),
         }),

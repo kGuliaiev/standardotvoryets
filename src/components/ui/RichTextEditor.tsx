@@ -5,6 +5,7 @@ import { StarterKit } from '@tiptap/starter-kit';
 import { Underline } from '@tiptap/extension-underline';
 import { Link } from '@tiptap/extension-link';
 import { Placeholder } from '@tiptap/extension-placeholder';
+import { TextAlign } from '@tiptap/extension-text-align';
 // All table parts live in @tiptap/extension-table; the row/cell/header
 // sub-packages are just re-exports of the same symbols.
 import { Table, TableRow, TableCell, TableHeader } from '@tiptap/extension-table';
@@ -25,6 +26,10 @@ import {
   Link as LinkIcon,
   Table as TableIcon,
   Type as TypeIcon,
+  AlignLeft,
+  AlignCenter,
+  AlignRight,
+  AlignJustify,
 } from 'lucide-react';
 
 /**
@@ -79,6 +84,14 @@ export function RichTextEditor({
       TableRow,
       TableHeader,
       TableCell,
+      // Alignment is stored as a `text-align` style on paragraphs and
+      // headings; matches what Word produces and what htmlToDocx parses
+      // on export so the round-trip stays clean.
+      TextAlign.configure({
+        types: ['paragraph', 'heading'],
+        alignments: ['left', 'center', 'right', 'justify'],
+        defaultAlignment: 'left',
+      }),
     ],
     content: initialHtml || '',
     editable,
@@ -201,6 +214,35 @@ function Toolbar({ editor }: { editor: Editor }) {
         title="Блок коду"
       >
         <Code size={14} />
+      </Btn>
+      <Sep />
+      <Btn
+        on={editor.isActive({ textAlign: 'left' })}
+        onClick={() => editor.chain().focus().setTextAlign('left').run()}
+        title="Зліва"
+      >
+        <AlignLeft size={14} />
+      </Btn>
+      <Btn
+        on={editor.isActive({ textAlign: 'center' })}
+        onClick={() => editor.chain().focus().setTextAlign('center').run()}
+        title="По центру"
+      >
+        <AlignCenter size={14} />
+      </Btn>
+      <Btn
+        on={editor.isActive({ textAlign: 'right' })}
+        onClick={() => editor.chain().focus().setTextAlign('right').run()}
+        title="Справа"
+      >
+        <AlignRight size={14} />
+      </Btn>
+      <Btn
+        on={editor.isActive({ textAlign: 'justify' })}
+        onClick={() => editor.chain().focus().setTextAlign('justify').run()}
+        title="По ширині"
+      >
+        <AlignJustify size={14} />
       </Btn>
       <Sep />
       <Btn
