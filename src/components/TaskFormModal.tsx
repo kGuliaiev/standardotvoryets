@@ -70,10 +70,22 @@ export function TaskFormModal({
     }
   }, [open, initial, lockedStandardId, lockedWorkingGroupId]);
 
-  const { data: groups } = trpc.workingGroup.list.useQuery(undefined, { enabled: open });
+  const { data: groups } = trpc.workingGroup.list.useQuery(undefined, {
+    enabled: open && !lockedStandardId,
+  });
+  // When the modal is locked to a specific standard, fetch its WG to get
+  // the member list (for the assignee picker) and the labels we render
+  // instead of the WG/Standard selects.
+  const { data: lockedStandard } = trpc.standard.byId.useQuery(
+    { id: lockedStandardId ?? '' },
+    { enabled: open && !!lockedStandardId },
+  );
   const { data: wgDetail } = trpc.workingGroup.byId.useQuery(
-    { id: form.workingGroupId },
-    { enabled: open && !!form.workingGroupId && !lockedStandardId },
+    { id: lockedStandard?.workingGroupId ?? form.workingGroupId },
+    {
+      enabled:
+        open && (lockedStandardId ? !!lockedStandard?.workingGroupId : !!form.workingGroupId),
+    },
   );
   const { data: standards } = trpc.standard.list.useQuery(
     { workingGroupId: form.workingGroupId, page: 1, pageSize: 100 },
@@ -155,7 +167,32 @@ export function TaskFormModal({
       size="md"
     >
       <div className="space-y-4">
-        {!editing && (
+        {!editing && lockedStandardId ? (
+          // Locked-to-standard mode: render read-only context line instead
+          // of dropdowns. Caller already knows the WG + Standard, asking
+          // again would be needless clicks.
+          <div className="rounded-[10px] bg-page border border-hairline px-3 py-2.5 text-xs">
+            {lockedStandard ? (
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="inline-flex items-center gap-1.5">
+                  <span
+                    className="w-2 h-2 rounded-full"
+                    style={{ backgroundColor: lockedStandard.workingGroup.color }}
+                  />
+                  <span className="font-mono text-mid font-semibold">
+                    {lockedStandard.workingGroup.code}
+                  </span>
+                </span>
+                <span className="text-light">·</span>
+                <span className="font-mono text-mid">{lockedStandard.code}</span>
+                <span className="text-light">·</span>
+                <span className="text-ink truncate min-w-0 flex-1">{lockedStandard.title}</span>
+              </div>
+            ) : (
+              <span className="text-light">Завантаження контексту…</span>
+            )}
+          </div>
+        ) : !editing ? (
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="field-label">Робоча група</label>
@@ -165,7 +202,7 @@ export function TaskFormModal({
                 onChange={(e) =>
                   setForm((f) => ({ ...f, workingGroupId: e.target.value, standardId: '' }))
                 }
-                disabled={!!lockedWorkingGroupId || !!lockedStandardId}
+                disabled={!!lockedWorkingGroupId}
               >
                 <option value="">— оберіть —</option>
                 {groups?.map((g) => (
@@ -181,7 +218,7 @@ export function TaskFormModal({
                 className="select"
                 value={form.standardId}
                 onChange={(e) => setForm((f) => ({ ...f, standardId: e.target.value }))}
-                disabled={!!lockedStandardId || !form.workingGroupId}
+                disabled={!form.workingGroupId}
               >
                 <option value="">— оберіть —</option>
                 {standards?.items.map((s) => (
@@ -192,7 +229,7 @@ export function TaskFormModal({
               </select>
             </div>
           </div>
-        )}
+        ) : null}
 
         <div>
           <label className="field-label">Назва завдання *</label>

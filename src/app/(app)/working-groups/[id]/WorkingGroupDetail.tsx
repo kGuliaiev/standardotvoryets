@@ -48,6 +48,8 @@ const TABS = [
 
 const DOC_TYPE_LABELS: Record<string, { label: string; cls: string }> = {
   DRAFT_STANDARD: { label: 'Чернетка', cls: 'bg-[#EEF4FF] text-[#1A3A8F]' },
+  TECH_SPEC: { label: 'ТЗ', cls: 'bg-amber-50 text-amber-700' },
+  FEEDBACK: { label: 'Відгук', cls: 'bg-cyan-50 text-cyan-700' },
   MEETING_MINUTES: { label: 'Протокол', cls: 'bg-[#ECFDF5] text-[#065F46]' },
   AGENDA: { label: 'Порядок денний', cls: 'bg-[#FFF7E6] text-[#92400E]' },
   ATTACHMENT: { label: 'Додаток', cls: 'bg-[#EDF0F7] text-[#4B5880]' },

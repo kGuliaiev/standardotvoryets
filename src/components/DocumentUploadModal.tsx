@@ -13,10 +13,19 @@ interface DocumentUploadModalProps {
 }
 
 const TYPE_OPTIONS: {
-  value: 'DRAFT_STANDARD' | 'MEETING_MINUTES' | 'AGENDA' | 'ATTACHMENT' | 'FINAL';
+  value:
+    | 'DRAFT_STANDARD'
+    | 'TECH_SPEC'
+    | 'FEEDBACK'
+    | 'MEETING_MINUTES'
+    | 'AGENDA'
+    | 'ATTACHMENT'
+    | 'FINAL';
   label: string;
 }[] = [
+  { value: 'TECH_SPEC', label: 'ТЗ (технічне завдання)' },
   { value: 'DRAFT_STANDARD', label: 'Чернетка стандарту' },
+  { value: 'FEEDBACK', label: 'Відгук' },
   { value: 'FINAL', label: 'Фінальна версія' },
   { value: 'AGENDA', label: 'Порядок денний' },
   { value: 'MEETING_MINUTES', label: 'Протокол' },
@@ -60,20 +69,13 @@ export function DocumentUploadModal({
     }
   }, [open]);
 
-  const getUploadUrlMutation = trpc.document.getUploadUrl.useMutation();
-  const confirmUploadMutation = trpc.document.confirmUpload.useMutation({
-    onSuccess: () => {
-      void utils.standard.byId.invalidate({ id: standardId });
-      void utils.document.list.invalidate({ standardId });
-      void utils.document.byWorkingGroup.invalidate();
-      onSaved?.();
-      onClose();
-    },
-    onError: (e) => {
-      setError(e.message);
-      setProgress('idle');
-    },
-  });
+  // Server-side proxy upload — keeps the browser away from S3 CORS pain.
+  // See src/app/api/standards/[id]/documents/route.ts for the handler.
+  function invalidateAfterUpload() {
+    void utils.standard.byId.invalidate({ id: standardId });
+    void utils.document.list.invalidate({ standardId });
+    void utils.document.byWorkingGroup.invalidate();
+  }
 
   function onPick(e: React.ChangeEvent<HTMLInputElement>) {
     const f = e.target.files?.[0];
@@ -102,49 +104,40 @@ export function DocumentUploadModal({
     }
 
     try {
-      // 1) Get presigned URL from server
-      setProgress('getting-url');
-      const { uploadUrl, s3Key } = await getUploadUrlMutation.mutateAsync({
-        standardId,
-        filename: file.name,
-        contentType: file.type,
-        type,
-        version: version.trim(),
-      });
-
-      // 2) Direct upload to S3
       setProgress('uploading');
-      const putResp = await fetch(uploadUrl, {
-        method: 'PUT',
-        body: file,
-        headers: { 'Content-Type': file.type },
-      });
-      if (!putResp.ok) {
-        const text = await putResp.text().catch(() => '');
-        throw new Error(
-          `Не вдалося завантажити файл (HTTP ${putResp.status}). ${text.slice(0, 120)}`,
-        );
-      }
+      const form = new FormData();
+      form.append('file', file);
+      form.append('type', type);
+      form.append('version', version.trim());
+      form.append('isCurrent', String(isCurrent));
+      if (note.trim()) form.append('note', note.trim());
 
-      // 3) Confirm: create document record
-      setProgress('confirming');
-      confirmUploadMutation.mutate({
-        standardId,
-        s3Key,
-        filename: file.name,
-        sizeBytes: file.size,
-        version: version.trim(),
-        type,
-        note: note.trim() || undefined,
-        isCurrent,
+      const resp = await fetch(`/api/standards/${standardId}/documents`, {
+        method: 'POST',
+        body: form,
       });
+      if (!resp.ok) {
+        let detail = '';
+        try {
+          const j = (await resp.json()) as { error?: string; detail?: string };
+          detail = j.error ?? '';
+          if (j.detail) detail += ` (${j.detail})`;
+        } catch {
+          /* ignore */
+        }
+        throw new Error(`HTTP ${resp.status}${detail ? ` · ${detail}` : ''}`);
+      }
+      setProgress('confirming');
+      invalidateAfterUpload();
+      onSaved?.();
+      onClose();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Помилка завантаження');
       setProgress('idle');
     }
   }
 
-  const busy = progress !== 'idle' || confirmUploadMutation.isPending;
+  const busy = progress !== 'idle';
 
   return (
     <Modal open={open} onClose={onClose} title="Завантажити документ" size="md">

@@ -36,6 +36,8 @@ enum StandardStatus {
 
 enum DocumentType {
   DRAFT_STANDARD  // Чернетка стандарту
+  TECH_SPEC       // ТЗ (технічне завдання)
+  FEEDBACK        // Відгук
   MEETING_MINUTES // Протокол засідання
   AGENDA          // Порядок денний
   ATTACHMENT      // Додатковий матеріал
