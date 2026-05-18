@@ -411,4 +411,90 @@ export const standardRouter = createTRPCRouter({
       });
       return deleted;
     }),
+
+  // ── bulkUpdate: apply one change to many standards at once ───────────
+  // Pattern matches GitHub / Linear bulk-edit: caller passes a list of
+  // ids + a partial patch. Each affected standard is checked individually
+  // for permission; failures are returned, not thrown, so a partial-batch
+  // operation isn't fully wasted.
+  bulkUpdate: protectedProcedure
+    .input(
+      z.object({
+        ids: z.array(z.string().cuid()).min(1).max(200),
+        patch: z
+          .object({
+            status: z
+              .enum(['DRAFT', 'IN_REVIEW', 'VOTING', 'ADOPTED', 'REJECTED', 'ARCHIVED'])
+              .optional(),
+            workingGroupId: z.string().cuid().optional(),
+          })
+          .refine(
+            (p) => p.status !== undefined || p.workingGroupId !== undefined,
+            'Patch must include at least one field',
+          ),
+      }),
+    )
+    .mutation(async ({ ctx, input }) => {
+      const uctx = userCtx(ctx.session);
+      const isAdmin = ctx.session.user.globalRole === 'ADMIN';
+
+      const targets = await ctx.db.standard.findMany({
+        where: { id: { in: input.ids } },
+        select: { id: true, code: true, status: true, workingGroupId: true },
+      });
+
+      const updated: string[] = [];
+      const skipped: { id: string; reason: string }[] = [];
+
+      for (const t of targets) {
+        // Permission: editing meta on the *source* WG
+        if (!isAdmin && !can(uctx, 'standard:editMeta', t.workingGroupId)) {
+          skipped.push({ id: t.id, reason: 'no permission on source WG' });
+          continue;
+        }
+        // Permission: also editing meta on the *target* WG when moving
+        if (
+          input.patch.workingGroupId &&
+          input.patch.workingGroupId !== t.workingGroupId &&
+          !isAdmin &&
+          !can(uctx, 'standard:editMeta', input.patch.workingGroupId)
+        ) {
+          skipped.push({ id: t.id, reason: 'no permission on target WG' });
+          continue;
+        }
+
+        const before = { status: t.status, workingGroupId: t.workingGroupId };
+        const after = await ctx.db.standard.update({
+          where: { id: t.id },
+          data: input.patch,
+          select: { id: true, status: true, workingGroupId: true },
+        });
+        await logActivity(ctx.db, {
+          userId: ctx.session.user.id,
+          action: input.patch.status ? 'STATUS_CHANGE' : 'UPDATE',
+          entity: 'Standard',
+          entityId: t.id,
+          before,
+          after,
+          note: 'Bulk action',
+        });
+        if (
+          input.patch.status &&
+          input.patch.status !== t.status &&
+          ctx.session.user.globalRole !== 'ADMIN'
+        ) {
+          // status change notifications fire elsewhere; mirror them on bulk
+          await notifyStandardStatusChanged(
+            ctx.db,
+            t.id,
+            t.status,
+            input.patch.status,
+            ctx.session.user.id,
+          );
+        }
+        updated.push(t.id);
+      }
+
+      return { updated, skipped };
+    }),
 });

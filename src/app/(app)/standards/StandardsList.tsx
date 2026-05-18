@@ -10,7 +10,7 @@ import { StandardProgress, hasOverdueStage } from '@/components/standards/Standa
 import { SortableHeader } from '@/components/ui/SortableHeader';
 import { useSort, sortedRows } from '@/lib/useSort';
 import { useLocalStorageState } from '@/lib/useLocalStorageState';
-import { AlertCircle, ChevronDown, Check } from 'lucide-react';
+import { AlertCircle, ChevronDown, Check, X as XIcon } from 'lucide-react';
 import { formatDate } from '@/lib/utils';
 
 const STATUS_TABS: { value: StandardStatus; label: string }[] = [
@@ -41,6 +41,21 @@ export function StandardsList() {
     'code',
     'asc',
   );
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [bulkMenu, setBulkMenu] = useState<'status' | 'wg' | null>(null);
+
+  const utils = trpc.useUtils();
+  const bulkMutation = trpc.standard.bulkUpdate.useMutation({
+    onSuccess: ({ updated, skipped }) => {
+      void utils.standard.list.invalidate();
+      setBulkMenu(null);
+      setSelectedIds(new Set());
+      if (skipped.length > 0) {
+        alert(`Оновлено: ${updated.length}. Пропущено через відсутність прав: ${skipped.length}.`);
+      }
+    },
+    onError: (e) => alert(`Помилка: ${e.message}`),
+  });
 
   // Close WG picker on outside click
   useEffect(() => {
@@ -260,6 +275,33 @@ export function StandardsList() {
             <table className="w-full text-sm min-w-[640px]">
               <thead className="bg-page border-b border-hairline">
                 <tr className="text-left text-xs text-mid uppercase tracking-wide">
+                  <th className="px-3 py-3 font-medium w-8">
+                    <input
+                      type="checkbox"
+                      aria-label="Виділити всі на сторінці"
+                      checked={
+                        !!data?.items &&
+                        data.items.length > 0 &&
+                        data.items.every((s) => selectedIds.has(s.id))
+                      }
+                      ref={(el) => {
+                        if (!el) return;
+                        const allOnPage = data?.items ?? [];
+                        const somePicked = allOnPage.some((s) => selectedIds.has(s.id));
+                        const allPicked = allOnPage.every((s) => selectedIds.has(s.id));
+                        el.indeterminate = somePicked && !allPicked;
+                      }}
+                      onChange={(e) => {
+                        const next = new Set(selectedIds);
+                        for (const s of data?.items ?? []) {
+                          if (e.target.checked) next.add(s.id);
+                          else next.delete(s.id);
+                        }
+                        setSelectedIds(next);
+                      }}
+                      className="w-4 h-4 cursor-pointer"
+                    />
+                  </th>
                   <th className="px-5 py-3 font-medium">
                     <SortableHeader columnKey="code" sort={sort} onSort={setSort}>
                       Код / Назва
@@ -322,7 +364,27 @@ export function StandardsList() {
                       return null;
                   }
                 }).map((s) => (
-                  <tr key={s.id} className="hover:bg-page transition-colors group">
+                  <tr
+                    key={s.id}
+                    className={`hover:bg-page transition-colors group ${
+                      selectedIds.has(s.id) ? 'bg-brand-soft/30' : ''
+                    }`}
+                  >
+                    <td className="px-3 py-3.5 w-8">
+                      <input
+                        type="checkbox"
+                        aria-label={`Виділити ${s.code}`}
+                        checked={selectedIds.has(s.id)}
+                        onChange={(e) => {
+                          const next = new Set(selectedIds);
+                          if (e.target.checked) next.add(s.id);
+                          else next.delete(s.id);
+                          setSelectedIds(next);
+                        }}
+                        onClick={(e) => e.stopPropagation()}
+                        className="w-4 h-4 cursor-pointer"
+                      />
+                    </td>
                     <td className="px-5 py-3.5 max-w-xs">
                       <Link href={`/standards/${s.id}`} className="block">
                         <div className="flex items-center gap-1.5">
@@ -435,6 +497,106 @@ export function StandardsList() {
         <p className="text-xs text-light text-right">
           Знайдено {data.total} стандарт{data.total === 1 ? '' : data.total < 5 ? 'и' : 'ів'}
         </p>
+      )}
+
+      {/* Sticky bulk-actions bar — appears when 1+ rows selected */}
+      {selectedIds.size > 0 && (
+        <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-40 bg-card border border-hairline shadow-2xl rounded-xl px-4 py-3 flex items-center gap-3 max-w-[95vw]">
+          <span className="text-sm font-semibold text-ink whitespace-nowrap">
+            Виділено: <span className="text-brand">{selectedIds.size}</span>
+          </span>
+          <span className="w-px h-5 bg-hairline" />
+          <div className="relative">
+            <button
+              onClick={() => setBulkMenu((m) => (m === 'status' ? null : 'status'))}
+              disabled={bulkMutation.isPending}
+              className="text-xs px-3 py-1.5 rounded-lg border border-hairline hover:bg-pill text-mid"
+            >
+              Змінити статус ▾
+            </button>
+            {bulkMenu === 'status' && (
+              <div className="absolute bottom-full left-0 mb-1 w-48 bg-card border border-hairline rounded-lg shadow-lg py-1">
+                {(
+                  [
+                    ['DRAFT', 'Чернетка'],
+                    ['IN_REVIEW', 'На розгляді'],
+                    ['VOTING', 'Голосування'],
+                    ['ADOPTED', 'Прийнятий'],
+                    ['REJECTED', 'Відхилений'],
+                    ['ARCHIVED', 'Архів'],
+                  ] as const
+                ).map(([v, label]) => (
+                  <button
+                    key={v}
+                    onClick={() => {
+                      bulkMutation.mutate({
+                        ids: Array.from(selectedIds),
+                        patch: { status: v },
+                      });
+                    }}
+                    className="w-full text-left px-3 py-1.5 text-xs text-ink hover:bg-pill"
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+          <div className="relative">
+            <button
+              onClick={() => setBulkMenu((m) => (m === 'wg' ? null : 'wg'))}
+              disabled={bulkMutation.isPending || !groups}
+              className="text-xs px-3 py-1.5 rounded-lg border border-hairline hover:bg-pill text-mid"
+            >
+              Перенести в РГ ▾
+            </button>
+            {bulkMenu === 'wg' && groups && (
+              <div className="absolute bottom-full left-0 mb-1 w-56 max-h-72 overflow-y-auto bg-card border border-hairline rounded-lg shadow-lg py-1 scrollbar-thin">
+                {groups.map((g) => (
+                  <button
+                    key={g.id}
+                    onClick={() => {
+                      bulkMutation.mutate({
+                        ids: Array.from(selectedIds),
+                        patch: { workingGroupId: g.id },
+                      });
+                    }}
+                    className="w-full text-left px-3 py-1.5 text-xs hover:bg-pill flex items-center gap-2"
+                  >
+                    <span className="w-2 h-2 rounded-full" style={{ backgroundColor: g.color }} />
+                    <span className="font-mono text-mid">{g.code}</span>
+                    <span className="text-ink truncate">{g.name}</span>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+          <button
+            onClick={() => {
+              if (confirm(`Архівувати ${selectedIds.size} стандартів?`)) {
+                bulkMutation.mutate({
+                  ids: Array.from(selectedIds),
+                  patch: { status: 'ARCHIVED' },
+                });
+              }
+            }}
+            disabled={bulkMutation.isPending}
+            className="text-xs px-3 py-1.5 rounded-lg border border-hairline text-red-600 hover:bg-red-50 dark:hover:bg-red-900/30"
+          >
+            Архівувати
+          </button>
+          <span className="w-px h-5 bg-hairline" />
+          <button
+            onClick={() => {
+              setSelectedIds(new Set());
+              setBulkMenu(null);
+            }}
+            className="p-1.5 rounded text-mid hover:bg-pill"
+            title="Скасувати"
+          >
+            <XIcon size={14} />
+          </button>
+        </div>
       )}
     </div>
   );
