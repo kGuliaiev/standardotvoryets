@@ -62,6 +62,15 @@
     box-sizing: border-box;
   }
 
+  html,
+  body {
+    /* Prevent body-level scroll on mobile so the topbar stays fixed
+       relative to the visual viewport even when iOS Safari's URL bar
+       collapses. The app shell handles its own internal scrolling. */
+    height: 100%;
+    overflow: hidden;
+    overscroll-behavior: none;
+  }
   html {
     font-family: var(--font-sans);
     -webkit-font-smoothing: antialiased;

@@ -208,35 +208,36 @@ export function UsersAdmin() {
           </div>
         ) : (
           <div className="overflow-x-auto scrollbar-thin">
-            <table className="w-full text-sm min-w-[820px]">
+            <table className="w-full text-sm md:min-w-[820px]">
               <thead className="bg-page border-b border-hairline">
                 <tr className="text-left text-xs text-mid uppercase tracking-wide">
-                  <th className="px-5 py-3 font-medium">
+                  <th className="px-3 sm:px-5 py-3 font-medium">
                     <SortableHeader columnKey="name" sort={sort} onSort={setSort}>
                       Користувач
                     </SortableHeader>
                   </th>
-                  <th className="px-3 py-3 font-medium">
+                  <th className="px-3 py-3 font-medium hidden md:table-cell">
                     <SortableHeader columnKey="rank" sort={sort} onSort={setSort}>
                       Звання
                     </SortableHeader>
                   </th>
-                  <th className="px-3 py-3 font-medium">
+                  <th className="px-3 py-3 font-medium hidden lg:table-cell">
                     <SortableHeader columnKey="position" sort={sort} onSort={setSort}>
                       Посада
                     </SortableHeader>
                   </th>
                   <th className="px-3 py-3 font-medium">
                     <SortableHeader columnKey="role" sort={sort} onSort={setSort}>
-                      Глобальна роль
+                      Роль
                     </SortableHeader>
                   </th>
-                  <th className="px-3 py-3 font-medium">
+                  <th className="px-3 py-3 font-medium hidden md:table-cell">
                     <SortableHeader columnKey="wgs" sort={sort} onSort={setSort}>
                       Робочі групи
                     </SortableHeader>
                   </th>
-                  <th className="px-3 py-3 font-medium text-right">Дії</th>
+                  <th className="px-3 py-3 font-medium hidden xl:table-cell">Створено</th>
+                  <th className="px-3 py-3 font-medium text-right hidden sm:table-cell">Дії</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-hairline">
@@ -276,14 +277,14 @@ export function UsersAdmin() {
                           </div>
                         </div>
                       </td>
-                      <td className="px-3 py-3.5">
+                      <td className="px-3 py-3.5 hidden md:table-cell">
                         {u.rank && u.rank !== 'CIVILIAN' ? (
                           <span className="text-xs text-ink">{rankLabel(u.rank)}</span>
                         ) : (
                           <span className="text-xs text-light">—</span>
                         )}
                       </td>
-                      <td className="px-3 py-3.5">
+                      <td className="px-3 py-3.5 hidden lg:table-cell">
                         <span
                           className="text-xs text-mid line-clamp-2 max-w-[280px]"
                           title={u.position ?? ''}
@@ -315,7 +316,7 @@ export function UsersAdmin() {
                           </select>
                         )}
                       </td>
-                      <td className="px-3 py-3.5">
+                      <td className="px-3 py-3.5 hidden md:table-cell">
                         <div className="flex flex-wrap gap-1">
                           {u.memberships.length === 0 ? (
                             <span className="text-xs text-light">—</span>
@@ -338,8 +339,10 @@ export function UsersAdmin() {
                           )}
                         </div>
                       </td>
-                      <td className="px-3 py-3.5 text-xs text-light">{formatDate(u.createdAt)}</td>
-                      <td className="px-3 py-3.5 text-right">
+                      <td className="px-3 py-3.5 text-xs text-light hidden xl:table-cell">
+                        {formatDate(u.createdAt)}
+                      </td>
+                      <td className="px-3 py-3.5 text-right hidden sm:table-cell">
                         <div className="inline-flex gap-1.5">
                           <button
                             onClick={() =>

@@ -235,26 +235,33 @@ export function StandardDetail({ id }: { id: string }) {
         </div>
 
         {/* Title */}
-        <h1 className="text-xl font-bold text-ink mt-3">{standard.title}</h1>
+        <h1 className="text-xl font-bold text-ink mt-3 break-words">{standard.title}</h1>
 
         {/* Collapsible stepper */}
         <div className="mt-4 pt-3 border-t border-hairline">
           <button
             type="button"
             onClick={() => setStepperOpen((o) => !o)}
-            className="flex items-center justify-between w-full text-left group"
+            className="flex items-center justify-between gap-3 w-full text-left group"
           >
-            <span className="text-xs text-mid font-semibold uppercase tracking-wide group-hover:text-ink transition-colors inline-flex items-center gap-2">
-              Поетапний план виконання
-              <span className="text-[10px] font-normal normal-case text-light">
-                · оновлено {formatDateTime(standard.updatedAt)}
+            <span className="text-xs text-mid font-semibold uppercase tracking-wide group-hover:text-ink transition-colors flex flex-col sm:flex-row sm:items-center sm:gap-2 min-w-0">
+              <span className="truncate">Поетапний план виконання</span>
+              <span className="text-[10px] font-normal normal-case text-light truncate">
+                <span className="hidden sm:inline">· </span>
+                оновлено {formatDateTime(standard.updatedAt)}
               </span>
             </span>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 shrink-0">
               {!stepperOpen && hasOverdueStage(standard) && (
-                <span className="text-[11px] text-red-600 dark:text-red-400 font-semibold">
+                <span className="text-[11px] text-red-600 dark:text-red-400 font-semibold hidden sm:inline">
                   є прострочений етап
                 </span>
+              )}
+              {!stepperOpen && hasOverdueStage(standard) && (
+                <span
+                  className="sm:hidden w-2 h-2 rounded-full bg-red-500"
+                  title="Є прострочений етап"
+                />
               )}
               <ChevronDown
                 size={16}
@@ -314,13 +321,13 @@ export function StandardDetail({ id }: { id: string }) {
       </div>
 
       {/* Tabs */}
-      <div className="border-b border-hairline">
-        <nav className="flex gap-0 -mb-px">
+      <div className="border-b border-hairline overflow-x-auto scrollbar-thin">
+        <nav className="flex gap-0 -mb-px min-w-max">
           {TABS.map((tab) => (
             <button
               key={tab.id}
               onClick={() => setActiveTab(tab.id)}
-              className={`px-5 py-3 text-sm font-medium border-b-2 transition-colors ${
+              className={`px-4 sm:px-5 py-3 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${
                 activeTab === tab.id
                   ? 'border-blue-600 text-blue-700'
                   : 'border-transparent text-mid hover:text-ink hover:border-slate-300'

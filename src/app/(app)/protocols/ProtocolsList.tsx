@@ -185,12 +185,12 @@ export function ProtocolsList() {
           </div>
         ) : (
           <div className="overflow-x-auto scrollbar-thin">
-            <table className="w-full text-sm min-w-[820px]">
+            <table className="w-full text-sm md:min-w-[820px]">
               <thead className="bg-page border-b border-hairline">
                 <tr className="text-left text-xs text-mid uppercase tracking-wide">
-                  <th className="px-4 py-3 font-medium w-24">
+                  <th className="px-3 sm:px-4 py-3 font-medium w-20 sm:w-24">
                     <SortableHeader columnKey="protocolNumber" sort={sort} onSort={setSort}>
-                      № протоколу
+                      № прот.
                     </SortableHeader>
                   </th>
                   <th className="px-3 py-3 font-medium">
@@ -198,23 +198,23 @@ export function ProtocolsList() {
                       Тема засідання
                     </SortableHeader>
                   </th>
-                  <th className="px-3 py-3 font-medium">
+                  <th className="px-3 py-3 font-medium hidden md:table-cell">
                     <SortableHeader columnKey="wg" sort={sort} onSort={setSort}>
                       РГ
                     </SortableHeader>
                   </th>
-                  <th className="px-3 py-3 font-medium">
+                  <th className="px-3 py-3 font-medium hidden sm:table-cell">
                     <SortableHeader columnKey="date" sort={sort} onSort={setSort}>
                       Дата
                     </SortableHeader>
                   </th>
-                  <th className="px-3 py-3 font-medium">
+                  <th className="px-3 py-3 font-medium hidden lg:table-cell">
                     <SortableHeader columnKey="status" sort={sort} onSort={setSort}>
                       Статус
                     </SortableHeader>
                   </th>
-                  <th className="px-3 py-3 font-medium">Головуючий</th>
-                  <th className="px-3 py-3 font-medium text-center">Пункти</th>
+                  <th className="px-3 py-3 font-medium hidden lg:table-cell">Головуючий</th>
+                  <th className="px-3 py-3 font-medium text-center hidden xl:table-cell">Пункти</th>
                   <th className="px-3 py-3 font-medium text-right">Дії</th>
                 </tr>
               </thead>
@@ -246,7 +246,7 @@ export function ProtocolsList() {
                           {m.title}
                         </Link>
                       </td>
-                      <td className="px-3 py-3">
+                      <td className="px-3 py-3 hidden md:table-cell">
                         <Link
                           href={`/working-groups/${m.workingGroup.id}`}
                           className="inline-flex items-center gap-1.5"
@@ -260,17 +260,17 @@ export function ProtocolsList() {
                           </span>
                         </Link>
                       </td>
-                      <td className="px-3 py-3 text-xs text-mid whitespace-nowrap">
+                      <td className="px-3 py-3 text-xs text-mid whitespace-nowrap hidden sm:table-cell">
                         {formatDate(m.startAt)}
                       </td>
-                      <td className="px-3 py-3">
+                      <td className="px-3 py-3 hidden lg:table-cell">
                         <span
                           className={`text-[11px] px-2 py-0.5 rounded-full font-semibold ${statusInfo.cls}`}
                         >
                           {statusInfo.label}
                         </span>
                       </td>
-                      <td className="px-3 py-3 text-xs">
+                      <td className="px-3 py-3 text-xs hidden lg:table-cell">
                         {(() => {
                           const fallbackLeader = m.workingGroup.members?.[0]?.user;
                           const person = m.chairman ?? fallbackLeader ?? null;
@@ -294,7 +294,7 @@ export function ProtocolsList() {
                           );
                         })()}
                       </td>
-                      <td className="px-3 py-3 text-center text-xs text-mid">
+                      <td className="px-3 py-3 text-center text-xs text-mid hidden xl:table-cell">
                         {m._count.agendaItems}
                       </td>
                       <td className="px-3 py-3">

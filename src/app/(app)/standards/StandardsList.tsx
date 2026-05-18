@@ -272,7 +272,7 @@ export function StandardsList() {
           </div>
         ) : (
           <div className="overflow-x-auto scrollbar-thin">
-            <table className="w-full text-sm min-w-[640px]">
+            <table className="w-full text-sm md:min-w-[640px]">
               <thead className="bg-page border-b border-hairline">
                 <tr className="text-left text-xs text-mid uppercase tracking-wide">
                   <th className="px-3 py-3 font-medium w-8">
@@ -312,22 +312,22 @@ export function StandardsList() {
                       РГ
                     </SortableHeader>
                   </th>
-                  <th className="px-3 py-3 font-medium">
+                  <th className="px-3 py-3 font-medium hidden sm:table-cell">
                     <SortableHeader columnKey="status" sort={sort} onSort={setSort}>
                       Статус
                     </SortableHeader>
                   </th>
-                  <th className="px-3 py-3 font-medium">
+                  <th className="px-3 py-3 font-medium hidden lg:table-cell">
                     <SortableHeader columnKey="responsible" sort={sort} onSort={setSort}>
                       Відповідальний
                     </SortableHeader>
                   </th>
-                  <th className="px-3 py-3 font-medium w-[240px]">
+                  <th className="px-3 py-3 font-medium w-[240px] hidden md:table-cell">
                     <SortableHeader columnKey="stage" sort={sort} onSort={setSort}>
                       Етапи
                     </SortableHeader>
                   </th>
-                  <th className="px-3 py-3 font-medium">
+                  <th className="px-3 py-3 font-medium hidden lg:table-cell">
                     <SortableHeader columnKey="deadline" sort={sort} onSort={setSort}>
                       Дедлайн
                     </SortableHeader>
@@ -414,10 +414,10 @@ export function StandardsList() {
                         <span className="text-xs text-mid font-medium">{s.workingGroup.code}</span>
                       </span>
                     </td>
-                    <td className="px-3 py-3.5">
+                    <td className="px-3 py-3.5 hidden sm:table-cell">
                       <StatusBadge status={s.status} size="sm" />
                     </td>
-                    <td className="px-3 py-3.5">
+                    <td className="px-3 py-3.5 hidden lg:table-cell">
                       {s.responsible ? (
                         <div className="flex items-center gap-2">
                           <Avatar
@@ -433,7 +433,7 @@ export function StandardsList() {
                         <span className="text-xs text-light">—</span>
                       )}
                     </td>
-                    <td className="px-3 py-3.5">
+                    <td className="px-3 py-3.5 hidden md:table-cell">
                       <StandardProgress
                         variant="compact"
                         techSpecDueDate={s.techSpecDueDate}
@@ -448,7 +448,7 @@ export function StandardsList() {
                         finalCompletedAt={s.finalCompletedAt}
                       />
                     </td>
-                    <td className="px-3 py-3.5">
+                    <td className="px-3 py-3.5 hidden lg:table-cell">
                       {s.deadline ? (
                         <span
                           className={`text-xs ${new Date(s.deadline) < new Date() && !['ADOPTED', 'ARCHIVED'].includes(s.status) ? 'text-red-600 font-medium' : 'text-mid'}`}

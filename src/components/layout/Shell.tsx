@@ -32,7 +32,7 @@ export function Shell({ children, session }: ShellProps) {
   }, [mobileMenuOpen]);
 
   return (
-    <div className="flex h-screen bg-page overflow-hidden">
+    <div className="flex h-screen h-[100dvh] bg-page overflow-hidden">
       {/* Desktop sidebar — visible on lg+ */}
       <div className="hidden lg:flex">
         <Sidebar session={session} />

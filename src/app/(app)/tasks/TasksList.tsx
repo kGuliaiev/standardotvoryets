@@ -324,7 +324,7 @@ export function TasksList() {
 
         {/* RIGHT: List */}
         <main className="card overflow-hidden">
-          <div className="card-head">
+          <div className="card-head flex-col items-stretch sm:flex-row sm:items-center gap-3">
             <div className="min-w-0">
               <p className="text-[11px] font-bold uppercase tracking-wide text-light">
                 {selectedScope.kind === 'all'
@@ -335,7 +335,7 @@ export function TasksList() {
               </p>
               <h2 className="text-[15px] font-bold text-ink truncate">{scopeLabel}</h2>
             </div>
-            <div className="inline-flex rounded-full border border-hairline p-0.5 bg-card">
+            <div className="inline-flex rounded-full border border-hairline p-0.5 bg-card self-start sm:self-auto shrink-0">
               {(
                 [
                   ['all', 'Всі'],
@@ -347,7 +347,7 @@ export function TasksList() {
                 <button
                   key={k}
                   onClick={() => setFilter(k)}
-                  className={`text-[12px] font-semibold px-3 py-1 rounded-full transition-colors ${
+                  className={`text-[12px] font-semibold px-3 py-1 rounded-full transition-colors whitespace-nowrap ${
                     filter === k ? 'bg-brand-soft text-brand' : 'text-mid hover:text-ink'
                   }`}
                 >
