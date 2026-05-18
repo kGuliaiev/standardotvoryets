@@ -363,4 +363,47 @@ export const suggestionRouter = createTRPCRouter({
       });
       return updated;
     }),
+
+  // ── replaceBody: import-style atomic body swap ────────────────────────
+  // Same permission as updateBody, but also drops every existing
+  // suggestion on this standard in a single transaction. Use this when
+  // the body is being completely replaced (e.g. .docx import) — leftover
+  // suggestions would point at paragraph indices that no longer exist
+  // and produce confusing CONFLICT errors when the leader tries to
+  // resolve them.
+  replaceBody: protectedProcedure
+    .input(z.object({ standardId: z.string().cuid(), bodyText: z.string().max(200_000) }))
+    .mutation(async ({ ctx, input }) => {
+      const std = await ctx.db.standard.findUniqueOrThrow({
+        where: { id: input.standardId },
+        select: { workingGroupId: true, bodyText: true },
+      });
+      if (!can(userCtx(ctx.session), 'standard:editMeta', std.workingGroupId)) {
+        throw new TRPCError({ code: 'FORBIDDEN' });
+      }
+
+      const [deleted, updated] = await ctx.db.$transaction([
+        // Reactions cascade via Prisma's onDelete: Cascade on SuggestionReaction.
+        ctx.db.standardSuggestion.deleteMany({ where: { standardId: input.standardId } }),
+        ctx.db.standard.update({
+          where: { id: input.standardId },
+          data: {
+            bodyText: input.bodyText,
+            bodyUpdatedAt: new Date(),
+            bodyUpdatedById: ctx.session.user.id,
+          },
+        }),
+      ]);
+
+      await logActivity(ctx.db, {
+        userId: ctx.session.user.id,
+        action: 'UPDATE',
+        entity: 'Standard',
+        entityId: input.standardId,
+        before: { bodyText: std.bodyText ?? '' },
+        after: { bodyText: updated.bodyText ?? '' },
+        note: `Замінено текст документа (імпорт). Видалено правок: ${deleted.count}.`,
+      });
+      return { ...updated, droppedSuggestionCount: deleted.count };
+    }),
 });

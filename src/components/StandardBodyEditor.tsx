@@ -18,6 +18,7 @@ import {
   Loader2,
   AlertCircle,
   FileUp,
+  FileDown,
 } from 'lucide-react';
 import { can } from '@/lib/rbac';
 import type { GlobalRole, WorkingGroupRole } from '@prisma/client';
@@ -107,6 +108,16 @@ export function StandardBodyEditor({
   const [draft, setDraft] = useState<DraftSuggestion | null>(null);
   const [bulkOpen, setBulkOpen] = useState(false);
   const [bulkText, setBulkText] = useState(normalizedBody);
+  // Holds HTML returned by /api/import-body while the user confirms a
+  // destructive replace (only used when a body already exists).
+  const [pendingImport, setPendingImport] = useState<{ html: string; filename: string } | null>(
+    null,
+  );
+
+  const pendingSuggestionCount = useMemo(
+    () => (suggestions ?? []).filter((s) => s.status === 'PENDING').length,
+    [suggestions],
+  );
 
   const createMutation = trpc.suggestion.create.useMutation({
     onSuccess: () => {
@@ -131,6 +142,15 @@ export function StandardBodyEditor({
     onSuccess: () => {
       void utils.standard.byId.invalidate({ id: standardId });
       setBulkOpen(false);
+    },
+    onError: (e) => alert(e.message),
+  });
+  const replaceBodyMutation = trpc.suggestion.replaceBody.useMutation({
+    onSuccess: () => {
+      void utils.standard.byId.invalidate({ id: standardId });
+      void utils.suggestion.list.invalidate({ standardId });
+      setBulkOpen(false);
+      setPendingImport(null);
     },
     onError: (e) => alert(e.message),
   });
@@ -218,8 +238,11 @@ export function StandardBodyEditor({
           open={bulkOpen}
           initial={bulkText}
           standardId={standardId}
+          bodyAlreadyExists={false}
+          pendingSuggestionCount={0}
           onClose={() => setBulkOpen(false)}
           onSave={(text) => updateBodyMutation.mutate({ standardId, bodyText: text })}
+          onReplace={(text) => updateBodyMutation.mutate({ standardId, bodyText: text })}
           isPending={updateBodyMutation.isPending}
         />
       </div>
@@ -241,19 +264,38 @@ export function StandardBodyEditor({
               </span>
             )}
           </p>
-          {canEditMeta && (
-            <button
-              onClick={() => {
-                setBulkText(normalizedBody);
-                setBulkOpen(true);
-              }}
+          <div className="flex items-center gap-1.5 flex-wrap">
+            <a
+              href={`/api/standards/${standardId}/export-body`}
+              download
               className="text-xs px-2.5 py-1 rounded border border-hairline text-mid hover:text-ink hover:bg-pill inline-flex items-center gap-1.5"
-              title="Редагувати весь текст із форматуванням як у Word"
+              title="Зберегти текст документа як файл Microsoft Word (.docx)"
             >
-              <Edit3 className="w-3 h-3" />
-              Редагувати все
-            </button>
-          )}
+              <FileDown className="w-3 h-3" />
+              Експортувати .docx
+            </a>
+            {canEditMeta && (
+              <DocxImportButton
+                standardId={standardId}
+                variant="header"
+                onImported={(html, filename) => setPendingImport({ html, filename })}
+                disabled={replaceBodyMutation.isPending}
+              />
+            )}
+            {canEditMeta && (
+              <button
+                onClick={() => {
+                  setBulkText(normalizedBody);
+                  setBulkOpen(true);
+                }}
+                className="text-xs px-2.5 py-1 rounded border border-hairline text-mid hover:text-ink hover:bg-pill inline-flex items-center gap-1.5"
+                title="Редагувати весь текст із форматуванням як у Word"
+              >
+                <Edit3 className="w-3 h-3" />
+                Редагувати все
+              </button>
+            )}
+          </div>
         </div>
 
         {/* Body blocks (HTML, rendered via prose classes) */}
@@ -345,9 +387,27 @@ export function StandardBodyEditor({
         open={bulkOpen}
         initial={bulkText}
         standardId={standardId}
+        bodyAlreadyExists={!!bodyText}
+        pendingSuggestionCount={pendingSuggestionCount}
         onClose={() => setBulkOpen(false)}
         onSave={(text) => updateBodyMutation.mutate({ standardId, bodyText: text })}
-        isPending={updateBodyMutation.isPending}
+        onReplace={(text) => replaceBodyMutation.mutate({ standardId, bodyText: text })}
+        isPending={updateBodyMutation.isPending || replaceBodyMutation.isPending}
+      />
+
+      {/* Top-level import confirmation: only shown when the body already
+          has content (otherwise the import write is non-destructive and
+          we apply it immediately). */}
+      <ImportConfirmModal
+        pending={pendingImport}
+        pendingSuggestionCount={pendingSuggestionCount}
+        isApplying={replaceBodyMutation.isPending}
+        onCancel={() => setPendingImport(null)}
+        onConfirm={() => {
+          if (pendingImport) {
+            replaceBodyMutation.mutate({ standardId, bodyText: pendingImport.html });
+          }
+        }}
       />
     </div>
   );
@@ -646,28 +706,47 @@ function BulkEditModal({
   open,
   initial,
   standardId,
+  bodyAlreadyExists,
+  pendingSuggestionCount,
   onClose,
   onSave,
+  onReplace,
   isPending,
 }: {
   open: boolean;
   initial: string;
   standardId: string;
+  bodyAlreadyExists: boolean;
+  pendingSuggestionCount: number;
   onClose: () => void;
   onSave: (text: string) => void;
+  onReplace: (text: string) => void;
   isPending: boolean;
 }) {
   const [html, setHtml] = useState(initial);
   // The editor seeds `content` only once at mount; bumping this key
   // forces a remount when an import replaces the buffer mid-session.
   const [editorKey, setEditorKey] = useState(0);
+  // Tracks whether the current buffer came from a .docx import. When true,
+  // saving uses replaceBody (which wipes orphaned suggestions) instead of
+  // updateBody.
+  const [importedFromDocx, setImportedFromDocx] = useState(false);
   // re-sync when modal (re)opens with a different initial value
   useEffect(() => {
     if (open) {
       setHtml(initial);
+      setImportedFromDocx(false);
       setEditorKey((k) => k + 1);
     }
   }, [initial, open]);
+
+  const handleSave = () => {
+    if (importedFromDocx && bodyAlreadyExists) {
+      onReplace(html);
+    } else {
+      onSave(html);
+    }
+  };
 
   return (
     <Modal open={open} onClose={onClose} title="Редагувати текст документа" size="xl">
@@ -683,10 +762,24 @@ function BulkEditModal({
             variant="secondary"
             onImported={(imported) => {
               setHtml(imported);
+              setImportedFromDocx(true);
               setEditorKey((k) => k + 1);
             }}
           />
         </div>
+        {importedFromDocx && bodyAlreadyExists && pendingSuggestionCount > 0 && (
+          <p className="text-xs text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-700 rounded px-2.5 py-1.5 inline-flex items-center gap-1.5">
+            <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+            При збереженні буде видалено {pendingSuggestionCount}{' '}
+            {pluralizeUk(
+              pendingSuggestionCount,
+              'відкриту правку',
+              'відкриті правки',
+              'відкритих правок',
+            )}
+            , оскільки вони відносяться до попереднього тексту.
+          </p>
+        )}
         {/* Force a fresh editor instance whenever the modal reopens or an
             import replaces the buffer — TipTap ignores `content` updates
             after init. */}
@@ -701,9 +794,78 @@ function BulkEditModal({
           <button onClick={onClose} className="btn-secondary">
             Скасувати
           </button>
-          <button onClick={() => onSave(html)} disabled={isPending} className="btn-primary">
+          <button onClick={handleSave} disabled={isPending} className="btn-primary">
             {isPending && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
             Зберегти
+          </button>
+        </div>
+      </div>
+    </Modal>
+  );
+}
+
+/** Ukrainian plural form: 1 → 'one', 2-4 → 'few', 5+ → 'many'. */
+function pluralizeUk(n: number, one: string, few: string, many: string): string {
+  const mod10 = n % 10;
+  const mod100 = n % 100;
+  if (mod10 === 1 && mod100 !== 11) return one;
+  if (mod10 >= 2 && mod10 <= 4 && (mod100 < 10 || mod100 >= 20)) return few;
+  return many;
+}
+
+function ImportConfirmModal({
+  pending,
+  pendingSuggestionCount,
+  isApplying,
+  onCancel,
+  onConfirm,
+}: {
+  pending: { html: string; filename: string } | null;
+  pendingSuggestionCount: number;
+  isApplying: boolean;
+  onCancel: () => void;
+  onConfirm: () => void;
+}) {
+  if (!pending) return null;
+  return (
+    <Modal open={!!pending} onClose={onCancel} title="Замінити текст документа?" size="md">
+      <div className="space-y-4">
+        <p className="text-sm text-ink">
+          Імпорт <span className="font-semibold">«{pending.filename}»</span> повністю замінить
+          поточний текст документа.
+        </p>
+        {pendingSuggestionCount > 0 && (
+          <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-700 rounded-lg px-3 py-2.5 text-xs text-amber-700 dark:text-amber-300 inline-flex items-start gap-2">
+            <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+            <span>
+              Також буде видалено{' '}
+              <strong>
+                {pendingSuggestionCount}{' '}
+                {pluralizeUk(
+                  pendingSuggestionCount,
+                  'відкриту правку',
+                  'відкриті правки',
+                  'відкритих правок',
+                )}
+              </strong>{' '}
+              — їхні позиції в параграфах втратять сенс після заміни.
+            </span>
+          </div>
+        )}
+        <p className="text-xs text-light">
+          Цю дію не можна скасувати. Попередній текст залишиться лише в журналі змін.
+        </p>
+        <div className="flex justify-end gap-2 pt-2 border-t border-hairline">
+          <button onClick={onCancel} disabled={isApplying} className="btn-secondary">
+            Скасувати
+          </button>
+          <button
+            onClick={onConfirm}
+            disabled={isApplying}
+            className="btn-primary bg-red-600 hover:bg-red-700"
+          >
+            {isApplying && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+            Замінити текст
           </button>
         </div>
       </div>
@@ -714,9 +876,11 @@ function BulkEditModal({
 /**
  * File picker + upload + .docx→HTML conversion via /api/standards/[id]/import-body.
  *
- * Two visual variants:
- *   - `primary` — the standalone empty-state CTA
+ * Visual variants:
+ *   - `primary`   — the standalone empty-state CTA
  *   - `secondary` — the inline button inside the bulk edit modal
+ *   - `header`    — compact button matching the other header actions
+ *                   (Export / Edit-all) on the body tab
  */
 function DocxImportButton({
   standardId,
@@ -725,8 +889,8 @@ function DocxImportButton({
   disabled,
 }: {
   standardId: string;
-  variant: 'primary' | 'secondary';
-  onImported: (html: string) => void;
+  variant: 'primary' | 'secondary' | 'header';
+  onImported: (html: string, filename: string) => void;
   disabled?: boolean;
 }) {
   const inputRef = useRef<HTMLInputElement>(null);
@@ -751,7 +915,11 @@ function DocxImportButton({
         alert(err.error ?? 'Не вдалося імпортувати документ');
         return;
       }
-      const data = (await res.json()) as { html: string; warnings?: string[] };
+      const data = (await res.json()) as {
+        html: string;
+        warnings?: string[];
+        filename?: string;
+      };
       if (data.warnings && data.warnings.length > 0) {
         // Show non-fatal conversion warnings so the user knows some content
         // (e.g. embedded objects) may have been dropped.
@@ -759,7 +927,7 @@ function DocxImportButton({
         // eslint-disable-next-line no-console
         console.warn('[import-body] warnings:', data.warnings);
       }
-      onImported(data.html);
+      onImported(data.html, data.filename ?? file.name);
     } finally {
       setBusy(false);
       if (inputRef.current) inputRef.current.value = '';
@@ -769,7 +937,11 @@ function DocxImportButton({
   const baseClass =
     variant === 'primary'
       ? 'inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-blue-700 text-white text-sm font-semibold hover:bg-blue-800 disabled:opacity-60 disabled:cursor-not-allowed'
-      : 'inline-flex items-center gap-1.5 px-2.5 py-1 rounded border border-hairline text-xs font-semibold text-ink hover:bg-pill disabled:opacity-60 disabled:cursor-not-allowed';
+      : variant === 'header'
+        ? 'text-xs px-2.5 py-1 rounded border border-hairline text-mid hover:text-ink hover:bg-pill inline-flex items-center gap-1.5 disabled:opacity-60 disabled:cursor-not-allowed'
+        : 'inline-flex items-center gap-1.5 px-2.5 py-1 rounded border border-hairline text-xs font-semibold text-ink hover:bg-pill disabled:opacity-60 disabled:cursor-not-allowed';
+
+  const iconSize = variant === 'primary' ? 'w-4 h-4' : 'w-3 h-3';
 
   return (
     <>
@@ -791,11 +963,9 @@ function DocxImportButton({
         title="Завантажити .docx — перетвориться в форматований текст"
       >
         {busy ? (
-          <Loader2
-            className={variant === 'primary' ? 'w-4 h-4 animate-spin' : 'w-3 h-3 animate-spin'}
-          />
+          <Loader2 className={`${iconSize} animate-spin`} />
         ) : (
-          <FileUp className={variant === 'primary' ? 'w-4 h-4' : 'w-3 h-3'} />
+          <FileUp className={iconSize} />
         )}
         Імпортувати з Word
       </button>
