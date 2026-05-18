@@ -30,11 +30,9 @@ function icalToken(userId: string, wgId: string): string {
     .slice(0, 32);
 }
 
-export function buildSubscribeUrl(userId: string, wgId: string): string {
-  const base = env.NEXT_PUBLIC_APP_URL.replace(/\/$/, '');
-  const token = icalToken(userId, wgId);
-  return `${base}/api/working-groups/${wgId}/ical?user=${userId}&token=${token}`;
-}
+// Note: token-generation logic is duplicated in
+// src/server/routers/workingGroup.ts → icalSubscribeUrl (the client
+// gets the URL via tRPC, not from this file). Keep both in sync.
 
 export async function GET(req: Request, { params }: { params: { id: string } }) {
   const url = new URL(req.url);
