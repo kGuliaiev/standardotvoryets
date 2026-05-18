@@ -19,14 +19,14 @@ ARG NODE_VERSION=20-alpine
 
 # ── deps ────────────────────────────────────────────────────────────
 FROM node:${NODE_VERSION} AS deps
-RUN corepack enable
+RUN corepack enable && corepack prepare pnpm@9.15.9 --activate
 WORKDIR /app
 COPY package.json pnpm-lock.yaml ./
 RUN pnpm install --frozen-lockfile
 
 # ── build ───────────────────────────────────────────────────────────
 FROM node:${NODE_VERSION} AS build
-RUN corepack enable
+RUN corepack enable && corepack prepare pnpm@9.15.9 --activate
 WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
@@ -36,7 +36,7 @@ RUN pnpm build
 
 # ── runner ──────────────────────────────────────────────────────────
 FROM node:${NODE_VERSION} AS runner
-RUN corepack enable
+RUN corepack enable && corepack prepare pnpm@9.15.9 --activate
 # pg_dump (postgresql-client) is required by the in-process backup job.
 # gzip is preinstalled on alpine.
 RUN apk add --no-cache postgresql-client
