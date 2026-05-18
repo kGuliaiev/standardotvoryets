@@ -1,17 +1,21 @@
 /**
- * Manual trigger for the weekly digest. Same scheduling/auth notes as
- * /api/cron/notifications/route.ts.
+ * Manual trigger for the database backup. Scheduling is handled
+ * in-process by src/instrumentation.ts.
+ *
+ * Auth: same as other /api/cron/* endpoints.
  *
  * Query params:
- *   ?force=1   bypass the Monday 09:00 Kyiv gate (useful for testing)
+ *   ?retentionDays=N  override default 30
  */
 
 import { NextResponse } from 'next/server';
 import { env } from '@/lib/env';
-import { runWeeklyDigest } from '@/lib/cron-jobs';
+import { runDatabaseBackup } from '@/lib/cron-jobs';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
+// Backup needs more than the default 10-second budget.
+export const maxDuration = 300;
 
 function isAuthorized(req: Request): boolean {
   if (!env.CRON_SECRET) return process.env.NODE_ENV !== 'production';
@@ -29,7 +33,15 @@ export async function GET(req: Request) {
     );
   }
   const url = new URL(req.url);
-  const force = url.searchParams.get('force') === '1';
-  const result = await runWeeklyDigest({ force });
-  return NextResponse.json(result);
+  const retentionParam = url.searchParams.get('retentionDays');
+  const retentionDays = retentionParam ? Number(retentionParam) : undefined;
+  try {
+    const result = await runDatabaseBackup({ retentionDays });
+    return NextResponse.json(result);
+  } catch (e) {
+    return NextResponse.json(
+      { ok: false, error: e instanceof Error ? e.message : 'unknown' },
+      { status: 500 },
+    );
+  }
 }

@@ -41,11 +41,11 @@ pnpm dev:all
 
 ## Інші сервіси (локально)
 
-| Сервіс | URL |
-|--------|-----|
-| Prisma Studio | `pnpm prisma:studio` → http://localhost:5555 |
-| MinIO Console | http://localhost:9001 (minioadmin / minioadmin) |
-| MailHog (email) | http://localhost:8025 |
+| Сервіс          | URL                                             |
+| --------------- | ----------------------------------------------- |
+| Prisma Studio   | `pnpm prisma:studio` → http://localhost:5555    |
+| MinIO Console   | http://localhost:9001 (minioadmin / minioadmin) |
+| MailHog (email) | http://localhost:8025                           |
 
 ## Корисні команди
 
@@ -59,6 +59,48 @@ pnpm prisma:reset     # скинути БД і перезасіяти
 
 ## Деплой
 
-GitHub Actions → Railway. Деталі: `agent-pack/09_deploy.md`
+Проект — **standalone Docker image**, без зовнішніх залежностей від
+платформи. Може бути розгорнутий на будь-якому Docker-хості з тих самих
+ENV-змінних (див. `.env.example`).
 
-Зміни в `main` автоматично деплояться на Railway.
+### Railway (поточний production)
+
+Railway автодетектить `Dockerfile`. Зміни в `main` гілці тригерять
+автоматичний редеплой. Потрібно тільки заповнити Variables за
+`.env.example`. Жодних додаткових сервісів — cron, бекапи й сповіщення
+живуть всередині того ж контейнера.
+
+### Fly.io / Render / Coolify / Docker host
+
+```bash
+docker build -t standardotvorets .
+docker run -d --name standardotvorets -p 3000:3000 --env-file .env standardotvorets
+```
+
+### Повний self-hosted стек одною командою
+
+```bash
+cp .env.example .env  # обов'язково встанови NEXTAUTH_SECRET
+docker compose --profile fullstack up -d
+```
+
+Підіймає app + Postgres + MinIO (S3) + Redis. Перевірка: `http://localhost:3000`.
+
+### Cron / scheduler
+
+Усі планові задачі (нагадування про засідання та етапи, тижневий
+дайджест, нічний бекап БД) виконуються **в тому самому процесі** через
+`node-cron` — зовнішній планувальник не потрібен. Графіки задані в
+[`src/instrumentation.ts`](src/instrumentation.ts), часовий пояс
+`Europe/Kyiv`:
+
+| Задача                                      | Розклад                                           |
+| ------------------------------------------- | ------------------------------------------------- |
+| Нагадування / etap-deadlines / vote-closing | Щогодини в `:00` (stage-нагадування лише о 09:00) |
+| Тижневий звіт керівникам                    | Понеділок 09:00                                   |
+| Дамп БД → S3 (з ретеншеном 30 днів)         | Щодня 03:00                                       |
+
+ENV-перемикачі: `CRON_DISABLED=1` повністю вимикає планувальник (для
+сценаріїв з кількома instances), `CRON_IN_DEV=1` дозволяє його в
+`NODE_ENV=development`. Ручний тригер: `GET /api/cron/{notifications,digest,backup}`
+(захищений `CRON_SECRET` якщо встановлений).

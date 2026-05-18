@@ -1,0 +1,15 @@
+node_modules
+.next
+.git
+.github
+.env
+.env.local
+*.log
+.DS_Store
+coverage
+.turbo
+.vercel
+README.md
+CONTINUATION.md
+прототип.html
+scripts/test-*.ts

@@ -11,7 +11,7 @@ importers:
         specifier: ^2.7.0
         version: 2.11.2(@prisma/client@5.22.0(prisma@5.22.0))(nodemailer@6.10.1)
       '@aws-sdk/client-s3':
-        specifier: ^3.600.0
+        specifier: ^3.1047.0
         version: 3.1047.0
       '@aws-sdk/s3-request-presigner':
         specifier: ^3.600.0
@@ -100,6 +100,9 @@ importers:
       next-auth:
         specifier: ^4.24.7
         version: 4.24.14(next@14.2.35(react-dom@18.3.1(react@18.3.1))(react@18.3.1))(nodemailer@6.10.1)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
+      node-cron:
+        specifier: ^4.2.1
+        version: 4.2.1
       nodemailer:
         specifier: ^6.9.14
         version: 6.10.1
@@ -137,6 +140,9 @@ importers:
       '@types/node':
         specifier: ^20.14.11
         version: 20.19.41
+      '@types/node-cron':
+        specifier: ^3.0.11
+        version: 3.0.11
       '@types/nodemailer':
         specifier: ^6.4.15
         version: 6.4.23
@@ -2072,6 +2078,12 @@ packages:
     resolution:
       {
         integrity: sha512-dRLjCWHYg4oaA77cxO64oO+7JwCwnIzkZPdrrC71jQmQtlhM556pwKo5bUzqvZndkVbeFLIIi+9TC40JNF5hNQ==,
+      }
+
+  '@types/node-cron@3.0.11':
+    resolution:
+      {
+        integrity: sha512-0ikrnug3/IyneSHqCBeslAhlK2aBfYek1fGo4bP4QnZPmiqSGRK+Oy7ZMisLWkesffJvQ1cqAcBnJC+8+nxIAg==,
       }
 
   '@types/node@20.19.41':
@@ -4843,6 +4855,13 @@ packages:
       {
         integrity: sha512-AGK2yQKIjRuqnc6VkX2Xj5d+QW8xZ87pa1UK6yA6ouUyuxfHuMP6umE5QK7UmTeOAymo+Zx1Fxiuw9rVx8taHQ==,
       }
+
+  node-cron@4.2.1:
+    resolution:
+      {
+        integrity: sha512-lgimEHPE/QDgFlywTd8yTR61ptugX3Qer29efeyWw2rv259HtGBNn1vZVmp8lB9uo9wC0t/AT4iGqXxia+CJFg==,
+      }
+    engines: { node: '>=6.0.0' }
 
   node-exports-info@1.6.0:
     resolution:
@@ -7926,6 +7945,8 @@ snapshots:
 
   '@types/json5@0.0.29': {}
 
+  '@types/node-cron@3.0.11': {}
+
   '@types/node@20.19.41':
     dependencies:
       undici-types: 6.21.0
@@ -9743,6 +9764,8 @@ snapshots:
       - babel-plugin-macros
 
   node-abort-controller@3.1.1: {}
+
+  node-cron@4.2.1: {}
 
   node-exports-info@1.6.0:
     dependencies:

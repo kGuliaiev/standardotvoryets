@@ -1,5 +1,58 @@
-version: "3.9"
+# Two ways to run this stack:
+#
+#   docker compose up -d
+#     → infra only (postgres + redis + minio + mailhog). Use this for
+#       local dev — the Next.js app runs on host via `pnpm dev`.
+#
+#   docker compose --profile fullstack up -d
+#     → also builds and starts the app container. Use this on a VPS /
+#       on-prem host for fully self-hosted deploys.
+#
+# The `app` service includes pg_dump and runs the in-process cron
+# scheduler (notifications hourly, weekly digest Mon 09:00 Kyiv,
+# backup daily 03:00 → MinIO).
+
+version: '3.9'
 services:
+  app:
+    profiles: ['fullstack']
+    build: .
+    image: standardotvorets:latest
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+    ports:
+      - '3000:3000'
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: postgresql://st_user:st_pass@postgres:5432/standardotvoryets
+      NEXTAUTH_URL: ${NEXTAUTH_URL:-http://localhost:3000}
+      NEXTAUTH_SECRET: ${NEXTAUTH_SECRET:?set NEXTAUTH_SECRET (openssl rand -base64 32)}
+      NEXT_PUBLIC_APP_URL: ${NEXT_PUBLIC_APP_URL:-http://localhost:3000}
+      NEXT_PUBLIC_APP_NAME: ${NEXT_PUBLIC_APP_NAME:-Стандартотворець}
+      NEXT_PUBLIC_ENABLE_DIFF_VIEWER: ${NEXT_PUBLIC_ENABLE_DIFF_VIEWER:-false}
+      EMAIL_FROM: ${EMAIL_FROM:-noreply@example.com}
+      RESEND_API_KEY: ${RESEND_API_KEY:-}
+      SMTP_HOST: ${SMTP_HOST:-mailhog}
+      SMTP_PORT: ${SMTP_PORT:-1025}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASS: ${SMTP_PASS:-}
+      S3_ENDPOINT: http://minio:9000
+      S3_REGION: ${S3_REGION:-eu-central-1}
+      S3_BUCKET: ${S3_BUCKET:-standardotvoryets}
+      S3_ACCESS_KEY: ${S3_ACCESS_KEY:-minioadmin}
+      S3_SECRET_KEY: ${S3_SECRET_KEY:-minioadmin}
+      REDIS_URL: redis://redis:6379
+      CRON_SECRET: ${CRON_SECRET:-}
+    healthcheck:
+      test: ['CMD-SHELL', 'wget -qO- http://localhost:3000/api/health || exit 1']
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
   postgres:
     image: postgres:16-alpine
     environment:
@@ -7,11 +60,11 @@ services:
       POSTGRES_PASSWORD: st_pass
       POSTGRES_DB: standardotvoryets
     ports:
-      - "5432:5432"
+      - '5432:5432'
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U st_user -d standardotvoryets"]
+      test: ['CMD-SHELL', 'pg_isready -U st_user -d standardotvoryets']
       interval: 5s
       timeout: 5s
       retries: 5
@@ -19,11 +72,11 @@ services:
   redis:
     image: redis:7-alpine
     ports:
-      - "6379:6379"
+      - '6379:6379'
     volumes:
       - redis_data:/data
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      test: ['CMD', 'redis-cli', 'ping']
       interval: 5s
       timeout: 5s
       retries: 5
@@ -35,12 +88,12 @@ services:
       MINIO_ROOT_USER: minioadmin
       MINIO_ROOT_PASSWORD: minioadmin
     ports:
-      - "9000:9000"
-      - "9001:9001"
+      - '9000:9000'
+      - '9001:9001'
     volumes:
       - minio_data:/data
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      test: ['CMD', 'curl', '-f', 'http://localhost:9000/minio/health/live']
       interval: 10s
       timeout: 5s
       retries: 5
@@ -48,8 +101,8 @@ services:
   mailhog:
     image: mailhog/mailhog
     ports:
-      - "1025:1025"   # SMTP
-      - "8025:8025"   # Web UI
+      - '1025:1025' # SMTP
+      - '8025:8025' # Web UI
 
 volumes:
   pgdata:
