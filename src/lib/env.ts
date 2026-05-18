@@ -26,6 +26,34 @@ const envSchema = z.object({
   CRON_SECRET: z.string().optional(),
 });
 
-export const env = envSchema.parse(process.env);
-
 export type Env = z.infer<typeof envSchema>;
+
+/**
+ * During `next build` Next.js loads every route module to collect page
+ * data — that includes routes which import `env`. The build container
+ * has no DATABASE_URL / NEXTAUTH_* set, so a strict parse() at module
+ * load time crashes the build.
+ *
+ * Detect build phase and short-circuit with a permissive shim. At
+ * runtime (NEXT_PHASE !== 'phase-production-build') we run the full
+ * Zod parse and fail loudly if anything is missing.
+ */
+function loadEnv(): Env {
+  // Next.js sets NEXT_PHASE=phase-production-build during `next build` —
+  // before any route module gets loaded for page-data collection. The
+  // build container has no real secrets, so we feed Zod placeholders
+  // that only satisfy schema shape. At runtime NEXT_PHASE is not set
+  // to that value, so the strict parse runs and fails loudly if any
+  // required var is missing.
+  if (process.env.NEXT_PHASE === 'phase-production-build') {
+    return envSchema.parse({
+      DATABASE_URL: 'postgresql://build:build@localhost:5432/build',
+      NEXTAUTH_SECRET: 'build-placeholder-secret-not-used-at-runtime',
+      NEXTAUTH_URL: 'http://localhost:3000',
+      ...process.env,
+    });
+  }
+  return envSchema.parse(process.env);
+}
+
+export const env = loadEnv();
