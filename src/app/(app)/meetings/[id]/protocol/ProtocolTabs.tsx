@@ -1,7 +1,24 @@
 'use client';
 
 import { useState } from 'react';
-import { Plus, Save, Trash2, Loader2 } from 'lucide-react';
+import { Plus, Save, Trash2, Loader2, GripVertical } from 'lucide-react';
+import {
+  DndContext,
+  closestCenter,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+} from '@dnd-kit/core';
+import {
+  SortableContext,
+  arrayMove,
+  sortableKeyboardCoordinates,
+  useSortable,
+  verticalListSortingStrategy,
+} from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
 import type { AgendaDraft, ProtocolSection } from './ProtocolEditor';
 
 interface MemberLite {
@@ -108,6 +125,34 @@ export function ProtocolTabs(props: Props) {
   const heardItems = items.filter((it) => it.section === 'HEARD');
   const decisionItems = items.filter((it) => it.section === 'DECISION');
 
+  /**
+   * Reorder items within one section. Reassigns `order` (1..N) inside
+   * the section and marks affected rows dirty so the next "Save all"
+   * persists the new order.
+   */
+  function reorderSection(section: ProtocolSection, newSectionOrder: AgendaDraft[]) {
+    const idToNewOrder = new Map<string, number>();
+    newSectionOrder.forEach((it, i) => {
+      const k = it.id ?? `new-${items.indexOf(it)}`;
+      idToNewOrder.set(k, i + 1);
+    });
+    const next = items.map((it) => {
+      if (it.section !== section) return it;
+      const k = it.id ?? `new-${items.indexOf(it)}`;
+      const newOrder = idToNewOrder.get(k);
+      if (newOrder !== undefined && newOrder !== it.order) {
+        return { ...it, order: newOrder, dirty: true };
+      }
+      return it;
+    });
+    // Sort the items inside the section to match new visual order
+    const sectionItems = next
+      .filter((it) => it.section === section)
+      .sort((a, b) => a.order - b.order);
+    const others = next.filter((it) => it.section !== section);
+    onChange([...others, ...sectionItems]);
+  }
+
   return (
     <div className="card overflow-hidden">
       <div className="border-b border-hairline flex items-end justify-between px-5 gap-3 flex-wrap">
@@ -179,6 +224,7 @@ export function ProtocolTabs(props: Props) {
           items={agendaItems}
           empty="Розділ порожній — натисніть «+ Пункт»"
           canEdit={canEdit}
+          onReorder={(next) => reorderSection('AGENDA', next)}
           onRemove={(it) => onRemove(indexOf(it))}
           renderBody={(it) => {
             const idx = indexOf(it);
@@ -220,6 +266,7 @@ export function ProtocolTabs(props: Props) {
           items={heardItems}
           empty="Розділ порожній — натисніть «+ Пункт»"
           canEdit={canEdit}
+          onReorder={(next) => reorderSection('HEARD', next)}
           onRemove={(it) => onRemove(indexOf(it))}
           renderBody={(it) => {
             const idx = indexOf(it);
@@ -281,6 +328,7 @@ export function ProtocolTabs(props: Props) {
           items={decisionItems}
           empty="Розділ порожній — натисніть «+ Пункт»"
           canEdit={canEdit}
+          onReorder={(next) => reorderSection('DECISION', next)}
           onRemove={(it) => onRemove(indexOf(it))}
           renderBody={(it) => {
             const idx = indexOf(it);
@@ -348,45 +396,118 @@ interface ListProps {
   empty: string;
   canEdit: boolean;
   onRemove: (it: AgendaDraft) => void;
+  onReorder?: (newOrder: AgendaDraft[]) => void;
   renderBody: (it: AgendaDraft) => React.ReactNode;
 }
 
-function ItemList({ items, empty, canEdit, onRemove, renderBody }: ListProps) {
+function ItemList({ items, empty, canEdit, onRemove, onReorder, renderBody }: ListProps) {
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
+  );
+
   if (items.length === 0) {
     return <div className="py-12 text-center text-light text-sm">{empty}</div>;
   }
+
+  // Each item needs a stable string id for dnd-kit
+  const itemIds = items.map((it, idx) => it.id ?? `new-${idx}`);
+
+  function handleDragEnd(e: DragEndEvent) {
+    const { active, over } = e;
+    if (!over || active.id === over.id || !onReorder) return;
+    const oldIdx = itemIds.indexOf(String(active.id));
+    const newIdx = itemIds.indexOf(String(over.id));
+    if (oldIdx < 0 || newIdx < 0) return;
+    onReorder(arrayMove(items, oldIdx, newIdx));
+  }
+
   return (
-    <div className="divide-y divide-hairline">
-      {items.map((it, idx) => {
-        const key = it.id ?? `new-${idx}`;
-        return (
-          <div
-            key={key}
-            className={`px-5 py-4 ${it.dirty ? 'bg-amber-50/40 dark:bg-amber-900/10' : ''}`}
+    <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+      <SortableContext items={itemIds} strategy={verticalListSortingStrategy}>
+        <div className="divide-y divide-hairline">
+          {items.map((it, idx) => (
+            <SortableRow
+              key={itemIds[idx] ?? `idx-${idx}`}
+              id={itemIds[idx] ?? `idx-${idx}`}
+              idx={idx}
+              dirty={it.dirty}
+              canEdit={canEdit}
+              onRemove={() => onRemove(it)}
+            >
+              {renderBody(it)}
+            </SortableRow>
+          ))}
+        </div>
+      </SortableContext>
+    </DndContext>
+  );
+}
+
+function SortableRow({
+  id,
+  idx,
+  dirty,
+  canEdit,
+  onRemove,
+  children,
+}: {
+  id: string;
+  idx: number;
+  dirty: boolean;
+  canEdit: boolean;
+  onRemove: () => void;
+  children: React.ReactNode;
+}) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
+    id,
+    disabled: !canEdit,
+  });
+  const style: React.CSSProperties = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.5 : 1,
+  };
+  return (
+    <div
+      ref={setNodeRef}
+      style={style}
+      className={`px-5 py-4 ${dirty ? 'bg-amber-50/40 dark:bg-amber-900/10' : ''} ${
+        isDragging ? 'bg-pill' : ''
+      }`}
+    >
+      <div className="flex items-start gap-2">
+        {canEdit && (
+          <button
+            type="button"
+            {...attributes}
+            {...listeners}
+            className="p-1 mt-1 text-light hover:text-ink cursor-grab active:cursor-grabbing shrink-0"
+            title="Перетягнути"
+            aria-label="Перетягнути пункт"
           >
-            <div className="flex items-start gap-3">
-              <span className="text-[13px] font-bold text-mid w-6 text-center font-mono pt-2">
-                {idx + 1}.
-              </span>
-              <div className="flex-1 min-w-0">{renderBody(it)}</div>
-              {canEdit && (
-                <button
-                  onClick={() => onRemove(it)}
-                  className="p-1.5 rounded hover:bg-red-50 dark:hover:bg-red-900/30 text-mid hover:text-red-600 shrink-0"
-                  title="Видалити"
-                >
-                  <Trash2 className="w-3.5 h-3.5" />
-                </button>
-              )}
-            </div>
-            {it.dirty && (
-              <p className="ml-9 mt-2 text-[10px] text-amber-700 dark:text-amber-300 italic">
-                Незбережено — натисніть {'«'}Зберегти все{'»'} вгорі
-              </p>
-            )}
-          </div>
-        );
-      })}
+            <GripVertical className="w-4 h-4" />
+          </button>
+        )}
+        <span className="text-[13px] font-bold text-mid w-6 text-center font-mono pt-2 shrink-0">
+          {idx + 1}.
+        </span>
+        <div className="flex-1 min-w-0">{children}</div>
+        {canEdit && (
+          <button
+            onClick={onRemove}
+            className="p-1.5 rounded hover:bg-red-50 dark:hover:bg-red-900/30 text-mid hover:text-red-600 shrink-0"
+            title="Видалити"
+          >
+            <Trash2 className="w-3.5 h-3.5" />
+          </button>
+        )}
+      </div>
+      {dirty && (
+        <p className="ml-9 mt-2 text-[10px] text-amber-700 dark:text-amber-300 italic">
+          Незбережено — натисніть {'«'}Зберегти все{'»'} вгорі
+        </p>
+      )}
     </div>
   );
 }
