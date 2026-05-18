@@ -101,6 +101,65 @@ export async function POST(req: Request, { params }: { params: { id: string } })
   // bold/italic, links, tables). We pass `ignoreEmptyParagraphs: false`
   // so empty paragraphs in the source still create separate TipTap blocks
   // — that preserves the author's visual rhythm.
+  //
+  // Paragraph alignment isn't in mammoth's default output (the library was
+  // designed around semantic style maps, not direct formatting). The
+  // workaround:
+  //   1. `transformDocument` rewrites each paragraph's styleName to embed
+  //      an alignment suffix when a non-default alignment is set.
+  //   2. A supplemental styleMap matches those synthetic names and emits
+  //      classes (`ta-center` / `ta-right` / `ta-justify`).
+  //   3. A post-process pass converts those classes to inline
+  //      `style="text-align: …"` so the TipTap renderer + .docx
+  //      re-export both see it.
+  const ALIGN_BY_KEY = {
+    center: 'center',
+    right: 'right',
+    end: 'right',
+    justify: 'justify',
+    both: 'justify',
+  } as const;
+  type AlignKey = keyof typeof ALIGN_BY_KEY;
+  type AlignTarget = (typeof ALIGN_BY_KEY)[AlignKey];
+
+  function alignSuffix(a: string | null | undefined): AlignTarget | null {
+    if (!a) return null;
+    const key = a as AlignKey;
+    return ALIGN_BY_KEY[key] ?? null;
+  }
+
+  // Mammoth's transforms helpers aren't in the .d.ts. Cast to the loose
+  // shape its options expect (matching mammoth's own runtime signature).
+  interface MammothParagraph {
+    alignment?: string | null;
+    styleName?: string | null;
+  }
+  type MammothTransformFn = (element: MammothParagraph) => MammothParagraph;
+  interface MammothTransforms {
+    paragraph: (fn: MammothTransformFn) => MammothTransformFn;
+  }
+  const mammothTransforms = (mammoth as unknown as { transforms: MammothTransforms }).transforms;
+  const transformDocument = mammothTransforms.paragraph((paragraph) => {
+    const target = alignSuffix(paragraph.alignment);
+    if (!target) return paragraph;
+    const base = paragraph.styleName ?? '';
+    return { ...paragraph, styleName: base ? `${base}__align-${target}` : `__align-${target}` };
+  });
+
+  // Mappings for headings 1-6 + plain paragraphs, for each of the three
+  // alignments we propagate. The `:fresh` suffix tells mammoth to start a
+  // new HTML element instead of merging into a previous one.
+  const HEADING_LEVELS = [1, 2, 3, 4, 5, 6] as const;
+  const alignmentStyleMap: string[] = [];
+  for (const target of ['center', 'right', 'justify'] as const) {
+    alignmentStyleMap.push(`p[style-name='__align-${target}'] => p.ta-${target}:fresh`);
+    for (const lvl of HEADING_LEVELS) {
+      alignmentStyleMap.push(
+        `p[style-name='Heading ${lvl}__align-${target}'] => h${lvl}.ta-${target}:fresh`,
+      );
+    }
+  }
+
   let html: string;
   let warnings: string[] = [];
   try {
@@ -108,6 +167,8 @@ export async function POST(req: Request, { params }: { params: { id: string } })
       { buffer },
       {
         ignoreEmptyParagraphs: false,
+        transformDocument,
+        styleMap: alignmentStyleMap,
         // Strip embedded images (the body is meant for text; images live
         // in the Documents tab). Returning empty src yields a tag-less
         // placeholder that ProseMirror will discard.
@@ -115,6 +176,12 @@ export async function POST(req: Request, { params }: { params: { id: string } })
       },
     );
     html = result.value;
+    // Convert the marker classes to inline styles the rest of the pipeline
+    // already understands (TipTap's TextAlign extension reads `style`).
+    html = html
+      .replace(/\sclass="ta-center"/g, ' style="text-align: center"')
+      .replace(/\sclass="ta-right"/g, ' style="text-align: right"')
+      .replace(/\sclass="ta-justify"/g, ' style="text-align: justify"');
     warnings = result.messages.map((m) => m.message);
   } catch (e) {
     return NextResponse.json(
