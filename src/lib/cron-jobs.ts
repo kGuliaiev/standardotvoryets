@@ -355,44 +355,50 @@ export async function runDatabaseBackup(opts: { retentionDays?: number; now?: Da
   // Pipe: pg_dump → gzip → buffer in memory, then upload.
   // For 50MB+ dumps consider streaming directly to S3; for our size
   // (~5–20MB) in-memory is simpler and well within RAM.
-  const buffer = await new Promise<Buffer>((resolve, reject) => {
-    const dump = spawn(
-      'pg_dump',
-      ['--no-owner', '--no-privileges', '--format=plain', env.DATABASE_URL!],
-      { stdio: ['ignore', 'pipe', 'pipe'] },
-    );
-    const gzip = spawn('gzip', ['-9'], { stdio: ['pipe', 'pipe', 'pipe'] });
-    dump.stdout.pipe(gzip.stdin);
+  const result = await new Promise<{ buffer: Buffer; dumpErr: string; dumpExit: number | null }>(
+    (resolve, reject) => {
+      const dump = spawn(
+        'pg_dump',
+        ['--no-owner', '--no-privileges', '--format=plain', env.DATABASE_URL!],
+        { stdio: ['ignore', 'pipe', 'pipe'] },
+      );
+      const gzip = spawn('gzip', ['-9'], { stdio: ['pipe', 'pipe', 'pipe'] });
+      dump.stdout.pipe(gzip.stdin);
 
-    let dumpErr = '';
-    let gzipErr = '';
-    dump.stderr.on('data', (b: Buffer) => (dumpErr += b.toString()));
-    gzip.stderr.on('data', (b: Buffer) => (gzipErr += b.toString()));
+      let dumpErr = '';
+      let gzipErr = '';
+      let dumpExit: number | null = null;
+      dump.stderr.on('data', (b: Buffer) => (dumpErr += b.toString()));
+      gzip.stderr.on('data', (b: Buffer) => (gzipErr += b.toString()));
 
-    const chunks: Buffer[] = [];
-    gzip.stdout.on('data', (chunk: Buffer) => chunks.push(chunk));
-    gzip.stdout.on('end', () => resolve(Buffer.concat(chunks)));
+      const chunks: Buffer[] = [];
+      gzip.stdout.on('data', (chunk: Buffer) => chunks.push(chunk));
+      gzip.stdout.on('end', () => resolve({ buffer: Buffer.concat(chunks), dumpErr, dumpExit }));
 
-    dump.on('error', (e) => reject(new Error(`pg_dump spawn failed: ${e.message}`)));
-    gzip.on('error', (e) => reject(new Error(`gzip spawn failed: ${e.message}`)));
-    dump.on('close', (code) => {
-      if (code !== 0) {
-        reject(new Error(`pg_dump exit ${code}: ${dumpErr || gzipErr}`));
-      } else if (dumpErr) {
-        // pg_dump exited 0 but wrote something to stderr — surface it
-        // (often "WARNING" lines that signal real problems).
-        console.warn('[backup] pg_dump stderr:', dumpErr);
-      }
-    });
-    gzip.on('close', (code) => {
-      if (code !== 0) reject(new Error(`gzip exit ${code}: ${gzipErr || dumpErr}`));
-    });
-  });
+      dump.on('error', (e) => reject(new Error(`pg_dump spawn failed: ${e.message}`)));
+      gzip.on('error', (e) => reject(new Error(`gzip spawn failed: ${e.message}`)));
+      dump.on('close', (code) => {
+        dumpExit = code;
+        if (code !== 0) {
+          reject(new Error(`pg_dump exit ${code}: ${dumpErr || gzipErr}`));
+        } else if (dumpErr) {
+          console.warn('[backup] pg_dump stderr:', dumpErr);
+        }
+      });
+      gzip.on('close', (code) => {
+        if (code !== 0) reject(new Error(`gzip exit ${code}: ${gzipErr || dumpErr}`));
+      });
+    },
+  );
+  const { buffer, dumpErr, dumpExit } = result;
 
   if (buffer.length < 1024) {
     return {
       ok: false,
-      reason: `Dump suspiciously small (${buffer.length} bytes). Possible causes: pg_dump version mismatch with server, missing perms on schema, or unreachable host. Try \`docker exec <container> pg_dump --version\` and compare with server's SELECT version();`,
+      reason: `Dump suspiciously small (${buffer.length} bytes)`,
+      pgDumpExit: dumpExit,
+      pgDumpStderr: dumpErr || '(empty)',
+      hint: 'If stderr is empty: pg_dump likely connected and returned an empty schema. Check DATABASE_URL host reachability and credentials. If stderr mentions version: install matching postgresql-client-NN in the image.',
       ranAt: now.toISOString(),
     };
   }
