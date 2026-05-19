@@ -200,6 +200,7 @@ export function Sidebar({ session, forceExpanded = false }: SidebarProps) {
             width={36}
             height={36}
             priority
+            unoptimized
             className="object-contain"
           />
         </button>

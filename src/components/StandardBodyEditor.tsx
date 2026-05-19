@@ -142,6 +142,11 @@ export function StandardBodyEditor({ target, bodyText, bodyUpdatedAt, bodyUpdate
   const [draft, setDraft] = useState<DraftSuggestion | null>(null);
   const [bulkOpen, setBulkOpen] = useState(false);
   const [bulkText, setBulkText] = useState(normalizedBody);
+  // Documents are edited like Word files — the user expects the
+  // formatting toolbar to be visible immediately, not hidden behind
+  // a "Редагувати все" click. Auto-open the bulk WYSIWYG editor once
+  // on mount when we're editing a per-document body.
+  const didAutoOpenBulkRef = useRef(false);
   /** Right rail tabs — Зміни (suggestions) or Коментарі (inline). */
   const [railTab, setRailTab] = useState<'changes' | 'comments'>('changes');
   // Shared inline-comments query so the rail tab badge can show a
@@ -211,6 +216,20 @@ export function StandardBodyEditor({ target, bodyText, bodyUpdatedAt, bodyUpdate
     },
     onError: (e) => alert(e.message),
   });
+
+  // Auto-open bulk WYSIWYG once for document targets so the user
+  // lands directly in the Word-style editor with the full formatting
+  // toolbar. Standards keep the paragraph-by-paragraph suggestion
+  // view since that's the consensus flow.
+  useEffect(() => {
+    if (target.kind !== 'document') return;
+    if (didAutoOpenBulkRef.current) return;
+    if (!canEditMeta) return;
+    didAutoOpenBulkRef.current = true;
+    setBulkText(normalizedBody);
+    setBulkOpen(true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [target.kind, canEditMeta]);
 
   function openSuggest(idx: number, op: OpKind = 'REPLACE') {
     const original = paragraphs[idx] ?? '';

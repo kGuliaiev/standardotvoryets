@@ -173,6 +173,23 @@ export function StandardDetail({ id }: { id: string }) {
   // version, isCurrent, allowEdits) — the body editor stays as
   // `editDocId`.
   const [editMetaDocId, setEditMetaDocId] = useState<string | null>(null);
+  // Two-step confirm for document deletion. Step 1 is the native
+  // `confirm()` dialog; step 2 opens this modal with a typed
+  // confirmation so the user can't fat-finger it.
+  const [deleteDocCandidate, setDeleteDocCandidate] = useState<{
+    id: string;
+    filename: string;
+  } | null>(null);
+  const [deleteDocConfirmText, setDeleteDocConfirmText] = useState('');
+
+  const deleteDocMutation = trpc.document.delete.useMutation({
+    onSuccess: () => {
+      setDeleteDocCandidate(null);
+      setDeleteDocConfirmText('');
+      void refetch();
+    },
+    onError: (e) => alert(e.message),
+  });
 
   const updateMutation = trpc.standard.update.useMutation({
     onSuccess: () => {
@@ -203,6 +220,7 @@ export function StandardDetail({ id }: { id: string }) {
   const canOpenVoting = userCtx ? can(userCtx, 'vote:open', wgId) : false;
   const canCastVote = userCtx ? can(userCtx, 'vote:cast', wgId) : false;
   const canUpload = userCtx ? can(userCtx, 'document:upload', wgId) : false;
+  const canDeleteDoc = userCtx ? can(userCtx, 'document:delete', wgId) : false;
 
   const myVote = currentVoting?.votes.find((v) => v.userId === session?.user?.id);
   const forVotes = currentVoting?.votes.filter((v) => v.choice === 'FOR').length ?? 0;
@@ -623,6 +641,25 @@ export function StandardDetail({ id }: { id: string }) {
                             </button>
                           )}
                           <DownloadButton documentId={doc.id} />
+                          {canDeleteDoc && (
+                            <button
+                              onClick={() => {
+                                if (
+                                  confirm(
+                                    `Видалити документ "${doc.filename}"?\n\nЦе перший із двох підтверджень — далі потрібно буде ввести назву файла.`,
+                                  )
+                                ) {
+                                  setDeleteDocCandidate({ id: doc.id, filename: doc.filename });
+                                  setDeleteDocConfirmText('');
+                                }
+                              }}
+                              disabled={deleteDocMutation.isPending}
+                              className="text-xs px-2 py-1 rounded border border-red-200 dark:border-red-800/60 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors inline-flex items-center gap-1 flex-shrink-0 disabled:opacity-50"
+                              title="Видалити документ"
+                            >
+                              ×
+                            </button>
+                          )}
                         </div>
                       );
                     })}
@@ -1105,6 +1142,68 @@ export function StandardDetail({ id }: { id: string }) {
         onSaved={() => void refetch()}
         defaultAllowEdits={uploadAllowEditsDefault}
       />
+
+      {/* Second-stage confirmation for document deletion. The first
+          stage is a native confirm() on the trash button; here the
+          user types the filename to confirm. Both required because
+          deletes are destructive (S3 object + DB row + audit trail). */}
+      <Modal
+        open={!!deleteDocCandidate}
+        onClose={() => {
+          setDeleteDocCandidate(null);
+          setDeleteDocConfirmText('');
+        }}
+        title="Підтвердження видалення документа"
+        size="sm"
+      >
+        {deleteDocCandidate && (
+          <div className="space-y-4">
+            <p className="text-sm text-mid">
+              Документ <span className="font-semibold text-ink">{deleteDocCandidate.filename}</span>{' '}
+              буде видалено остаточно — разом із файлом у сховищі та всіма правками й коментарями.
+              Цю дію не можна скасувати.
+            </p>
+            <div>
+              <label className="field-label">Введіть назву файла, щоб підтвердити:</label>
+              <input
+                type="text"
+                value={deleteDocConfirmText}
+                onChange={(e) => setDeleteDocConfirmText(e.target.value)}
+                className="input font-mono"
+                placeholder={deleteDocCandidate.filename}
+                autoFocus
+              />
+            </div>
+            <div className="flex gap-3 justify-end pt-2 border-t border-hairline">
+              <button
+                type="button"
+                onClick={() => {
+                  setDeleteDocCandidate(null);
+                  setDeleteDocConfirmText('');
+                }}
+                className="btn-secondary"
+                disabled={deleteDocMutation.isPending}
+              >
+                Скасувати
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  if (!deleteDocCandidate) return;
+                  deleteDocMutation.mutate({ documentId: deleteDocCandidate.id });
+                }}
+                disabled={
+                  deleteDocConfirmText.trim() !== deleteDocCandidate.filename ||
+                  deleteDocMutation.isPending
+                }
+                className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-red-600 hover:bg-red-700 text-white text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              >
+                {deleteDocMutation.isPending ? 'Видалення…' : 'Видалити остаточно'}
+              </button>
+            </div>
+          </div>
+        )}
+      </Modal>
 
       <DocumentEditMetaModal
         open={!!editMetaDocId}
