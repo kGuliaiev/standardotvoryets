@@ -24,8 +24,11 @@ import type { GlobalRole, WorkingGroupRole } from '@prisma/client';
 
 type Tab = 'body' | 'documents' | 'comments' | 'tasks' | 'members' | 'voting' | 'history';
 
+// "Текст документа" was deprecated in favour of editing individual
+// uploaded documents (Документи → Редагувати). The body tab is kept in
+// the type only because old deep-link notifications may still point at
+// `?tab=body` — we silently redirect those to `documents` below.
 const TABS: { id: Tab; label: string }[] = [
-  { id: 'body', label: 'Текст документа' },
   { id: 'documents', label: 'Документи' },
   { id: 'comments', label: 'Обговорення' },
   { id: 'tasks', label: 'Завдання' },
@@ -83,7 +86,11 @@ export function StandardDetail({ id }: { id: string }) {
   const searchParams = useSearchParams();
   // Honor ?tab=<id> from incoming links (notifications deep-link here).
   const queryTab = searchParams.get('tab');
-  const initialTab: Tab = queryTab && VALID_TABS.has(queryTab as Tab) ? (queryTab as Tab) : 'body';
+  // Default to Документи now that the body tab is hidden; an explicit
+  // `?tab=body` URL still gets redirected to `documents` to avoid
+  // breaking old notification deep-links.
+  const requested = queryTab && VALID_TABS.has(queryTab as Tab) ? (queryTab as Tab) : 'documents';
+  const initialTab: Tab = requested === 'body' ? 'documents' : requested;
   const [activeTab, setActiveTab] = useState<Tab>(initialTab);
   const [stepperOpen, setStepperOpen] = useLocalStorageState<boolean>(
     `standard.${id}.stepperOpen`,
@@ -94,7 +101,8 @@ export function StandardDetail({ id }: { id: string }) {
   // same standard page), follow it.
   useEffect(() => {
     if (queryTab && VALID_TABS.has(queryTab as Tab)) {
-      setActiveTab(queryTab as Tab);
+      const t = queryTab as Tab;
+      setActiveTab(t === 'body' ? 'documents' : t);
     }
   }, [queryTab]);
 

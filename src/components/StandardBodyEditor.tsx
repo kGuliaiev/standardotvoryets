@@ -309,55 +309,59 @@ export function StandardBodyEditor({ target, bodyText, bodyUpdatedAt, bodyUpdate
     : 'sticky top-0 z-10 bg-card/90 backdrop-blur-md py-2 border-b border-hairline';
 
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-[1fr_300px] gap-5 items-start">
-      <div className="space-y-2">
-        {/* Header strip — action toolbar pinned so it stays reachable
-            while scrolling long documents. */}
-        <div className={`${toolbarSticky} flex items-center justify-between flex-wrap gap-2`}>
-          <p className="text-[11px] text-light">
-            {bodyUpdatedAt && bodyUpdatedBy
-              ? `Оновлено ${new Date(bodyUpdatedAt).toLocaleString('uk-UA')} · ${bodyUpdatedBy.name}`
-              : 'Без правок'}
-            {suggestions && suggestions.filter((s) => s.status === 'PENDING').length > 0 && (
-              <span className="ml-2 text-amber-600 dark:text-amber-400 font-semibold">
-                · {suggestions.filter((s) => s.status === 'PENDING').length} відкритих правок
-              </span>
-            )}
-          </p>
-          <div className="flex items-center gap-1.5 flex-wrap">
-            <a
-              href={exportUrl}
-              download
+    <div className="space-y-3">
+      {/* Header strip / action toolbar — pinned to top so it stays
+          reachable while scrolling long documents. Lives OUTSIDE the
+          grid so it spans the full width and the right rail starts at
+          the same vertical position as the article body. */}
+      <div className={`${toolbarSticky} flex items-center justify-between flex-wrap gap-2`}>
+        <p className="text-[11px] text-light">
+          {bodyUpdatedAt && bodyUpdatedBy
+            ? `Оновлено ${new Date(bodyUpdatedAt).toLocaleString('uk-UA')} · ${bodyUpdatedBy.name}`
+            : 'Без правок'}
+          {suggestions && suggestions.filter((s) => s.status === 'PENDING').length > 0 && (
+            <span className="ml-2 text-amber-600 dark:text-amber-400 font-semibold">
+              · {suggestions.filter((s) => s.status === 'PENDING').length} відкритих правок
+            </span>
+          )}
+        </p>
+        <div className="flex items-center gap-1.5 flex-wrap">
+          <a
+            href={exportUrl}
+            download
+            className="text-xs px-2.5 py-1 rounded border border-hairline text-mid hover:text-ink hover:bg-pill inline-flex items-center gap-1.5"
+            title="Зберегти текст документа як файл Microsoft Word (.docx)"
+          >
+            <FileDown className="w-3 h-3" />
+            Експортувати .docx
+          </a>
+          {canEditMeta && (
+            <DocxImportButton
+              standardIdForUpload={parentStandardId}
+              variant="header"
+              onImported={(html, filename) => setPendingImport({ html, filename })}
+              disabled={replaceBodyMutation.isPending}
+            />
+          )}
+          {canEditMeta && (
+            <button
+              onClick={() => {
+                setBulkText(normalizedBody);
+                setBulkOpen(true);
+              }}
               className="text-xs px-2.5 py-1 rounded border border-hairline text-mid hover:text-ink hover:bg-pill inline-flex items-center gap-1.5"
-              title="Зберегти текст документа як файл Microsoft Word (.docx)"
+              title="Редагувати весь текст із форматуванням як у Word"
             >
-              <FileDown className="w-3 h-3" />
-              Експортувати .docx
-            </a>
-            {canEditMeta && (
-              <DocxImportButton
-                standardIdForUpload={parentStandardId}
-                variant="header"
-                onImported={(html, filename) => setPendingImport({ html, filename })}
-                disabled={replaceBodyMutation.isPending}
-              />
-            )}
-            {canEditMeta && (
-              <button
-                onClick={() => {
-                  setBulkText(normalizedBody);
-                  setBulkOpen(true);
-                }}
-                className="text-xs px-2.5 py-1 rounded border border-hairline text-mid hover:text-ink hover:bg-pill inline-flex items-center gap-1.5"
-                title="Редагувати весь текст із форматуванням як у Word"
-              >
-                <Edit3 className="w-3 h-3" />
-                Редагувати все
-              </button>
-            )}
-          </div>
+              <Edit3 className="w-3 h-3" />
+              Редагувати все
+            </button>
+          )}
         </div>
+      </div>
 
+      {/* Two columns under the sticky toolbar: body article on the
+          left, comments + decisions rail on the right. */}
+      <div className="grid grid-cols-1 lg:grid-cols-[1fr_300px] gap-5 items-start">
         {/* Body blocks (HTML, rendered via prose classes).
             space-y-1 ≈ Word's normal paragraph rhythm; hover actions
             float on top of the text instead of expanding the layout. */}
@@ -397,52 +401,55 @@ export function StandardBodyEditor({ target, bodyText, bodyUpdatedAt, bodyUpdate
             </div>
           )}
         </article>
-      </div>
 
-      {/* Right rail: inline comments panel + recent suggestion
-          decisions. Stacked, scrolls together with the body — sticky
-          positioning here fought with the modal's sticky title and
-          caused content overlaps. The rail will be a sibling that
-          follows the body height. */}
-      <div className="space-y-3">
-        <InlineComments target={targetInput} canComment={canSuggest} articleRef={articleRef} />
-        <aside className="bg-card rounded-xl border border-hairline overflow-hidden">
-          <div className="px-4 py-3 border-b border-hairline">
-            <h3 className="text-xs font-bold uppercase tracking-wide text-ink">Останні рішення</h3>
-          </div>
-          {resolvedRecent.length === 0 ? (
-            <p className="px-4 py-6 text-xs text-light text-center">
-              Прийнятих або відхилених правок ще немає
-            </p>
-          ) : (
-            <ul className="divide-y divide-hairline">
-              {resolvedRecent.map((s) => (
-                <li key={s.id} className="px-4 py-2.5">
-                  <div className="flex items-center gap-1.5 mb-1">
-                    <span
-                      className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${
-                        s.status === 'ACCEPTED'
-                          ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300'
-                          : 'bg-red-50 text-red-700 dark:bg-red-900/30 dark:text-red-300'
-                      }`}
-                    >
-                      {s.status === 'ACCEPTED' ? 'ПРИЙНЯТО' : 'ВІДХИЛЕНО'}
-                    </span>
-                    <span className="text-[10px] text-light">параграф {s.paragraphIndex + 1}</span>
-                  </div>
-                  {/* Show plaintext preview in the rail to keep it compact */}
-                  <p className="text-[11px] text-mid line-clamp-2">
-                    {htmlToPlainText(s.proposedText) || '—'}
-                  </p>
-                  <p className="text-[10px] text-light mt-1">
-                    {s.author.name}
-                    {s.resolvedBy && ` → ${s.resolvedBy.name}`}
-                  </p>
-                </li>
-              ))}
-            </ul>
-          )}
-        </aside>
+        {/* Right rail: inline comments panel + recent suggestion
+            decisions. Stacked, scrolls together with the body — sticky
+            positioning here fought with the modal's sticky title and
+            caused content overlaps. */}
+        <div className="space-y-3">
+          <InlineComments target={targetInput} canComment={canSuggest} articleRef={articleRef} />
+          <aside className="bg-card rounded-xl border border-hairline overflow-hidden">
+            <div className="px-4 py-3 border-b border-hairline">
+              <h3 className="text-xs font-bold uppercase tracking-wide text-ink">
+                Останні рішення
+              </h3>
+            </div>
+            {resolvedRecent.length === 0 ? (
+              <p className="px-4 py-6 text-xs text-light text-center">
+                Прийнятих або відхилених правок ще немає
+              </p>
+            ) : (
+              <ul className="divide-y divide-hairline">
+                {resolvedRecent.map((s) => (
+                  <li key={s.id} className="px-4 py-2.5">
+                    <div className="flex items-center gap-1.5 mb-1">
+                      <span
+                        className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${
+                          s.status === 'ACCEPTED'
+                            ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300'
+                            : 'bg-red-50 text-red-700 dark:bg-red-900/30 dark:text-red-300'
+                        }`}
+                      >
+                        {s.status === 'ACCEPTED' ? 'ПРИЙНЯТО' : 'ВІДХИЛЕНО'}
+                      </span>
+                      <span className="text-[10px] text-light">
+                        параграф {s.paragraphIndex + 1}
+                      </span>
+                    </div>
+                    {/* Show plaintext preview in the rail to keep it compact */}
+                    <p className="text-[11px] text-mid line-clamp-2">
+                      {htmlToPlainText(s.proposedText) || '—'}
+                    </p>
+                    <p className="text-[10px] text-light mt-1">
+                      {s.author.name}
+                      {s.resolvedBy && ` → ${s.resolvedBy.name}`}
+                    </p>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </aside>
+        </div>
       </div>
 
       {/* Suggest modal */}
@@ -719,6 +726,18 @@ function SuggestionDraftModal({
   const sameAsOriginal =
     draft.operation === 'REPLACE' && draft.proposedText.trim() === draft.originalText.trim();
 
+  // Sniff the block tag of the original vs the proposed so we can warn
+  // the user when they accidentally demoted a heading to a paragraph
+  // (common when typing over a heading drops the block type).
+  const originalTag = /^\s*<(\w+)/.exec(draft.originalText)?.[1]?.toLowerCase();
+  const proposedTag = /^\s*<(\w+)/.exec(draft.proposedText)?.[1]?.toLowerCase();
+  const blockTypeChanged =
+    draft.operation === 'REPLACE' &&
+    originalTag &&
+    proposedTag &&
+    originalTag !== proposedTag &&
+    /^h[1-6]$/.test(originalTag);
+
   return (
     <Modal open={!!draft} onClose={onClose} title={title} size="lg">
       <div className="space-y-4">
@@ -749,6 +768,14 @@ function SuggestionDraftModal({
                   : 'Введіть новий варіант параграфа…'
               }
             />
+            {blockTypeChanged && (
+              <p className="mt-2 text-xs text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-700 rounded px-2.5 py-1.5 inline-flex items-center gap-1.5">
+                <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+                Оригінал — заголовок ({originalTag?.toUpperCase()}). Зараз ваш текст оформлений як{' '}
+                {proposedTag === 'p' ? 'звичайний абзац' : proposedTag?.toUpperCase()}. Натисніть
+                кнопку {originalTag?.toUpperCase()} у тулбарі, щоб повернути стиль.
+              </p>
+            )}
           </div>
         )}
         <div>

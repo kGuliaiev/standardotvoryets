@@ -152,6 +152,9 @@ export function InlineComments({ target, canComment, articleRef }: Props) {
       invalidate();
       setPending(null);
       setDraft('');
+      // Reset the bubble-active latch — otherwise the next selection
+      // auto-opens the composer without a click on the pill.
+      setBubbleActive(false);
     },
     onError: (e) => alert(e.message),
   });
