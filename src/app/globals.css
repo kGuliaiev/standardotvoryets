@@ -268,6 +268,45 @@
     border-radius: 6px;
   }
 
+  /* Green variant used when navigating from a "change" item in the
+     right rail — distinguishes the visual cue from comments. */
+  @keyframes inlineChangeFlash {
+    0% {
+      background-color: rgba(16, 185, 129, 0);
+    }
+    20% {
+      background-color: rgba(16, 185, 129, 0.35);
+    }
+    100% {
+      background-color: rgba(16, 185, 129, 0);
+    }
+  }
+  .inline-change-flash {
+    animation: inlineChangeFlash 1.4s ease-out;
+    border-radius: 6px;
+  }
+
+  /* Brighter, glowing pulse on a single inline-comment-mark span when
+     the user clicks the matching item in the comments rail. Layers on
+     top of the always-on amber tint. */
+  @keyframes inlineCommentSpotlight {
+    0% {
+      background-color: rgba(251, 191, 36, 0.22);
+      box-shadow: 0 0 0 0 rgba(251, 191, 36, 0.6);
+    }
+    30% {
+      background-color: rgba(251, 191, 36, 0.85);
+      box-shadow: 0 0 0 4px rgba(251, 191, 36, 0.4);
+    }
+    100% {
+      background-color: rgba(251, 191, 36, 0.22);
+      box-shadow: 0 0 0 0 rgba(251, 191, 36, 0);
+    }
+  }
+  .inline-comment-mark.spotlight {
+    animation: inlineCommentSpotlight 1.6s ease-out;
+  }
+
   /* In-body highlight on a selection that has at least one comment
      anchored to it. Tinted amber for OPEN comments, muted grey for
      RESOLVED ones. Clickable — InlineComments listens for a click on

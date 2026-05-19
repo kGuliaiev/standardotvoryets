@@ -6,7 +6,7 @@ import { trpc } from '@/lib/trpc/client';
 import { Avatar } from '@/components/ui/Avatar';
 import { Modal } from '@/components/ui/Modal';
 import { RichTextEditor } from '@/components/ui/RichTextEditor';
-import { InlineComments } from '@/components/InlineComments';
+import { InlineComments, InlineCommentsList } from '@/components/InlineComments';
 import { splitHtmlBlocks, htmlToPlainText, normalizeBodyHtml } from '@/lib/standardBody';
 import { wordDiff } from '@/lib/wordDiff';
 import {
@@ -420,15 +420,18 @@ export function StandardBodyEditor({ target, bodyText, bodyUpdatedAt, bodyUpdate
           )}
         </article>
 
-        {/* Right rail with two tabs: Зміни (suggestions) and
-            Коментарі (inline). Each tab badge shows
-            `{open}/{total}`. The InlineComments overlay (floating
-            bubble + composer + inline highlights) stays mounted
-            regardless of active tab — only its right-rail aside is
-            conditionally shown when the Коментарі tab is selected. */}
-        <div className="space-y-3">
-          <div className="bg-card rounded-xl border border-hairline overflow-hidden">
-            <div className="flex border-b border-hairline">
+        {/* Right rail card with two tabs: Зміни (suggestions) and
+            Коментарі (inline). Sticky so the rail stays put while the
+            body scrolls underneath. Each tab has its own scrollable
+            content area (max-h on the tab body itself) — the rail
+            never has to scroll as a unit. */}
+        <div
+          className={`${
+            isInModal ? 'lg:sticky lg:top-[88px] lg:self-start' : 'lg:sticky lg:top-4 lg:self-start'
+          }`}
+        >
+          <div className="bg-card rounded-xl border border-hairline overflow-hidden flex flex-col lg:max-h-[calc(100vh-110px)]">
+            <div className="flex border-b border-hairline shrink-0">
               <RailTabButton
                 active={railTab === 'changes'}
                 onClick={() => setRailTab('changes')}
@@ -444,22 +447,33 @@ export function StandardBodyEditor({ target, bodyText, bodyUpdatedAt, bodyUpdate
                 total={inlineCommentsTotal}
               />
             </div>
-            {railTab === 'changes' && (
-              <ChangesPanel
-                suggestions={suggestions ?? []}
-                resolvedRecent={resolvedRecent}
-                articleRef={articleRef}
-              />
-            )}
+            {/* The tab body owns its own overflow — the card never
+                scrolls as a whole, the inner list does. */}
+            <div className="flex-1 overflow-y-auto scrollbar-thin">
+              {railTab === 'changes' ? (
+                <ChangesPanel
+                  suggestions={suggestions ?? []}
+                  resolvedRecent={resolvedRecent}
+                  articleRef={articleRef}
+                />
+              ) : (
+                <InlineCommentsList
+                  target={targetInput}
+                  canComment={canSuggest}
+                  articleRef={articleRef}
+                />
+              )}
+            </div>
           </div>
-          {/* InlineComments mounted always so selection capture +
-              highlighting work on both tabs. Only the rail aside is
-              shown on the Коментарі tab. */}
+          {/* InlineComments overlay (no rail rendering) mounted
+              always so selection capture, the floating composer, and
+              inline highlights work regardless of which tab is
+              active. */}
           <InlineComments
             target={targetInput}
             canComment={canSuggest}
             articleRef={articleRef}
-            showRail={railTab === 'comments'}
+            showRail={false}
           />
         </div>
       </div>
@@ -1016,8 +1030,10 @@ function ChangesPanel({
     const el = articleRef.current?.querySelector(`[data-paragraph-idx="${idx}"]`);
     if (!(el instanceof HTMLElement)) return;
     el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-    el.classList.add('inline-comment-flash');
-    setTimeout(() => el.classList.remove('inline-comment-flash'), 1500);
+    // Green pulse for "change" navigation so it visually differs from
+    // the amber pulse used by inline-comment clicks.
+    el.classList.add('inline-change-flash');
+    setTimeout(() => el.classList.remove('inline-change-flash'), 1500);
   }
 
   if (pending.length === 0 && resolvedRecent.length === 0) {
@@ -1029,7 +1045,7 @@ function ChangesPanel({
   }
 
   return (
-    <div className="divide-y divide-hairline max-h-[60vh] overflow-y-auto scrollbar-thin">
+    <div className="divide-y divide-hairline">
       {pending.length > 0 && (
         <section>
           <div className="px-3 py-1.5 text-[10px] text-amber-700 dark:text-amber-300 font-bold uppercase tracking-wide">

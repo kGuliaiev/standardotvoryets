@@ -5,7 +5,7 @@ import { createPortal } from 'react-dom';
 import { useSession } from 'next-auth/react';
 import { trpc } from '@/lib/trpc/client';
 import { Avatar } from '@/components/ui/Avatar';
-import { MessageSquare, Check, X as XIcon, Loader2, MessageCirclePlus, Reply } from 'lucide-react';
+import { Check, X as XIcon, Loader2, MessageCirclePlus, Reply } from 'lucide-react';
 import type { RouterOutputs } from '@/lib/trpc/client';
 
 /**
@@ -44,10 +44,8 @@ interface Props {
   /** Ref to the element that wraps all the paragraph blocks. The
    *  selection listener is scoped to this container. */
   articleRef: React.RefObject<HTMLElement>;
-  /** Show the right-rail aside. When false (parent is hosting a
-   *  different panel in the rail's tab content) only the floating
-   *  bubble + composer overlay are rendered, and the document
-   *  selection capture and inline highlighting still run. */
+  /** No-op now — the rail aside lives in `InlineCommentsList`. Kept
+   *  on the prop type so callers don't break, but ignored. */
   showRail?: boolean;
 }
 
@@ -133,10 +131,8 @@ function wrapRange(
   }
 }
 
-export function InlineComments({ target, canComment, articleRef, showRail = true }: Props) {
+export function InlineComments({ target, canComment, articleRef }: Props) {
   const utils = trpc.useUtils();
-  const { data: session } = useSession();
-  const me = session?.user;
 
   const queryInput = useMemo(() => target, [target]);
 
@@ -163,17 +159,6 @@ export function InlineComments({ target, canComment, articleRef, showRail = true
     },
     onError: (e) => alert(e.message),
   });
-  const replyMutation = trpc.inlineComment.reply.useMutation({
-    onSuccess: () => invalidate(),
-    onError: (e) => alert(e.message),
-  });
-  const setResolvedMutation = trpc.inlineComment.setResolved.useMutation({
-    onSuccess: () => invalidate(),
-  });
-  const deleteMutation = trpc.inlineComment.delete.useMutation({
-    onSuccess: () => invalidate(),
-  });
-
   const [pending, setPending] = useState<PendingSelection | null>(null);
   const [draft, setDraft] = useState('');
   // Hover state for the floating pill — without this it disappears the
@@ -300,151 +285,12 @@ export function InlineComments({ target, canComment, articleRef, showRail = true
     });
   }
 
-  function scrollToParagraph(paragraphIndex: number) {
-    const el = articleRef.current?.querySelector(
-      `[data-paragraph-idx="${paragraphIndex}"]`,
-    ) as HTMLElement | null;
-    if (!el) return;
-    el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-    el.classList.add('inline-comment-flash');
-    setTimeout(() => el.classList.remove('inline-comment-flash'), 1500);
-  }
-
-  // ── Rail rendering helpers ───────────────────────────────────────────
-  const grouped = useMemo(() => {
-    const map = new Map<number, InlineCommentItem[]>();
-    for (const c of comments ?? []) {
-      const arr = map.get(c.paragraphIndex) ?? [];
-      arr.push(c);
-      map.set(c.paragraphIndex, arr);
-    }
-    return Array.from(map.entries()).sort((a, b) => a[0] - b[0]);
-  }, [comments]);
-
-  const openCount = useMemo(
-    () => (comments ?? []).filter((c) => c.status === 'OPEN').length,
-    [comments],
-  );
-
   return (
     <>
-      {/* Right-rail panel of all inline comments grouped by paragraph.
-          When the parent's rail is showing a different tab (e.g. the
-          changes panel), it sets `showRail={false}` so we skip
-          mounting the aside but keep the selection capture, inline
-          highlighting, and the composer portal all running. */}
-      {showRail && (
-        <aside className="bg-card rounded-xl border border-hairline overflow-hidden">
-          <div className="px-4 py-3 border-b border-hairline flex items-center justify-between">
-            <div className="flex items-center gap-1.5">
-              <MessageSquare className="w-3.5 h-3.5 text-mid" />
-              <h3 className="text-xs font-bold uppercase tracking-wide text-ink">Коментарі</h3>
-            </div>
-            {openCount > 0 && (
-              <span className="text-[10px] text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-900/30 rounded-full px-1.5 py-0.5 tabular-nums">
-                {openCount} відкритих
-              </span>
-            )}
-          </div>
-          {grouped.length === 0 ? (
-            <p className="px-4 py-5 text-[11px] text-light text-center leading-relaxed">
-              {canComment
-                ? 'Виділіть текст у документі та натисніть «💬 Коментувати», щоб залишити inline-замітку.'
-                : 'Коментарів ще немає.'}
-            </p>
-          ) : (
-            <ul className="divide-y divide-hairline max-h-[60vh] overflow-y-auto scrollbar-thin">
-              {grouped.map(([paraIdx, items]) => (
-                <li key={paraIdx} className="px-3 py-2.5">
-                  <button
-                    className="text-[10px] text-light font-mono uppercase tracking-wide mb-1 hover:text-brand"
-                    onClick={() => scrollToParagraph(paraIdx)}
-                  >
-                    Параграф {paraIdx + 1}
-                  </button>
-                  <ul className="space-y-2">
-                    {items.map((c) => {
-                      const isResolved = c.status === 'RESOLVED';
-                      const isMine = me?.id === c.author.id;
-                      return (
-                        <li
-                          key={c.id}
-                          data-rail-comment-id={c.id}
-                          className={`rounded-md border px-2.5 py-2 text-[11px] ${
-                            isResolved
-                              ? 'border-hairline bg-pill/40 opacity-70'
-                              : 'border-amber-200 dark:border-amber-700/60 bg-amber-50/40 dark:bg-amber-900/10'
-                          }`}
-                        >
-                          <div className="flex items-center gap-1.5 mb-1">
-                            <Avatar
-                              name={c.author.name}
-                              avatarUrl={c.author.avatarUrl ?? undefined}
-                              size="xs"
-                            />
-                            <span className="font-semibold text-ink">{c.author.name}</span>
-                            <span className="text-[10px] text-light ml-auto">
-                              {new Date(c.createdAt).toLocaleDateString('uk-UA')}
-                            </span>
-                          </div>
-                          <p className="italic text-mid line-clamp-2 mb-1.5">
-                            «{c.selectionText.slice(0, 120)}
-                            {c.selectionText.length > 120 ? '…' : ''}»
-                          </p>
-                          <p className="text-ink whitespace-pre-wrap leading-snug">{c.body}</p>
-                          {c.replies.length > 0 && (
-                            <ul className="mt-1.5 pl-2 border-l-2 border-hairline space-y-1">
-                              {c.replies.map((r) => (
-                                <li key={r.id} className="text-[10.5px]">
-                                  <span className="font-semibold text-ink">{r.author.name}:</span>{' '}
-                                  <span className="text-mid">{r.body}</span>
-                                </li>
-                              ))}
-                            </ul>
-                          )}
-                          <div className="mt-1.5 flex items-center gap-1 flex-wrap">
-                            {canComment && !isResolved && (
-                              <ReplyButton commentId={c.id} replyMutation={replyMutation} />
-                            )}
-                            {canComment && (
-                              <button
-                                onClick={() =>
-                                  setResolvedMutation.mutate({
-                                    id: c.id,
-                                    resolved: !isResolved,
-                                  })
-                                }
-                                className="text-[10px] text-mid hover:text-brand inline-flex items-center gap-0.5"
-                                title={isResolved ? 'Знову відкрити' : 'Позначити вирішеним'}
-                              >
-                                <Check className="w-3 h-3" />
-                                {isResolved ? 'Відкрити' : 'Вирішено'}
-                              </button>
-                            )}
-                            {(isMine || canComment) && (
-                              <button
-                                onClick={() => {
-                                  if (confirm('Видалити цей коментар?')) {
-                                    deleteMutation.mutate({ id: c.id });
-                                  }
-                                }}
-                                className="text-[10px] text-mid hover:text-red-600 inline-flex items-center gap-0.5"
-                              >
-                                <XIcon className="w-3 h-3" />
-                                Видалити
-                              </button>
-                            )}
-                          </div>
-                        </li>
-                      );
-                    })}
-                  </ul>
-                </li>
-              ))}
-            </ul>
-          )}
-        </aside>
-      )}
+      {/* The right-rail list is now rendered by `InlineCommentsList`
+          so the parent can drop it inside a tab in the unified rail
+          card. This component only handles the overlay (selection
+          capture, floating composer, inline highlighting). */}
 
       {/* Floating "💬 Коментувати" pill — shown while a valid selection
           exists. Portal'd to body so the fixed positioning isn't
@@ -606,5 +452,178 @@ function ReplyButton({
         </button>
       </div>
     </div>
+  );
+}
+
+/**
+ * The inline-comments list, suitable for embedding directly inside a
+ * tab card. Renders the comments grouped by paragraph; emits a click
+ * → scroll → highlight pulse on the source paragraph. Shares the
+ * tRPC cache with the overlay-only `InlineComments`, so mutations
+ * here invalidate the cache and both surfaces refresh.
+ */
+export function InlineCommentsList({
+  target,
+  canComment,
+  articleRef,
+}: {
+  target: InlineCommentTarget;
+  canComment: boolean;
+  articleRef: React.RefObject<HTMLElement>;
+}) {
+  const utils = trpc.useUtils();
+  const { data: session } = useSession();
+  const me = session?.user;
+  const queryInput = useMemo(() => target, [target]);
+  const { data: comments } = trpc.inlineComment.list.useQuery(queryInput, {
+    staleTime: 0,
+    refetchInterval: 5_000,
+    refetchIntervalInBackground: false,
+    refetchOnWindowFocus: true,
+  });
+  const invalidate = useCallback(
+    () => void utils.inlineComment.list.invalidate(queryInput),
+    [utils, queryInput],
+  );
+  const replyMutation = trpc.inlineComment.reply.useMutation({ onSuccess: () => invalidate() });
+  const setResolvedMutation = trpc.inlineComment.setResolved.useMutation({
+    onSuccess: () => invalidate(),
+  });
+  const deleteMutation = trpc.inlineComment.delete.useMutation({ onSuccess: () => invalidate() });
+
+  const grouped = useMemo(() => {
+    const map = new Map<number, InlineCommentItem[]>();
+    for (const c of comments ?? []) {
+      const arr = map.get(c.paragraphIndex) ?? [];
+      arr.push(c);
+      map.set(c.paragraphIndex, arr);
+    }
+    return Array.from(map.entries()).sort((a, b) => a[0] - b[0]);
+  }, [comments]);
+
+  /** Scroll the source paragraph into view and pulse-animate both the
+   *  paragraph and the inline-comment-mark span that owns this id. */
+  function focusComment(commentId: string, paragraphIndex: number) {
+    const para = articleRef.current?.querySelector(`[data-paragraph-idx="${paragraphIndex}"]`);
+    if (para instanceof HTMLElement) {
+      para.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      para.classList.add('inline-comment-flash');
+      setTimeout(() => para.classList.remove('inline-comment-flash'), 1500);
+    }
+    // The mark inside is wrapped by the overlay's effect. Pulse it
+    // with a stronger spotlight so the eye lands on the exact phrase.
+    const marks = articleRef.current?.querySelectorAll(
+      `.inline-comment-mark[data-comment-id="${commentId}"]`,
+    );
+    marks?.forEach((m) => {
+      m.classList.add('spotlight');
+      setTimeout(() => m.classList.remove('spotlight'), 1600);
+    });
+  }
+
+  if (grouped.length === 0) {
+    return (
+      <p className="px-4 py-5 text-[11px] text-light text-center leading-relaxed">
+        {canComment
+          ? 'Виділіть текст у документі та натисніть «💬 Коментувати», щоб залишити inline-замітку.'
+          : 'Коментарів ще немає.'}
+      </p>
+    );
+  }
+
+  return (
+    <ul className="divide-y divide-hairline">
+      {grouped.map(([paraIdx, items]) => (
+        <li key={paraIdx} className="px-3 py-2.5">
+          <button
+            className="text-[10px] text-light font-mono uppercase tracking-wide mb-1 hover:text-brand"
+            onClick={() => {
+              const first = items[0];
+              if (first) focusComment(first.id, paraIdx);
+            }}
+          >
+            Параграф {paraIdx + 1}
+          </button>
+          <ul className="space-y-2">
+            {items.map((c) => {
+              const isResolved = c.status === 'RESOLVED';
+              const isMine = me?.id === c.author.id;
+              return (
+                <li
+                  key={c.id}
+                  data-rail-comment-id={c.id}
+                  onClick={() => focusComment(c.id, paraIdx)}
+                  className={`rounded-md border px-2.5 py-2 text-[11px] cursor-pointer ${
+                    isResolved
+                      ? 'border-hairline bg-pill/40 opacity-70'
+                      : 'border-amber-200 dark:border-amber-700/60 bg-amber-50/40 dark:bg-amber-900/10 hover:bg-amber-50 dark:hover:bg-amber-900/20'
+                  }`}
+                >
+                  <div className="flex items-center gap-1.5 mb-1">
+                    <Avatar
+                      name={c.author.name}
+                      avatarUrl={c.author.avatarUrl ?? undefined}
+                      size="xs"
+                    />
+                    <span className="font-semibold text-ink">{c.author.name}</span>
+                    <span className="text-[10px] text-light ml-auto">
+                      {new Date(c.createdAt).toLocaleDateString('uk-UA')}
+                    </span>
+                  </div>
+                  <p className="italic text-mid line-clamp-2 mb-1.5">
+                    «{c.selectionText.slice(0, 120)}
+                    {c.selectionText.length > 120 ? '…' : ''}»
+                  </p>
+                  <p className="text-ink whitespace-pre-wrap leading-snug">{c.body}</p>
+                  {c.replies.length > 0 && (
+                    <ul className="mt-1.5 pl-2 border-l-2 border-hairline space-y-1">
+                      {c.replies.map((r) => (
+                        <li key={r.id} className="text-[10.5px]">
+                          <span className="font-semibold text-ink">{r.author.name}:</span>{' '}
+                          <span className="text-mid">{r.body}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                  <div
+                    className="mt-1.5 flex items-center gap-1 flex-wrap"
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    {canComment && !isResolved && (
+                      <ReplyButton commentId={c.id} replyMutation={replyMutation} />
+                    )}
+                    {canComment && (
+                      <button
+                        onClick={() =>
+                          setResolvedMutation.mutate({ id: c.id, resolved: !isResolved })
+                        }
+                        className="text-[10px] text-mid hover:text-brand inline-flex items-center gap-0.5"
+                        title={isResolved ? 'Знову відкрити' : 'Позначити вирішеним'}
+                      >
+                        <Check className="w-3 h-3" />
+                        {isResolved ? 'Відкрити' : 'Вирішено'}
+                      </button>
+                    )}
+                    {(isMine || canComment) && (
+                      <button
+                        onClick={() => {
+                          if (confirm('Видалити цей коментар?')) {
+                            deleteMutation.mutate({ id: c.id });
+                          }
+                        }}
+                        className="text-[10px] text-mid hover:text-red-600 inline-flex items-center gap-0.5"
+                      >
+                        <XIcon className="w-3 h-3" />
+                        Видалити
+                      </button>
+                    )}
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
+        </li>
+      ))}
+    </ul>
   );
 }

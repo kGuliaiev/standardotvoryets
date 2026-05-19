@@ -60,7 +60,7 @@ export function Modal({
     <div
       role="dialog"
       aria-modal="true"
-      className="fixed inset-0 z-[200] flex md:items-center justify-center bg-[rgba(8,14,33,0.80)] backdrop-blur-xl md:p-4 animate-fade-in items-end"
+      className="fixed inset-0 z-[200] flex md:items-center justify-center bg-page/95 backdrop-blur-2xl md:p-4 animate-fade-in items-end"
       onMouseDown={(e) => {
         if (closeOnOverlay && e.target === e.currentTarget) onClose();
       }}
