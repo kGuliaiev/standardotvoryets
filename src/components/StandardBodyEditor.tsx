@@ -8,6 +8,7 @@ import { Modal } from '@/components/ui/Modal';
 import { RichTextEditor } from '@/components/ui/RichTextEditor';
 import { InlineComments } from '@/components/InlineComments';
 import { splitHtmlBlocks, htmlToPlainText, normalizeBodyHtml } from '@/lib/standardBody';
+import { wordDiff } from '@/lib/wordDiff';
 import {
   Pencil,
   ThumbsUp,
@@ -141,6 +142,17 @@ export function StandardBodyEditor({ target, bodyText, bodyUpdatedAt, bodyUpdate
   const [draft, setDraft] = useState<DraftSuggestion | null>(null);
   const [bulkOpen, setBulkOpen] = useState(false);
   const [bulkText, setBulkText] = useState(normalizedBody);
+  /** Right rail tabs — Зміни (suggestions) or Коментарі (inline). */
+  const [railTab, setRailTab] = useState<'changes' | 'comments'>('changes');
+  // Shared inline-comments query so the rail tab badge can show a
+  // counter alongside Зміни — InlineComments component also queries
+  // the same endpoint (cache deduplicates so it's free).
+  const { data: inlineCommentsList } = trpc.inlineComment.list.useQuery(targetInput, {
+    staleTime: 0,
+    refetchInterval: 5_000,
+    refetchIntervalInBackground: false,
+    refetchOnWindowFocus: true,
+  });
   // Reference into the body container — `InlineComments` uses it to
   // scope selection capture and to scroll-to-paragraph from the rail.
   const articleRef = useRef<HTMLElement>(null);
@@ -154,6 +166,12 @@ export function StandardBodyEditor({ target, bodyText, bodyUpdatedAt, bodyUpdate
     () => (suggestions ?? []).filter((s) => s.status === 'PENDING').length,
     [suggestions],
   );
+  const suggestionsTotal = suggestions?.length ?? 0;
+  const inlineCommentsOpenCount = useMemo(
+    () => (inlineCommentsList ?? []).filter((c) => c.status === 'OPEN').length,
+    [inlineCommentsList],
+  );
+  const inlineCommentsTotal = inlineCommentsList?.length ?? 0;
 
   const invalidateSuggestions = () => void utils.suggestion.list.invalidate(targetInput);
   const invalidateBody = () => void utils.standard.byId.invalidate({ id: parentStandardId });
@@ -402,53 +420,47 @@ export function StandardBodyEditor({ target, bodyText, bodyUpdatedAt, bodyUpdate
           )}
         </article>
 
-        {/* Right rail: inline comments panel + recent suggestion
-            decisions. Stacked, scrolls together with the body — sticky
-            positioning here fought with the modal's sticky title and
-            caused content overlaps. */}
+        {/* Right rail with two tabs: Зміни (suggestions) and
+            Коментарі (inline). Each tab badge shows
+            `{open}/{total}`. The InlineComments overlay (floating
+            bubble + composer + inline highlights) stays mounted
+            regardless of active tab — only its right-rail aside is
+            conditionally shown when the Коментарі tab is selected. */}
         <div className="space-y-3">
-          <InlineComments target={targetInput} canComment={canSuggest} articleRef={articleRef} />
-          <aside className="bg-card rounded-xl border border-hairline overflow-hidden">
-            <div className="px-4 py-3 border-b border-hairline">
-              <h3 className="text-xs font-bold uppercase tracking-wide text-ink">
-                Останні рішення
-              </h3>
+          <div className="bg-card rounded-xl border border-hairline overflow-hidden">
+            <div className="flex border-b border-hairline">
+              <RailTabButton
+                active={railTab === 'changes'}
+                onClick={() => setRailTab('changes')}
+                label="Зміни"
+                open={pendingSuggestionCount}
+                total={suggestionsTotal}
+              />
+              <RailTabButton
+                active={railTab === 'comments'}
+                onClick={() => setRailTab('comments')}
+                label="Коментарі"
+                open={inlineCommentsOpenCount}
+                total={inlineCommentsTotal}
+              />
             </div>
-            {resolvedRecent.length === 0 ? (
-              <p className="px-4 py-6 text-xs text-light text-center">
-                Прийнятих або відхилених правок ще немає
-              </p>
-            ) : (
-              <ul className="divide-y divide-hairline">
-                {resolvedRecent.map((s) => (
-                  <li key={s.id} className="px-4 py-2.5">
-                    <div className="flex items-center gap-1.5 mb-1">
-                      <span
-                        className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${
-                          s.status === 'ACCEPTED'
-                            ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300'
-                            : 'bg-red-50 text-red-700 dark:bg-red-900/30 dark:text-red-300'
-                        }`}
-                      >
-                        {s.status === 'ACCEPTED' ? 'ПРИЙНЯТО' : 'ВІДХИЛЕНО'}
-                      </span>
-                      <span className="text-[10px] text-light">
-                        параграф {s.paragraphIndex + 1}
-                      </span>
-                    </div>
-                    {/* Show plaintext preview in the rail to keep it compact */}
-                    <p className="text-[11px] text-mid line-clamp-2">
-                      {htmlToPlainText(s.proposedText) || '—'}
-                    </p>
-                    <p className="text-[10px] text-light mt-1">
-                      {s.author.name}
-                      {s.resolvedBy && ` → ${s.resolvedBy.name}`}
-                    </p>
-                  </li>
-                ))}
-              </ul>
+            {railTab === 'changes' && (
+              <ChangesPanel
+                suggestions={suggestions ?? []}
+                resolvedRecent={resolvedRecent}
+                articleRef={articleRef}
+              />
             )}
-          </aside>
+          </div>
+          {/* InlineComments mounted always so selection capture +
+              highlighting work on both tabs. Only the rail aside is
+              shown on the Коментарі tab. */}
+          <InlineComments
+            target={targetInput}
+            canComment={canSuggest}
+            articleRef={articleRef}
+            showRail={railTab === 'comments'}
+          />
         </div>
       </div>
 
@@ -609,17 +621,40 @@ function ParagraphBlock({
                   </span>
                 </div>
 
-                {/* Word-style redline — both sides render their HTML */}
+                {/* For REPLACE: show the original as a quiet grey
+                    reference, then a word-level diff line with red
+                    strike-through removals + green additions. Much
+                    easier to scan than two redundant blocks. */}
                 {s.operation === 'REPLACE' && (
                   <div className="text-[13px] leading-relaxed space-y-1.5">
-                    <div
-                      className={`${READONLY_PROSE_CLASSES} rounded border border-red-200 dark:border-red-800/40 bg-red-50/40 dark:bg-red-900/10 px-2.5 py-1.5 text-red-700 dark:text-red-300 [&_*]:line-through [&_*]:!text-red-700 dark:[&_*]:!text-red-300`}
-                      dangerouslySetInnerHTML={{ __html: s.originalText || '<p>—</p>' }}
-                    />
-                    <div
-                      className={`${READONLY_PROSE_CLASSES} rounded border border-emerald-200 dark:border-emerald-800/40 bg-emerald-50/40 dark:bg-emerald-900/10 px-2.5 py-1.5 [&_*]:!text-emerald-800 dark:[&_*]:!text-emerald-200`}
-                      dangerouslySetInnerHTML={{ __html: s.proposedText || '<p>—</p>' }}
-                    />
+                    <p className="text-[12px] text-light italic line-clamp-2">
+                      {htmlToPlainText(s.originalText) || '—'}
+                    </p>
+                    <p className="leading-relaxed">
+                      {wordDiff(
+                        htmlToPlainText(s.originalText),
+                        htmlToPlainText(s.proposedText),
+                      ).map((part, i) => {
+                        if (part.type === 'eq') return <span key={i}>{part.text}</span>;
+                        if (part.type === 'del')
+                          return (
+                            <span
+                              key={i}
+                              className="line-through text-red-600 dark:text-red-400 bg-red-50/60 dark:bg-red-900/20 rounded px-0.5"
+                            >
+                              {part.text}
+                            </span>
+                          );
+                        return (
+                          <span
+                            key={i}
+                            className="text-emerald-700 dark:text-emerald-300 bg-emerald-50/70 dark:bg-emerald-900/20 rounded px-0.5 font-medium"
+                          >
+                            {part.text}
+                          </span>
+                        );
+                      })}
+                    </p>
                   </div>
                 )}
                 {s.operation === 'INSERT_AFTER' && (
@@ -928,6 +963,144 @@ function pluralizeUk(n: number, one: string, few: string, many: string): string 
   if (mod10 === 1 && mod100 !== 11) return one;
   if (mod10 >= 2 && mod10 <= 4 && (mod100 < 10 || mod100 >= 20)) return few;
   return many;
+}
+
+/** Tab button for the right rail with an inline open/total counter. */
+function RailTabButton({
+  active,
+  onClick,
+  label,
+  open,
+  total,
+}: {
+  active: boolean;
+  onClick: () => void;
+  label: string;
+  open: number;
+  total: number;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      className={`flex-1 px-3 py-2.5 text-[11px] font-bold uppercase tracking-wide border-b-2 transition-colors inline-flex items-center justify-center gap-1.5 ${
+        active
+          ? 'border-brand text-ink bg-card'
+          : 'border-transparent text-mid hover:text-ink hover:bg-pill/50'
+      }`}
+    >
+      {label}
+      <span className="tabular-nums font-normal text-light">
+        {open > 0 && <span className="text-amber-600 dark:text-amber-400 font-bold">{open}</span>}
+        {open > 0 ? ' / ' : ''}
+        {total}
+      </span>
+    </button>
+  );
+}
+
+/** Tab content for the "Зміни" tab — pending suggestions on top
+ *  (clickable to scroll to the source paragraph) + recently
+ *  resolved decisions below. */
+function ChangesPanel({
+  suggestions,
+  resolvedRecent,
+  articleRef,
+}: {
+  suggestions: SuggestionListItem[];
+  resolvedRecent: SuggestionListItem[];
+  articleRef: React.RefObject<HTMLElement>;
+}) {
+  const pending = suggestions.filter((s) => s.status === 'PENDING');
+
+  function scrollToParagraph(idx: number) {
+    const el = articleRef.current?.querySelector(`[data-paragraph-idx="${idx}"]`);
+    if (!(el instanceof HTMLElement)) return;
+    el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    el.classList.add('inline-comment-flash');
+    setTimeout(() => el.classList.remove('inline-comment-flash'), 1500);
+  }
+
+  if (pending.length === 0 && resolvedRecent.length === 0) {
+    return (
+      <p className="px-4 py-6 text-[11px] text-light text-center leading-relaxed">
+        Правок ще немає. Натисніть олівець біля параграфа, щоб запропонувати зміну.
+      </p>
+    );
+  }
+
+  return (
+    <div className="divide-y divide-hairline max-h-[60vh] overflow-y-auto scrollbar-thin">
+      {pending.length > 0 && (
+        <section>
+          <div className="px-3 py-1.5 text-[10px] text-amber-700 dark:text-amber-300 font-bold uppercase tracking-wide">
+            Відкриті ({pending.length})
+          </div>
+          <ul className="divide-y divide-hairline">
+            {pending.map((s) => (
+              <li key={s.id} className="px-3 py-2">
+                <button
+                  className="w-full text-left hover:bg-pill/40 rounded -mx-1 px-1 py-0.5 transition-colors"
+                  onClick={() => scrollToParagraph(s.paragraphIndex)}
+                >
+                  <div className="flex items-center gap-1.5 mb-0.5">
+                    <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-amber-50 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300">
+                      {s.operation === 'DELETE'
+                        ? 'ВИДАЛИТИ'
+                        : s.operation === 'INSERT_AFTER'
+                          ? 'ДОДАТИ'
+                          : 'ЗМІНИТИ'}
+                    </span>
+                    <span className="text-[10px] text-light">параграф {s.paragraphIndex + 1}</span>
+                  </div>
+                  <p className="text-[11px] text-mid line-clamp-2">
+                    {htmlToPlainText(s.proposedText) || htmlToPlainText(s.originalText) || '—'}
+                  </p>
+                  <p className="text-[10px] text-light mt-1">{s.author.name}</p>
+                </button>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
+      {resolvedRecent.length > 0 && (
+        <section>
+          <div className="px-3 py-1.5 text-[10px] text-light font-bold uppercase tracking-wide">
+            Останні рішення
+          </div>
+          <ul className="divide-y divide-hairline">
+            {resolvedRecent.map((s) => (
+              <li key={s.id} className="px-3 py-2">
+                <button
+                  className="w-full text-left hover:bg-pill/40 rounded -mx-1 px-1 py-0.5 transition-colors"
+                  onClick={() => scrollToParagraph(s.paragraphIndex)}
+                >
+                  <div className="flex items-center gap-1.5 mb-0.5">
+                    <span
+                      className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${
+                        s.status === 'ACCEPTED'
+                          ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300'
+                          : 'bg-red-50 text-red-700 dark:bg-red-900/30 dark:text-red-300'
+                      }`}
+                    >
+                      {s.status === 'ACCEPTED' ? 'ПРИЙНЯТО' : 'ВІДХИЛЕНО'}
+                    </span>
+                    <span className="text-[10px] text-light">параграф {s.paragraphIndex + 1}</span>
+                  </div>
+                  <p className="text-[11px] text-mid line-clamp-2">
+                    {htmlToPlainText(s.proposedText) || '—'}
+                  </p>
+                  <p className="text-[10px] text-light mt-1">
+                    {s.author.name}
+                    {s.resolvedBy && ` → ${s.resolvedBy.name}`}
+                  </p>
+                </button>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
+    </div>
+  );
 }
 
 function ImportConfirmModal({
