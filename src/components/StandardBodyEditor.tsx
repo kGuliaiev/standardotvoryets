@@ -438,7 +438,10 @@ export function StandardBodyEditor({ target, bodyText, bodyUpdatedAt, bodyUpdate
           <div
             className={`bg-card rounded-xl border border-hairline overflow-hidden flex flex-col ${
               isInModal
-                ? 'lg:sticky lg:top-[130px] lg:h-[calc(92vh-170px)]'
+                ? // Top: 130 px (modal title 64 + toolbar 52 + 14 gap)
+                  // Bottom: 20 px clearance to the modal panel's pb-5
+                  // → card fills the full visible area between them.
+                  'lg:sticky lg:top-[130px] lg:h-[calc(92vh-150px)]'
                 : 'lg:sticky lg:top-4 lg:h-[calc(100vh-3rem)]'
             }`}
           >
