@@ -36,10 +36,19 @@ interface RunStyle {
   code?: boolean;
   /** Wrap the run in an ExternalHyperlink with this URL. */
   href?: string;
+  /** Font family inherited from a surrounding <span style="font-family: …">. */
+  font?: string;
+  /** Font size in half-points (docx unit). 22 = 11pt. */
+  size?: number;
+  /** Hex color without leading #. */
+  color?: string;
 }
 
-const FONT = 'Arial';
-const BASE_SIZE = 22; // 11pt in half-points
+// Times New Roman is the standard for Ukrainian government documents
+// and most Word templates the WG members start from. Used as the
+// fallback font when an inline style doesn't override it.
+const FONT = 'Times New Roman';
+const BASE_SIZE = 24; // 12pt in half-points (Times reads slightly smaller than Arial at 11pt)
 const BASE_BORDER = { style: BorderStyle.SINGLE, size: 4, color: 'CCCCCC' } as const;
 const TABLE_BORDERS = {
   top: BASE_BORDER,
@@ -75,6 +84,71 @@ function readAlignment(
     default:
       return AlignmentType.LEFT;
   }
+}
+
+/** Read inline `style="font-family:…; font-size:…; color:…"` and turn it
+ *  into RunStyle deltas that override the parent's inherited style.
+ *  Anything else in `style` (text-align, etc.) is ignored here — those
+ *  are paragraph-level and handled separately. */
+function readSpanStyle(el: HTMLElement): Partial<RunStyle> {
+  const out: Partial<RunStyle> = {};
+  const style = el.getAttribute('style') ?? '';
+  if (!style) return out;
+
+  const fontMatch = /font-family\s*:\s*([^;]+)/i.exec(style);
+  if (fontMatch?.[1]) {
+    // CSS often quotes multi-word fonts: `'Times New Roman', Times, serif`.
+    // docx takes one family name — strip quotes, take the first one.
+    const firstSegment = fontMatch[1].split(',')[0] ?? '';
+    const first = firstSegment.trim().replace(/^['"]/, '').replace(/['"]$/, '');
+    if (first) out.font = first;
+  }
+
+  const sizeMatch = /font-size\s*:\s*([\d.]+)\s*(pt|px|em|rem)/i.exec(style);
+  if (sizeMatch?.[1] && sizeMatch[2]) {
+    const n = parseFloat(sizeMatch[1]);
+    const unit = sizeMatch[2].toLowerCase();
+    // docx run.size is in HALF-POINTS. 12pt → 24; 16px ≈ 12pt → 24.
+    let halfPoints: number;
+    if (unit === 'pt') halfPoints = Math.round(n * 2);
+    else if (unit === 'px')
+      halfPoints = Math.round((n * 3) / 2); // 1px ≈ 0.75pt
+    else halfPoints = Math.round(n * 24); // em/rem relative to 12pt
+    if (halfPoints > 0 && halfPoints < 200) out.size = halfPoints;
+  }
+
+  const colorMatch = /(?:^|;)\s*color\s*:\s*([^;]+)/i.exec(style);
+  if (colorMatch?.[1]) {
+    const c = colorMatch[1].trim();
+    const hex = cssColorToHex(c);
+    if (hex) out.color = hex;
+  }
+
+  return out;
+}
+
+/** Convert a CSS color literal to a 6-digit hex (no leading #). docx
+ *  only accepts hex strings, so we drop rgb()/hsl()/named colors that
+ *  we can't trivially map. */
+function cssColorToHex(c: string): string | null {
+  const hex3 = /^#([0-9a-f])([0-9a-f])([0-9a-f])$/i.exec(c);
+  if (hex3?.[1] && hex3[2] && hex3[3]) {
+    return (hex3[1] + hex3[1] + hex3[2] + hex3[2] + hex3[3] + hex3[3]).toUpperCase();
+  }
+  const hex6 = /^#([0-9a-f]{6})$/i.exec(c);
+  if (hex6?.[1]) return hex6[1].toUpperCase();
+  const rgb = /^rgb\s*\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*\)$/i.exec(c);
+  if (rgb?.[1] && rgb[2] && rgb[3]) {
+    return [rgb[1], rgb[2], rgb[3]]
+      .map((n) =>
+        Math.min(255, Math.max(0, parseInt(n, 10)))
+          .toString(16)
+          .padStart(2, '0'),
+      )
+      .join('')
+      .toUpperCase();
+  }
+  return null;
 }
 
 /** Decode the small set of entities node-html-parser leaves in text nodes. */
@@ -142,6 +216,14 @@ function collectRuns(nodes: Node[], style: RunStyle = {}): ParagraphChild[] {
         }
         break;
       }
+      case 'span': {
+        // <span> is where TipTap's TextStyle/FontFamily/Color/FontSize
+        // marks land in the serialised HTML. Read the inline style and
+        // overlay it on the inherited run style.
+        const inherited = readSpanStyle(n);
+        out.push(...collectRuns(n.childNodes, { ...style, ...inherited }));
+        break;
+      }
       default:
         // Unknown inline — recurse to grab text content.
         out.push(...collectRuns(n.childNodes, style));
@@ -155,8 +237,10 @@ function makeRun(text: string, style: RunStyle): TextRun {
   // rather than mutating after the fact.
   const opts: IRunOptions = {
     text,
-    font: style.code ? '"JetBrains Mono"' : FONT,
-    size: BASE_SIZE,
+    // Order: code mark > inline span font > document default.
+    font: style.code ? '"JetBrains Mono"' : (style.font ?? FONT),
+    size: style.size ?? BASE_SIZE,
+    color: style.color,
     bold: style.bold ? true : undefined,
     italics: style.italics ? true : undefined,
     strike: style.strike ? true : undefined,

@@ -6,6 +6,10 @@ import { Underline } from '@tiptap/extension-underline';
 import { Link } from '@tiptap/extension-link';
 import { Placeholder } from '@tiptap/extension-placeholder';
 import { TextAlign } from '@tiptap/extension-text-align';
+// TextStyle + Color + FontFamily + FontSize all ship from
+// @tiptap/extension-text-style in v3. The standalone -color and
+// -font-family packages we installed re-export from here for compat.
+import { TextStyle, FontFamily, Color, FontSize } from '@tiptap/extension-text-style';
 // All table parts live in @tiptap/extension-table; the row/cell/header
 // sub-packages are just re-exports of the same symbols.
 import { Table, TableRow, TableCell, TableHeader } from '@tiptap/extension-table';
@@ -100,6 +104,13 @@ export function RichTextEditor({
         alignments: ['left', 'center', 'right', 'justify'],
         defaultAlignment: 'left',
       }),
+      // TextStyle is the base mark that FontFamily / Color / FontSize
+      // attach attributes to. Order matters — TextStyle first so the
+      // others see its schema entry when they extend it.
+      TextStyle,
+      FontFamily.configure({ types: ['textStyle'] }),
+      Color.configure({ types: ['textStyle'] }),
+      FontSize,
     ],
     content: initialHtml || '',
     editable,
@@ -107,11 +118,17 @@ export function RichTextEditor({
     autofocus: autoFocus ? 'end' : false,
     editorProps: {
       attributes: {
+        // Times New Roman as the body default so unstyled imports
+        // look like Word documents out of the box. Per-span inline
+        // font-family / font-size / color from styled imports
+        // override this. prose-* utilities only apply colour cues
+        // for hyperlinks / code / blockquote so they don't clobber
+        // inline font choices the user makes via the toolbar.
         class:
           'prose prose-sm dark:prose-invert max-w-none focus:outline-none ' +
-          'prose-headings:text-ink prose-p:text-ink prose-li:text-ink prose-strong:text-ink ' +
+          "[font-family:'Times_New_Roman',Times,serif] " +
           'prose-blockquote:text-mid prose-blockquote:border-brand ' +
-          'prose-a:text-brand prose-code:text-ink prose-code:bg-pill prose-code:px-1 prose-code:rounded ' +
+          'prose-a:text-brand prose-code:bg-pill prose-code:px-1 prose-code:rounded ' +
           'min-h-[120px] py-2',
       },
     },
@@ -136,6 +153,16 @@ export function RichTextEditor({
   );
 }
 
+const FONT_OPTIONS: { label: string; value: string }[] = [
+  { label: 'Times New Roman', value: "'Times New Roman', Times, serif" },
+  { label: 'Arial', value: 'Arial, sans-serif' },
+  { label: 'Calibri', value: 'Calibri, sans-serif' },
+  { label: 'Georgia', value: 'Georgia, serif' },
+  { label: 'Verdana', value: 'Verdana, sans-serif' },
+  { label: 'Courier New', value: "'Courier New', Courier, monospace" },
+];
+const SIZE_OPTIONS = ['10pt', '11pt', '12pt', '13pt', '14pt', '16pt', '18pt', '20pt', '24pt'];
+
 function Toolbar({
   editor,
   sticky = false,
@@ -145,6 +172,11 @@ function Toolbar({
   sticky?: boolean;
   topOffset?: number;
 }) {
+  // Read current marks so the dropdowns reflect the cursor position.
+  const currentFont =
+    (editor.getAttributes('textStyle') as { fontFamily?: string }).fontFamily ?? '';
+  const currentSize = (editor.getAttributes('textStyle') as { fontSize?: string }).fontSize ?? '';
+  const currentColor = (editor.getAttributes('textStyle') as { color?: string }).color ?? '#000000';
   return (
     <div
       style={sticky ? { top: topOffset } : undefined}
@@ -152,6 +184,54 @@ function Toolbar({
         sticky ? 'sticky z-10 bg-card/95 backdrop-blur-md' : ''
       }`}
     >
+      {/* Font family */}
+      <select
+        value={currentFont}
+        onChange={(e) => {
+          const v = e.target.value;
+          if (!v) editor.chain().focus().unsetFontFamily().run();
+          else editor.chain().focus().setFontFamily(v).run();
+        }}
+        title="Шрифт"
+        className="text-xs border border-hairline rounded px-1.5 py-1 bg-card text-ink focus:outline-none focus:border-brand min-w-[110px]"
+      >
+        <option value="">— шрифт —</option>
+        {FONT_OPTIONS.map((f) => (
+          <option key={f.value} value={f.value} style={{ fontFamily: f.value }}>
+            {f.label}
+          </option>
+        ))}
+      </select>
+      <select
+        value={currentSize}
+        onChange={(e) => {
+          const v = e.target.value;
+          if (!v) editor.chain().focus().unsetFontSize().run();
+          else editor.chain().focus().setFontSize(v).run();
+        }}
+        title="Кегль"
+        className="text-xs border border-hairline rounded px-1.5 py-1 bg-card text-ink focus:outline-none focus:border-brand"
+      >
+        <option value="">—</option>
+        {SIZE_OPTIONS.map((s) => (
+          <option key={s} value={s}>
+            {s}
+          </option>
+        ))}
+      </select>
+      <label
+        title="Колір тексту"
+        className="inline-flex items-center gap-0.5 cursor-pointer px-1 hover:bg-pill rounded transition-colors"
+      >
+        <span className="text-[10px] font-bold text-mid">A</span>
+        <input
+          type="color"
+          value={currentColor}
+          onChange={(e) => editor.chain().focus().setColor(e.target.value).run()}
+          className="w-4 h-4 p-0 border-0 cursor-pointer bg-transparent"
+        />
+      </label>
+      <Sep />
       <Btn
         on={editor.isActive('bold')}
         onClick={() => editor.chain().focus().toggleBold().run()}

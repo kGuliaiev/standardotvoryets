@@ -67,11 +67,14 @@ interface DraftSuggestion {
  * Kept in sync with the live editor surface in RichTextEditor.tsx so the
  * preview looks identical to the editing experience.
  */
+// Read-only prose styling for paragraph blocks. Times New Roman as the
+// base font so imported docs feel like Word; inline `<span style="…">`
+// from the editor / mammoth output overrides this.
 const READONLY_PROSE_CLASSES =
   'prose prose-sm dark:prose-invert max-w-none ' +
-  'prose-headings:text-ink prose-p:text-ink prose-li:text-ink prose-strong:text-ink ' +
+  "[font-family:'Times_New_Roman',Times,serif] " +
   'prose-blockquote:text-mid prose-blockquote:border-brand ' +
-  'prose-a:text-brand prose-code:text-ink prose-code:bg-pill prose-code:px-1 prose-code:rounded ' +
+  'prose-a:text-brand prose-code:bg-pill prose-code:px-1 prose-code:rounded ' +
   'prose-p:my-0 prose-headings:my-0';
 
 export function StandardBodyEditor({ target, bodyText, bodyUpdatedAt, bodyUpdatedBy }: Props) {
