@@ -291,11 +291,25 @@ export function StandardBodyEditor({ target, bodyText, bodyUpdatedAt, bodyUpdate
       ? `/api/standards/${target.standardId}/export-body`
       : `/api/documents/${target.documentId}/export-body`;
 
+  // Sticky offset for the action toolbar:
+  //   - document target → editor lives inside a Modal whose title is
+  //     pinned to top-0, so the toolbar sits just under it.
+  //   - standard target → standalone page scroll, toolbar pins at top.
+  // px-* extends the bg across the surrounding container padding so the
+  // scrolling text behind doesn't peek through on either side; the
+  // matching -mx-* compensates so the strip doesn't overflow its
+  // grid column.
+  const isInModal = target.kind === 'document';
+  const toolbarSticky = isInModal
+    ? 'sticky top-[51px] md:top-[71px] z-10 bg-card -mx-5 md:-mx-7 px-5 md:px-7 py-2 border-b border-hairline'
+    : 'sticky top-0 z-10 bg-card py-2 border-b border-hairline';
+
   return (
     <div className="grid grid-cols-1 lg:grid-cols-[1fr_300px] gap-5 items-start">
       <div className="space-y-2">
-        {/* Header strip */}
-        <div className="flex items-center justify-between flex-wrap gap-2 px-1">
+        {/* Header strip — action toolbar pinned so it stays reachable
+            while scrolling long documents. */}
+        <div className={`${toolbarSticky} flex items-center justify-between flex-wrap gap-2`}>
           <p className="text-[11px] text-light">
             {bodyUpdatedAt && bodyUpdatedBy
               ? `Оновлено ${new Date(bodyUpdatedAt).toLocaleString('uk-UA')} · ${bodyUpdatedBy.name}`

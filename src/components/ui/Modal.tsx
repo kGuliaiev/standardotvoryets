@@ -77,7 +77,11 @@ export function Modal({
           <span className="w-10 h-1 rounded-full bg-hairline" />
         </div>
         {title && (
-          <div className="flex items-start justify-between gap-4 px-5 md:px-7 pt-3 md:pt-7 pb-4">
+          // Sticky so the title (and close button) stay visible inside
+          // long-scrolling modals — especially `size="full"` editors.
+          // `bg-card` matches the panel so content scrolling underneath
+          // doesn't bleed through.
+          <div className="sticky top-0 z-30 bg-card flex items-start justify-between gap-4 px-5 md:px-7 pt-3 md:pt-7 pb-4 border-b border-hairline">
             <div>
               {title && (
                 <h3 className="text-[16px] md:text-[18px] font-extrabold text-navy">{title}</h3>
