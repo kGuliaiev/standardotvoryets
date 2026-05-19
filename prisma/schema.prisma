@@ -185,6 +185,21 @@ model User {
 // ACTIVITY LOG (audit trail)
 // ─────────────────────────────────────────
 
+/// Optional per-(role, action) override for the RBAC matrix in
+/// src/lib/rbac.ts. When a row exists it wins over the hardcoded
+/// default; when absent the hardcoded list applies. Admin always
+/// gets every permission (short-circuit in `can()` — not stored
+/// here).
+model RolePermission {
+  role      WorkingGroupRole
+  action    String
+  allowed   Boolean
+  updatedAt DateTime         @updatedAt
+
+  @@id([role, action])
+  @@map("role_permissions")
+}
+
 model ActivityLog {
   id        String   @id @default(cuid())
   userId    String

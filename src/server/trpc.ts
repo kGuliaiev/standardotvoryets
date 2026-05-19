@@ -5,6 +5,7 @@ import { ZodError } from 'zod';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/server/auth';
 import { db } from '@/server/db';
+import { ensureLoaded } from '@/lib/permissionsCache';
 
 // ─── Context ─────────────────────────────────────────────────────────────────
 
@@ -41,10 +42,13 @@ const t = initTRPC.context<Context>().create({
 
 // ─── Middleware ───────────────────────────────────────────────────────────────
 
-const enforceUserIsAuthed = t.middleware(({ ctx, next }) => {
+const enforceUserIsAuthed = t.middleware(async ({ ctx, next }) => {
   if (!ctx.session?.user) {
     throw new TRPCError({ code: 'UNAUTHORIZED' });
   }
+  // Warm the permissions-override cache once per process before any
+  // can() check runs. Idempotent after the first call.
+  await ensureLoaded();
   return next({
     ctx: {
       session: { ...ctx.session, user: ctx.session.user },

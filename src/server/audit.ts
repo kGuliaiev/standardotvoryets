@@ -17,7 +17,8 @@ export type AuditEntity =
   | 'SystemSettings'
   | 'StandardSuggestion'
   | 'InlineComment'
-  | 'InlineCommentReply';
+  | 'InlineCommentReply'
+  | 'RolePermission';
 
 /**
  * Compute a shallow diff between two snapshots. Returns null if no differences.

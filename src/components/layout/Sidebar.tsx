@@ -20,6 +20,7 @@ import {
   BarChart3,
   ChevronsLeft,
   ChevronsRight,
+  ShieldCheck,
   type LucideIcon,
 } from 'lucide-react';
 import { trpc } from '@/lib/trpc/client';
@@ -142,6 +143,11 @@ export function Sidebar({ session, forceExpanded = false }: SidebarProps) {
                 href: '/admin/users',
                 label: 'Користувачі',
                 icon: Users,
+              } satisfies NavItem,
+              {
+                href: '/admin/permissions',
+                label: 'Ролі та права',
+                icon: ShieldCheck,
               } satisfies NavItem,
             ]
           : []),
