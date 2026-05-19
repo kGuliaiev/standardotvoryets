@@ -5,7 +5,7 @@ import { trpc } from '@/lib/trpc/client';
 import { useSession } from 'next-auth/react';
 import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
-import { Pencil, ChevronDown } from 'lucide-react';
+import { Pencil, ChevronDown, FileText } from 'lucide-react';
 import { StatusBadge, type StandardStatus } from '@/components/ui/StatusBadge';
 import { Avatar } from '@/components/ui/Avatar';
 import { Modal } from '@/components/ui/Modal';
@@ -174,11 +174,14 @@ export function StandardDetail({ id }: { id: string }) {
   // `editDocId`.
   const [editMetaDocId, setEditMetaDocId] = useState<string | null>(null);
   // Two-step confirm for document deletion. Step 1 is the native
-  // `confirm()` dialog; step 2 opens this modal with a typed
-  // confirmation so the user can't fat-finger it.
+  // `confirm()` dialog; step 2 opens this modal with a random 6-digit
+  // code the user must type. Switched away from filename-matching
+  // because long filenames invited copy-paste and defeated the
+  // second-thought purpose.
   const [deleteDocCandidate, setDeleteDocCandidate] = useState<{
     id: string;
     filename: string;
+    code: string;
   } | null>(null);
   const [deleteDocConfirmText, setDeleteDocConfirmText] = useState('');
 
@@ -620,6 +623,20 @@ export function StandardDetail({ id }: { id: string }) {
                               Актуальний
                             </span>
                           )}
+                          {/* Order: Текст → Завантажити → Картка → Видалити.
+                              Текст is the primary action so it leads;
+                              destructive Видалити is last and red. */}
+                          {doc.allowEdits && (
+                            <button
+                              onClick={() => setEditDocId(doc.id)}
+                              className="text-xs px-2.5 py-1 rounded border border-brand text-brand hover:bg-brand hover:text-white transition-colors inline-flex items-center gap-1 flex-shrink-0"
+                              title="Відкрити документ у колаборативному редакторі"
+                            >
+                              <FileText className="w-3 h-3" />
+                              Текст
+                            </button>
+                          )}
+                          <DownloadButton documentId={doc.id} />
                           {canUpload && (
                             <button
                               onClick={() => setEditMetaDocId(doc.id)}
@@ -630,26 +647,25 @@ export function StandardDetail({ id }: { id: string }) {
                               Картка
                             </button>
                           )}
-                          {doc.allowEdits && (
-                            <button
-                              onClick={() => setEditDocId(doc.id)}
-                              className="text-xs px-2.5 py-1 rounded border border-brand text-brand hover:bg-brand hover:text-white transition-colors inline-flex items-center gap-1 flex-shrink-0"
-                              title="Відкрити документ у колаборативному редакторі"
-                            >
-                              <Pencil className="w-3 h-3" />
-                              Текст
-                            </button>
-                          )}
-                          <DownloadButton documentId={doc.id} />
                           {canDeleteDoc && (
                             <button
                               onClick={() => {
+                                // Stage 1: native confirm.
                                 if (
                                   confirm(
-                                    `Видалити документ "${doc.filename}"?\n\nЦе перший із двох підтверджень — далі потрібно буде ввести назву файла.`,
+                                    `Видалити документ "${doc.filename}"?\n\nЦе перший із двох підтверджень — далі потрібно ввести 6-значний код підтвердження.`,
                                   )
                                 ) {
-                                  setDeleteDocCandidate({ id: doc.id, filename: doc.filename });
+                                  // Stage 2: open a modal that demands
+                                  // a fresh 6-digit code. The code is
+                                  // generated per-attempt so muscle
+                                  // memory can't bypass the prompt.
+                                  const code = String(Math.floor(100000 + Math.random() * 900000));
+                                  setDeleteDocCandidate({
+                                    id: doc.id,
+                                    filename: doc.filename,
+                                    code,
+                                  });
                                   setDeleteDocConfirmText('');
                                 }
                               }}
@@ -1145,8 +1161,10 @@ export function StandardDetail({ id }: { id: string }) {
 
       {/* Second-stage confirmation for document deletion. The first
           stage is a native confirm() on the trash button; here the
-          user types the filename to confirm. Both required because
-          deletes are destructive (S3 object + DB row + audit trail). */}
+          user copies a fresh 6-digit code generated per attempt so
+          muscle memory can't blow past the warning. Both required
+          because deletes are destructive (S3 object + DB row + audit
+          trail). */}
       <Modal
         open={!!deleteDocCandidate}
         onClose={() => {
@@ -1164,13 +1182,21 @@ export function StandardDetail({ id }: { id: string }) {
               Цю дію не можна скасувати.
             </p>
             <div>
-              <label className="field-label">Введіть назву файла, щоб підтвердити:</label>
+              <label className="field-label">
+                Щоб підтвердити, введіть код:{' '}
+                <span className="font-mono font-bold text-lg text-red-600 dark:text-red-400 tracking-widest select-all">
+                  {deleteDocCandidate.code}
+                </span>
+              </label>
               <input
                 type="text"
+                inputMode="numeric"
+                pattern="[0-9]*"
+                maxLength={6}
                 value={deleteDocConfirmText}
-                onChange={(e) => setDeleteDocConfirmText(e.target.value)}
-                className="input font-mono"
-                placeholder={deleteDocCandidate.filename}
+                onChange={(e) => setDeleteDocConfirmText(e.target.value.replace(/\D/g, ''))}
+                className="input font-mono tracking-widest text-center text-lg"
+                placeholder="••••••"
                 autoFocus
               />
             </div>
@@ -1193,8 +1219,7 @@ export function StandardDetail({ id }: { id: string }) {
                   deleteDocMutation.mutate({ documentId: deleteDocCandidate.id });
                 }}
                 disabled={
-                  deleteDocConfirmText.trim() !== deleteDocCandidate.filename ||
-                  deleteDocMutation.isPending
+                  deleteDocConfirmText !== deleteDocCandidate.code || deleteDocMutation.isPending
                 }
                 className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-red-600 hover:bg-red-700 text-white text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
               >
@@ -1275,9 +1300,13 @@ function DownloadButton({ documentId }: { documentId: string }) {
     <button
       onClick={() => setEnabled(true)}
       disabled={isLoading}
-      className="text-xs text-blue-600 hover:underline disabled:opacity-50 flex-shrink-0"
+      // Pill style matches the other row actions (Картка / Текст /
+      // Видалити) — bare-link style stood out and broke the row's
+      // visual rhythm.
+      className="text-xs px-2.5 py-1 rounded border border-hairline text-mid hover:text-ink hover:bg-pill transition-colors inline-flex items-center gap-1 flex-shrink-0 disabled:opacity-50"
+      title="Завантажити файл .docx"
     >
-      {isLoading ? '…' : '↓ Завантажити'}
+      {isLoading ? '…' : <>↓ Завантажити</>}
     </button>
   );
 }

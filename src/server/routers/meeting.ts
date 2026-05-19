@@ -338,11 +338,15 @@ export const meetingRouter = createTRPCRouter({
         action: before ? 'STATUS_CHANGE' : 'CREATE',
         // Attendance entries live under the Meeting entity so they
         // show up in the meeting page's journal alongside other
-        // meeting changes.
+        // meeting changes. `targetUserId` is what RESTORE needs to
+        // find the right attendance row — `userName` alone isn't
+        // unique. Older entries without it just can't be reverted.
         entity: 'Meeting',
         entityId: input.meetingId,
-        before: before ? { status: before.status, userName: targetName } : null,
-        after: { status: input.status, userName: targetName },
+        before: before
+          ? { status: before.status, userName: targetName, targetUserId: input.userId }
+          : null,
+        after: { status: input.status, userName: targetName, targetUserId: input.userId },
         note: `Зміна явки: ${targetName}`,
       });
 

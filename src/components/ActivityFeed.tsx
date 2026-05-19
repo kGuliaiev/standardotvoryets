@@ -3,6 +3,7 @@
 import { trpc } from '@/lib/trpc/client';
 import { useSession } from 'next-auth/react';
 import { Avatar } from '@/components/ui/Avatar';
+import { Modal } from '@/components/ui/Modal';
 import { useState } from 'react';
 import {
   Pencil,
@@ -129,6 +130,15 @@ export function ActivityFeed({
     limit: 30,
   });
 
+  // Selected log entry to revert. Drives the confirmation modal — we
+  // dropped the native confirm()/alert() pair because the error case
+  // showed an ugly stack trace in the system dialog.
+  const [pendingRestore, setPendingRestore] = useState<{
+    logId: string;
+    label: string;
+  } | null>(null);
+  const [restoreError, setRestoreError] = useState<string | null>(null);
+
   const restoreMutation = trpc.activityLog.restore.useMutation({
     onSuccess: () => {
       void utils.activityLog.list.invalidate({ entity, entityId });
@@ -149,8 +159,10 @@ export function ActivityFeed({
       }
       void utils.dashboard.kpis.invalidate();
       void utils.dashboard.navCounts.invalidate();
+      setPendingRestore(null);
+      setRestoreError(null);
     },
-    onError: (e) => alert('Не вдалося скасувати: ' + e.message),
+    onError: (e) => setRestoreError(e.message),
   });
 
   return (
@@ -227,9 +239,19 @@ export function ActivityFeed({
                       {canUndo && (
                         <button
                           onClick={() => {
-                            if (confirm('Скасувати цю зміну? Стан буде повернуто.')) {
-                              restoreMutation.mutate({ logId: e.id });
-                            }
+                            setRestoreError(null);
+                            setPendingRestore({
+                              logId: e.id,
+                              label: `${meta.label} · ${new Date(e.createdAt).toLocaleString(
+                                'uk-UA',
+                                {
+                                  day: '2-digit',
+                                  month: '2-digit',
+                                  hour: '2-digit',
+                                  minute: '2-digit',
+                                },
+                              )} · ${e.user.name}`,
+                            });
                           }}
                           disabled={restoreMutation.isPending}
                           className="text-[10px] font-bold inline-flex items-center gap-1 text-mid hover:text-brand border border-hairline rounded-full px-2 py-0.5 hover:border-brand disabled:opacity-50"
@@ -291,6 +313,59 @@ export function ActivityFeed({
           })}
         </ul>
       )}
+
+      {/* Restore confirmation modal — replaces native confirm()/alert()
+          so the dialog matches the rest of the app and lets us surface
+          server-side errors (e.g. "немає targetUserId у старому записі")
+          inline instead of in a system pop-up. */}
+      <Modal
+        open={!!pendingRestore}
+        onClose={() => {
+          setPendingRestore(null);
+          setRestoreError(null);
+        }}
+        title="Скасувати зміну?"
+        size="sm"
+      >
+        {pendingRestore && (
+          <div className="space-y-4">
+            <p className="text-sm text-mid">
+              Стан буде повернуто до значень, що існували до цієї дії. Створиться окремий запис у
+              журналі (RESTORE) — попередня дія залишається у історії.
+            </p>
+            <div className="rounded-[10px] border border-hairline bg-page/40 px-3 py-2 text-xs text-ink">
+              {pendingRestore.label}
+            </div>
+            {restoreError && (
+              <p className="text-xs text-red-600 bg-red-50 dark:bg-red-900/30 rounded-md px-3 py-2">
+                {restoreError}
+              </p>
+            )}
+            <div className="flex gap-3 justify-end pt-2 border-t border-hairline">
+              <button
+                type="button"
+                onClick={() => {
+                  setPendingRestore(null);
+                  setRestoreError(null);
+                }}
+                className="btn-secondary"
+                disabled={restoreMutation.isPending}
+              >
+                Закрити
+              </button>
+              <button
+                type="button"
+                onClick={() => restoreMutation.mutate({ logId: pendingRestore.logId })}
+                disabled={restoreMutation.isPending}
+                className="btn-primary"
+              >
+                {restoreMutation.isPending && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+                Скасувати зміну
+              </button>
+            </div>
+          </div>
+        )}
+      </Modal>
     </div>
   );
 }

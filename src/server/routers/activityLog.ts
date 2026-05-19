@@ -105,6 +105,54 @@ export const activityLogRouter = createTRPCRouter({
         throw new TRPCError({ code: 'BAD_REQUEST', message: 'Немає попереднього стану' });
       }
 
+      // Attendance changes are logged under entity='Meeting' (so they
+      // show up in the meeting feed) but the payload is the attendance
+      // shape: {status, userName, targetUserId}. Detect them and route
+      // restore to the Attendance table instead of Meeting.
+      const beforePayload = entry.before as Record<string, unknown>;
+      const afterPayload = entry.after as Record<string, unknown> | null;
+      const looksLikeAttendance =
+        entry.entity === 'Meeting' &&
+        beforePayload &&
+        'status' in beforePayload &&
+        'userName' in beforePayload;
+      if (looksLikeAttendance) {
+        const targetUserId =
+          (beforePayload.targetUserId as string | undefined) ??
+          (afterPayload?.targetUserId as string | undefined);
+        if (!targetUserId) {
+          throw new TRPCError({
+            code: 'BAD_REQUEST',
+            message:
+              'Цю зміну явки скасувати не можна — у журналі немає ідентифікатора учасника (стара запис).',
+          });
+        }
+        const beforeStatus = beforePayload.status as
+          | 'PENDING'
+          | 'CONFIRMED'
+          | 'DECLINED'
+          | undefined;
+        if (!beforeStatus) {
+          throw new TRPCError({ code: 'BAD_REQUEST', message: 'Немає попереднього статусу' });
+        }
+        const restored = await ctx.db.attendance.update({
+          where: {
+            meetingId_userId: { meetingId: entry.entityId, userId: targetUserId },
+          },
+          data: { status: beforeStatus },
+        });
+        await logActivity(ctx.db, {
+          userId: ctx.session.user.id,
+          action: 'RESTORE',
+          entity: 'Meeting',
+          entityId: entry.entityId,
+          before: afterPayload,
+          after: { status: beforeStatus, userName: beforePayload.userName, targetUserId },
+          note: `Скасована зміна явки від ${new Date(entry.createdAt).toLocaleString('uk-UA')}`,
+        });
+        return restored;
+      }
+
       const allowed = RESTORABLE_FIELDS[entry.entity];
       if (!allowed) {
         throw new TRPCError({
