@@ -425,18 +425,20 @@ export function StandardBodyEditor({ target, bodyText, bodyUpdatedAt, bodyUpdate
             body scrolls underneath. Each tab has its own scrollable
             content area (max-h on the tab body itself) — the rail
             never has to scroll as a unit. */}
-        <div
-          className={`${
-            isInModal
-              ? 'lg:sticky lg:top-[88px] lg:self-start lg:h-[calc(92vh-110px)]'
-              : 'lg:sticky lg:top-4 lg:self-start lg:h-[calc(100vh-3rem)]'
-          }`}
-        >
-          {/* Card with a hard-bounded height so sticky positioning
-              actually stays put. `h-[...]` (not max-h) keeps the
-              wrapper size predictable — sticky doesn't behave well
-              when its content can grow taller than the scrollport. */}
-          <div className="bg-card rounded-xl border border-hairline overflow-hidden flex flex-col h-full">
+        <div className="lg:self-stretch lg:h-full">
+          {/* Sticky lives on the card itself, not the wrapper. The
+              wrapper takes the full grid-row height so the card has
+              a tall containing block to scroll-anchor against —
+              that's required for `position: sticky` to actually
+              engage. The card has a hard `h-[...]` so it never
+              exceeds the modal's visible viewport. */}
+          <div
+            className={`bg-card rounded-xl border border-hairline overflow-hidden flex flex-col ${
+              isInModal
+                ? 'lg:sticky lg:top-[88px] lg:h-[calc(92vh-110px)]'
+                : 'lg:sticky lg:top-4 lg:h-[calc(100vh-3rem)]'
+            }`}
+          >
             <div className="flex border-b border-hairline shrink-0">
               <RailTabButton
                 active={railTab === 'changes'}
