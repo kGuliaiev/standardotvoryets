@@ -867,6 +867,7 @@ export function StandardDetail({ id }: { id: string }) {
                         <th className="px-3 py-2.5 font-bold">ПІБ</th>
                         <th className="px-3 py-2.5 font-bold">Звання</th>
                         <th className="px-3 py-2.5 font-bold">Посада</th>
+                        <th className="px-3 py-2.5 font-bold">Телефон</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-hairline">
@@ -901,6 +902,15 @@ export function StandardDetail({ id }: { id: string }) {
                               </div>
                             </td>
                             <td className="px-3 py-3 text-xs text-mid">{m.user.position ?? '—'}</td>
+                            <td className="px-3 py-3 text-xs text-mid font-mono">
+                              {m.user.phone ? (
+                                <a href={`tel:${m.user.phone}`} className="hover:text-brand">
+                                  {m.user.phone}
+                                </a>
+                              ) : (
+                                '—'
+                              )}
+                            </td>
                           </tr>
                         ))}
                     </tbody>

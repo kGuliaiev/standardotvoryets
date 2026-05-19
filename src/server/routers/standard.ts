@@ -108,7 +108,14 @@ export const standardRouter = createTRPCRouter({
               members: {
                 include: {
                   user: {
-                    select: { id: true, name: true, avatarUrl: true, rank: true, position: true },
+                    select: {
+                      id: true,
+                      name: true,
+                      avatarUrl: true,
+                      rank: true,
+                      position: true,
+                      phone: true,
+                    },
                   },
                 },
               },
