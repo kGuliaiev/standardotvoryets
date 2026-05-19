@@ -4,6 +4,7 @@ import { trpc } from '@/lib/trpc/client';
 import { useSort, sortedRows } from '@/lib/useSort';
 import { SortableHeader } from '@/components/ui/SortableHeader';
 import { Check, FileText, FileDown } from 'lucide-react';
+import { PageHeader } from '@/components/ui/PageHeader';
 
 interface CellProps {
   due?: Date | string | null;
@@ -115,19 +116,15 @@ export function ReportProgramPlan() {
 
   return (
     <div className="space-y-5">
-      <div className="flex items-center justify-between flex-wrap gap-3">
-        <div>
-          <h1 className="text-2xl font-bold text-ink">Звіт</h1>
-          <p className="text-sm text-mid mt-1">
-            Поетапний план виконання програми стандартизації на 2026 рік
-          </p>
-        </div>
-        <div className="flex items-center gap-3 flex-wrap">
-          <div className="text-xs text-mid">
-            ТЗ виконано: <span className="font-bold text-ink">{totalDone}</span> /{' '}
-            {planItems.length}
-          </div>
-          <div className="flex items-center gap-2">
+      <PageHeader
+        title="Звіт"
+        subtitle="Поетапний план виконання програми стандартизації на 2026 рік"
+        actions={
+          <>
+            <div className="text-xs text-mid">
+              ТЗ виконано: <span className="font-bold text-ink">{totalDone}</span> /{' '}
+              {planItems.length}
+            </div>
             <a
               href="/api/reports/plan.docx"
               className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg border border-hairline text-ink hover:bg-pill transition-colors"
@@ -146,9 +143,9 @@ export function ReportProgramPlan() {
               <FileDown className="w-3.5 h-3.5" />
               PDF
             </a>
-          </div>
-        </div>
-      </div>
+          </>
+        }
+      />
 
       <div className="bg-card rounded-xl border border-hairline overflow-x-auto scrollbar-thin">
         <table className="w-full text-xs min-w-[1200px]">
