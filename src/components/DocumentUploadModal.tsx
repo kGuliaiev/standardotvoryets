@@ -10,6 +10,10 @@ interface DocumentUploadModalProps {
   onClose: () => void;
   standardId: string;
   onSaved?: () => void;
+  /** When true the "Дозволити правки" checkbox starts ticked — used
+   *  by the "Імпортувати з Word" entry point that's specifically
+   *  intended for collaborative-editing uploads. */
+  defaultAllowEdits?: boolean;
 }
 
 const TYPE_OPTIONS: {
@@ -45,6 +49,7 @@ export function DocumentUploadModal({
   onClose,
   standardId,
   onSaved,
+  defaultAllowEdits = false,
 }: DocumentUploadModalProps) {
   const utils = trpc.useUtils();
   const [file, setFile] = useState<File | null>(null);
@@ -52,8 +57,10 @@ export function DocumentUploadModal({
   const [type, setType] = useState<(typeof TYPE_OPTIONS)[number]['value']>('DRAFT_STANDARD');
   const [isCurrent, setIsCurrent] = useState(true);
   // Default OFF: most uploads are reference material; the leader opts in
-  // for documents they want the WG to collaboratively edit.
-  const [allowEdits, setAllowEdits] = useState(false);
+  // for documents they want the WG to collaboratively edit. Override
+  // via `defaultAllowEdits` when the modal opens from a CTA that
+  // explicitly intends a collaborative-edit upload.
+  const [allowEdits, setAllowEdits] = useState(defaultAllowEdits);
   const [note, setNote] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [progress, setProgress] = useState<'idle' | 'getting-url' | 'uploading' | 'confirming'>(
@@ -66,12 +73,12 @@ export function DocumentUploadModal({
       setVersion('v1.0');
       setType('DRAFT_STANDARD');
       setIsCurrent(true);
-      setAllowEdits(false);
+      setAllowEdits(defaultAllowEdits);
       setNote('');
       setError(null);
       setProgress('idle');
     }
-  }, [open]);
+  }, [open, defaultAllowEdits]);
 
   // Only .docx can be inlined as editable HTML — the server will convert
   // it via mammoth. For PDF/XLSX/etc. we disable the option.

@@ -161,6 +161,10 @@ export function StandardDetail({ id }: { id: string }) {
   const [editError, setEditError] = useState<string | null>(null);
   const [taskModalOpen, setTaskModalOpen] = useState(false);
   const [docModalOpen, setDocModalOpen] = useState(false);
+  // Pre-checks the "Дозволити правки" toggle when the upload modal
+  // was opened via the "Імпортувати з Word" CTA — that flow is
+  // specifically meant for collaborative-edit imports.
+  const [uploadAllowEditsDefault, setUploadAllowEditsDefault] = useState(false);
   // ID of the editable document whose collaborative editor is currently
   // shown as a fullscreen modal (null = no editor open).
   const [editDocId, setEditDocId] = useState<string | null>(null);
@@ -484,15 +488,30 @@ export function StandardDetail({ id }: { id: string }) {
           <div className="space-y-4">
             {activeTab === 'documents' && (
               <div className="bg-card rounded-xl border border-hairline">
-                <div className="px-5 py-4 border-b border-hairline flex items-center justify-between">
+                <div className="px-5 py-4 border-b border-hairline flex items-center justify-between gap-3 flex-wrap">
                   <h3 className="font-semibold text-ink">Документи</h3>
                   {canUpload && (
-                    <button
-                      onClick={() => setDocModalOpen(true)}
-                      className="text-xs font-bold text-brand hover:underline"
-                    >
-                      + Завантажити
-                    </button>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <button
+                        onClick={() => {
+                          setUploadAllowEditsDefault(true);
+                          setDocModalOpen(true);
+                        }}
+                        className="inline-flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg bg-blue-700 text-white font-semibold hover:bg-blue-800 transition-colors"
+                        title="Завантажити .docx з прапорцем 'Дозволити правки' — для колаборативного редагування"
+                      >
+                        📥 Імпортувати з Word
+                      </button>
+                      <button
+                        onClick={() => {
+                          setUploadAllowEditsDefault(false);
+                          setDocModalOpen(true);
+                        }}
+                        className="text-xs font-bold text-brand hover:underline"
+                      >
+                        + Завантажити
+                      </button>
+                    </div>
                   )}
                 </div>
                 {standard.documents.length === 0 ? (
@@ -1069,6 +1088,7 @@ export function StandardDetail({ id }: { id: string }) {
         onClose={() => setDocModalOpen(false)}
         standardId={id}
         onSaved={() => void refetch()}
+        defaultAllowEdits={uploadAllowEditsDefault}
       />
 
       {/* Per-document collaborative editor. Reuses StandardBodyEditor
