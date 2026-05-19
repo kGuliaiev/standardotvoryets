@@ -215,161 +215,192 @@ export function StandardDetail({ id }: { id: string }) {
         <span className="font-mono text-light">{standard.code}</span>
       </nav>
 
-      {/* Header card */}
-      <div className="bg-card rounded-xl border border-hairline p-5">
-        {/* Row 1: meta (WG · code · status · ISO · category) on the left, actions on the right */}
-        <div className="flex items-center justify-between gap-4 flex-wrap">
-          <div className="flex items-center gap-2.5 flex-wrap min-w-0">
-            <span
-              className="inline-block w-3 h-3 rounded-full shrink-0"
-              style={{ backgroundColor: standard.workingGroup.color }}
-            />
-            <span className="text-sm font-medium text-mid">{standard.workingGroup.code}</span>
-            <span className="text-light">·</span>
-            <span className="font-mono text-sm text-light">{standard.code}</span>
-            <span className="text-light">·</span>
-            <StatusBadge status={standard.status} size="sm" />
-            {standard.isoAnalog && (
-              <span className="text-xs text-mid bg-pill px-2 py-0.5 rounded-md">
-                ISO: {standard.isoAnalog}
-              </span>
-            )}
-            {standard.category && (
-              <span className="text-xs text-mid bg-pill px-2 py-0.5 rounded-md">
-                {standard.category}
-              </span>
-            )}
-          </div>
-          <div className="flex gap-2 flex-wrap">
-            {canEdit && (
-              <button
-                onClick={() => {
-                  setEditForm({
-                    title: standard.title,
-                    description: standard.description ?? '',
-                    isoAnalog: standard.isoAnalog ?? '',
-                    category: standard.category ?? '',
-                    deadline: standard.deadline
-                      ? new Date(standard.deadline).toISOString().slice(0, 10)
-                      : '',
-                    responsibleId: standard.responsibleId ?? '',
-                    progress: standard.progress,
-                  });
-                  setEditError(null);
-                  setEditOpen(true);
-                }}
-                className="px-3 py-1.5 text-xs font-semibold rounded-[10px] border-[1.5px] border-hairline hover:border-brand hover:text-brand text-mid transition-colors inline-flex items-center gap-1.5"
-              >
-                <Pencil className="w-3.5 h-3.5" />
-                Редагувати
-              </button>
-            )}
-            {canChangeStatus &&
-              STATUS_TRANSITIONS[standard.status].map((next) => (
-                <button
-                  key={next}
-                  onClick={() => changeStatus.mutate({ id, status: next })}
-                  disabled={changeStatus.isPending}
-                  className="px-3 py-1.5 text-xs font-medium rounded-lg border border-hairline hover:bg-page text-ink transition-colors disabled:opacity-50"
-                >
-                  → {STATUS_LABELS[next]}
-                </button>
-              ))}
-            {canChangeStatus && standard.status === 'IN_REVIEW' && canOpenVoting && (
-              <Link
-                href={`/standards/${id}/open-voting`}
-                className="px-3 py-1.5 text-xs font-medium rounded-lg bg-amber-500 text-white hover:bg-amber-600 transition-colors"
-              >
-                Відкрити голосування
-              </Link>
-            )}
-          </div>
-        </div>
-
-        {/* Title */}
-        <h1 className="text-xl font-bold text-ink mt-3 break-words">{standard.title}</h1>
-
-        {/* Collapsible stepper */}
-        <div className="mt-4 pt-3 border-t border-hairline">
-          <button
-            type="button"
-            onClick={() => setStepperOpen((o) => !o)}
-            className="flex items-center justify-between gap-3 w-full text-left group"
-          >
-            <span className="text-xs text-mid font-semibold uppercase tracking-wide group-hover:text-ink transition-colors flex flex-col sm:flex-row sm:items-center sm:gap-2 min-w-0">
-              <span className="truncate">Поетапний план виконання</span>
-              <span className="text-[10px] font-normal normal-case text-light truncate">
-                <span className="hidden sm:inline">· </span>
-                оновлено {formatDateTime(standard.updatedAt)}
-              </span>
-            </span>
-            <div className="flex items-center gap-2 shrink-0">
-              {!stepperOpen && hasOverdueStage(standard) && (
-                <span className="text-[11px] text-red-600 dark:text-red-400 font-semibold hidden sm:inline">
-                  є прострочений етап
+      {/* Header row: standard meta card on the left, compact stats card
+          on the right (was previously a per-tab right rail). The grid's
+          `items-stretch` aligns both card heights for a clean visual
+          baseline; stats stay narrow with a fixed ~220px column. */}
+      <div className="grid grid-cols-1 lg:grid-cols-[1fr_220px] gap-4 items-stretch">
+        <div className="bg-card rounded-xl border border-hairline p-5">
+          {/* Row 1: meta (WG · code · status · ISO · category) on the left, actions on the right */}
+          <div className="flex items-center justify-between gap-4 flex-wrap">
+            <div className="flex items-center gap-2.5 flex-wrap min-w-0">
+              <span
+                className="inline-block w-3 h-3 rounded-full shrink-0"
+                style={{ backgroundColor: standard.workingGroup.color }}
+              />
+              <span className="text-sm font-medium text-mid">{standard.workingGroup.code}</span>
+              <span className="text-light">·</span>
+              <span className="font-mono text-sm text-light">{standard.code}</span>
+              <span className="text-light">·</span>
+              <StatusBadge status={standard.status} size="sm" />
+              {standard.isoAnalog && (
+                <span className="text-xs text-mid bg-pill px-2 py-0.5 rounded-md">
+                  ISO: {standard.isoAnalog}
                 </span>
               )}
-              {!stepperOpen && hasOverdueStage(standard) && (
-                <span
-                  className="sm:hidden w-2 h-2 rounded-full bg-red-500"
-                  title="Є прострочений етап"
-                />
+              {standard.category && (
+                <span className="text-xs text-mid bg-pill px-2 py-0.5 rounded-md">
+                  {standard.category}
+                </span>
               )}
-              <ChevronDown
-                size={16}
-                className={`text-mid transition-transform ${stepperOpen ? 'rotate-180' : ''}`}
-              />
             </div>
-          </button>
-          {stepperOpen && (
-            <div className="mt-3">
-              {!canChangeStatus && (
-                <p className="text-[11px] text-light italic mb-3">
-                  Етапи підтверджують секретар / керівник РГ
-                </p>
+            <div className="flex gap-2 flex-wrap">
+              {canEdit && (
+                <button
+                  onClick={() => {
+                    setEditForm({
+                      title: standard.title,
+                      description: standard.description ?? '',
+                      isoAnalog: standard.isoAnalog ?? '',
+                      category: standard.category ?? '',
+                      deadline: standard.deadline
+                        ? new Date(standard.deadline).toISOString().slice(0, 10)
+                        : '',
+                      responsibleId: standard.responsibleId ?? '',
+                      progress: standard.progress,
+                    });
+                    setEditError(null);
+                    setEditOpen(true);
+                  }}
+                  className="px-3 py-1.5 text-xs font-semibold rounded-[10px] border-[1.5px] border-hairline hover:border-brand hover:text-brand text-mid transition-colors inline-flex items-center gap-1.5"
+                >
+                  <Pencil className="w-3.5 h-3.5" />
+                  Редагувати
+                </button>
               )}
-              <StandardProgress
-                techSpecDueDate={standard.techSpecDueDate}
-                draftDueDate={standard.draftDueDate}
-                feedbackDueDate={standard.feedbackDueDate}
-                techReviewDueDate={standard.techReviewDueDate}
-                finalDueDate={standard.finalDueDate}
-                techSpecCompletedAt={standard.techSpecCompletedAt}
-                draftCompletedAt={standard.draftCompletedAt}
-                feedbackCompletedAt={standard.feedbackCompletedAt}
-                techReviewCompletedAt={standard.techReviewCompletedAt}
-                finalCompletedAt={standard.finalCompletedAt}
-                onConfirm={
-                  canChangeStatus
-                    ? (stage, confirmed, completedAt) =>
-                        confirmStage.mutate({
-                          id: standard.id,
-                          stage,
-                          confirmed,
-                          completedAt,
-                        })
-                    : undefined
-                }
-                isPending={confirmStage.isPending}
-              />
+              {canChangeStatus &&
+                STATUS_TRANSITIONS[standard.status].map((next) => (
+                  <button
+                    key={next}
+                    onClick={() => changeStatus.mutate({ id, status: next })}
+                    disabled={changeStatus.isPending}
+                    className="px-3 py-1.5 text-xs font-medium rounded-lg border border-hairline hover:bg-page text-ink transition-colors disabled:opacity-50"
+                  >
+                    → {STATUS_LABELS[next]}
+                  </button>
+                ))}
+              {canChangeStatus && standard.status === 'IN_REVIEW' && canOpenVoting && (
+                <Link
+                  href={`/standards/${id}/open-voting`}
+                  className="px-3 py-1.5 text-xs font-medium rounded-lg bg-amber-500 text-white hover:bg-amber-600 transition-colors"
+                >
+                  Відкрити голосування
+                </Link>
+              )}
+            </div>
+          </div>
+
+          {/* Title */}
+          <h1 className="text-xl font-bold text-ink mt-3 break-words">{standard.title}</h1>
+
+          {/* Collapsible stepper */}
+          <div className="mt-4 pt-3 border-t border-hairline">
+            <button
+              type="button"
+              onClick={() => setStepperOpen((o) => !o)}
+              className="flex items-center justify-between gap-3 w-full text-left group"
+            >
+              <span className="text-xs text-mid font-semibold uppercase tracking-wide group-hover:text-ink transition-colors flex flex-col sm:flex-row sm:items-center sm:gap-2 min-w-0">
+                <span className="truncate">Поетапний план виконання</span>
+                <span className="text-[10px] font-normal normal-case text-light truncate">
+                  <span className="hidden sm:inline">· </span>
+                  оновлено {formatDateTime(standard.updatedAt)}
+                </span>
+              </span>
+              <div className="flex items-center gap-2 shrink-0">
+                {!stepperOpen && hasOverdueStage(standard) && (
+                  <span className="text-[11px] text-red-600 dark:text-red-400 font-semibold hidden sm:inline">
+                    є прострочений етап
+                  </span>
+                )}
+                {!stepperOpen && hasOverdueStage(standard) && (
+                  <span
+                    className="sm:hidden w-2 h-2 rounded-full bg-red-500"
+                    title="Є прострочений етап"
+                  />
+                )}
+                <ChevronDown
+                  size={16}
+                  className={`text-mid transition-transform ${stepperOpen ? 'rotate-180' : ''}`}
+                />
+              </div>
+            </button>
+            {stepperOpen && (
+              <div className="mt-3">
+                {!canChangeStatus && (
+                  <p className="text-[11px] text-light italic mb-3">
+                    Етапи підтверджують секретар / керівник РГ
+                  </p>
+                )}
+                <StandardProgress
+                  techSpecDueDate={standard.techSpecDueDate}
+                  draftDueDate={standard.draftDueDate}
+                  feedbackDueDate={standard.feedbackDueDate}
+                  techReviewDueDate={standard.techReviewDueDate}
+                  finalDueDate={standard.finalDueDate}
+                  techSpecCompletedAt={standard.techSpecCompletedAt}
+                  draftCompletedAt={standard.draftCompletedAt}
+                  feedbackCompletedAt={standard.feedbackCompletedAt}
+                  techReviewCompletedAt={standard.techReviewCompletedAt}
+                  finalCompletedAt={standard.finalCompletedAt}
+                  onConfirm={
+                    canChangeStatus
+                      ? (stage, confirmed, completedAt) =>
+                          confirmStage.mutate({
+                            id: standard.id,
+                            stage,
+                            confirmed,
+                            completedAt,
+                          })
+                      : undefined
+                  }
+                  isPending={confirmStage.isPending}
+                />
+              </div>
+            )}
+          </div>
+
+          {/* Meta row */}
+          {standard.responsible && (
+            <div className="mt-4 flex gap-6 flex-wrap text-sm">
+              <div className="flex items-center gap-2">
+                <span className="text-light text-xs">Відповідальний:</span>
+                <Avatar
+                  name={standard.responsible.name}
+                  avatarUrl={standard.responsible.avatarUrl}
+                  size="xs"
+                />
+                <span className="text-ink text-xs">{standard.responsible.name}</span>
+              </div>
             </div>
           )}
         </div>
 
-        {/* Meta row */}
-        {standard.responsible && (
-          <div className="mt-4 flex gap-6 flex-wrap text-sm">
-            <div className="flex items-center gap-2">
-              <span className="text-light text-xs">Відповідальний:</span>
-              <Avatar
-                name={standard.responsible.name}
-                avatarUrl={standard.responsible.avatarUrl}
-                size="xs"
-              />
-              <span className="text-ink text-xs">{standard.responsible.name}</span>
+        {/* Stats card — stretches to header card height for visual
+          baseline parity. */}
+        <div className="bg-card rounded-xl border border-hairline p-5 flex flex-col">
+          <h3 className="font-semibold text-ink mb-3 text-sm uppercase tracking-wide text-light">
+            Статистика
+          </h3>
+          <dl className="space-y-2 text-sm flex-1">
+            <div className="flex justify-between">
+              <dt className="text-mid">Документів</dt>
+              <dd className="font-medium tabular-nums">{standard.documents?.length ?? 0}</dd>
             </div>
-          </div>
-        )}
+            <div className="flex justify-between">
+              <dt className="text-mid">Коментарів</dt>
+              <dd className="font-medium tabular-nums">{standard.comments?.length ?? 0}</dd>
+            </div>
+            <div className="flex justify-between">
+              <dt className="text-mid">Завдань</dt>
+              <dd className="font-medium tabular-nums">{standard.tasks?.length ?? 0}</dd>
+            </div>
+            <div className="flex justify-between">
+              <dt className="text-mid">Голосувань</dt>
+              <dd className="font-medium tabular-nums">{standard.votes?.length ?? 0}</dd>
+            </div>
+          </dl>
+        </div>
       </div>
 
       {/* Tabs */}
@@ -446,10 +477,11 @@ export function StandardDetail({ id }: { id: string }) {
         />
       )}
 
-      {/* Tab content + statistics rail */}
+      {/* Tab content — full-width now that statistics moved to the
+          header row. */}
       {activeTab !== 'body' && (
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          <div className="lg:col-span-2 space-y-4">
+        <div className="space-y-4">
+          <div className="space-y-4">
             {activeTab === 'documents' && (
               <div className="bg-card rounded-xl border border-hairline">
                 <div className="px-5 py-4 border-b border-hairline flex items-center justify-between">
@@ -821,69 +853,61 @@ export function StandardDetail({ id }: { id: string }) {
             )}
 
             {activeTab === 'members' && (
-              <div className="bg-card rounded-xl border border-hairline p-5">
-                <h3 className="font-semibold text-ink mb-3">
-                  Учасники РГ ({standard.workingGroup.members.length})
-                </h3>
-                <div className="space-y-3">
-                  {[...standard.workingGroup.members]
-                    .sort((a, b) => {
-                      const r = (WG_ROLE_ORDER[a.role] ?? 99) - (WG_ROLE_ORDER[b.role] ?? 99);
-                      if (r !== 0) return r;
-                      const w = rankWeight(b.user.rank) - rankWeight(a.user.rank);
-                      if (w !== 0) return w;
-                      return extractSurname(a.user.name).localeCompare(
-                        extractSurname(b.user.name),
-                        'uk',
-                      );
-                    })
-                    .map((m) => (
-                      <div key={m.userId} className="flex items-center gap-3">
-                        <Avatar name={m.user.name} avatarUrl={m.user.avatarUrl} size="sm" />
-                        <div className="min-w-0 flex-1">
-                          <p className="text-sm font-medium text-ink flex items-center gap-1.5 flex-wrap">
-                            <RankBadge rank={m.user.rank} variant="icon" />
-                            {m.user.rank && m.user.rank !== 'CIVILIAN' && (
-                              <span className="text-xs text-mid font-normal">
-                                {rankLabel(m.user.rank)}
-                              </span>
-                            )}
-                            <span>{m.user.name}</span>
-                          </p>
-                          <p className="text-xs text-light">
-                            {WG_ROLE_LABELS_UA[m.role] ?? m.role}
-                          </p>
-                        </div>
-                      </div>
-                    ))}
+              <div className="bg-card rounded-xl border border-hairline overflow-hidden">
+                <div className="px-5 py-4 border-b border-hairline">
+                  <h3 className="font-semibold text-ink">
+                    Учасники РГ ({standard.workingGroup.members.length})
+                  </h3>
+                </div>
+                <div className="overflow-x-auto scrollbar-thin">
+                  <table className="w-full text-sm min-w-[640px]">
+                    <thead className="bg-page border-b border-hairline">
+                      <tr className="text-left text-[10px] text-light uppercase tracking-wide">
+                        <th className="px-5 py-2.5 font-bold">Роль в РГ</th>
+                        <th className="px-3 py-2.5 font-bold">ПІБ</th>
+                        <th className="px-3 py-2.5 font-bold">Звання</th>
+                        <th className="px-3 py-2.5 font-bold">Посада</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-hairline">
+                      {[...standard.workingGroup.members]
+                        .sort((a, b) => {
+                          const r = (WG_ROLE_ORDER[a.role] ?? 99) - (WG_ROLE_ORDER[b.role] ?? 99);
+                          if (r !== 0) return r;
+                          const w = rankWeight(b.user.rank) - rankWeight(a.user.rank);
+                          if (w !== 0) return w;
+                          return extractSurname(a.user.name).localeCompare(
+                            extractSurname(b.user.name),
+                            'uk',
+                          );
+                        })
+                        .map((m) => (
+                          <tr key={m.userId} className="hover:bg-pill/40">
+                            <td className="px-5 py-3 text-xs text-mid">
+                              {WG_ROLE_LABELS_UA[m.role] ?? m.role}
+                            </td>
+                            <td className="px-3 py-3">
+                              <div className="flex items-center gap-2.5">
+                                <Avatar name={m.user.name} avatarUrl={m.user.avatarUrl} size="xs" />
+                                <span className="text-ink font-medium">{m.user.name}</span>
+                              </div>
+                            </td>
+                            <td className="px-3 py-3">
+                              <div className="flex items-center gap-1.5">
+                                <RankBadge rank={m.user.rank} variant="icon" />
+                                {m.user.rank && m.user.rank !== 'CIVILIAN' && (
+                                  <span className="text-xs text-mid">{rankLabel(m.user.rank)}</span>
+                                )}
+                              </div>
+                            </td>
+                            <td className="px-3 py-3 text-xs text-mid">{m.user.position ?? '—'}</td>
+                          </tr>
+                        ))}
+                    </tbody>
+                  </table>
                 </div>
               </div>
             )}
-          </div>
-
-          {/* Right rail — always visible Statistics */}
-          <div className="space-y-4">
-            <div className="bg-card rounded-xl border border-hairline p-5">
-              <h3 className="font-semibold text-ink mb-3">Статистика</h3>
-              <dl className="space-y-2 text-sm">
-                <div className="flex justify-between">
-                  <dt className="text-mid">Документів</dt>
-                  <dd className="font-medium">{standard.documents?.length ?? 0}</dd>
-                </div>
-                <div className="flex justify-between">
-                  <dt className="text-mid">Коментарів</dt>
-                  <dd className="font-medium">{standard.comments?.length ?? 0}</dd>
-                </div>
-                <div className="flex justify-between">
-                  <dt className="text-mid">Завдань</dt>
-                  <dd className="font-medium">{standard.tasks?.length ?? 0}</dd>
-                </div>
-                <div className="flex justify-between">
-                  <dt className="text-mid">Голосувань</dt>
-                  <dd className="font-medium">{standard.votes?.length ?? 0}</dd>
-                </div>
-              </dl>
-            </div>
           </div>
         </div>
       )}
