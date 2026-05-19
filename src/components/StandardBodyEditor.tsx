@@ -142,11 +142,12 @@ export function StandardBodyEditor({ target, bodyText, bodyUpdatedAt, bodyUpdate
   const [draft, setDraft] = useState<DraftSuggestion | null>(null);
   const [bulkOpen, setBulkOpen] = useState(false);
   const [bulkText, setBulkText] = useState(normalizedBody);
-  // Documents are edited like Word files — the user expects the
-  // formatting toolbar to be visible immediately, not hidden behind
-  // a "Редагувати все" click. Auto-open the bulk WYSIWYG editor once
-  // on mount when we're editing a per-document body.
-  const didAutoOpenBulkRef = useRef(false);
+  // For per-document editing we replace the read-only paragraph view
+  // with an editable rich-text surface (Word-style toolbar inline).
+  // `inlineHtml` is the live buffer; `inlineDirty` tracks whether
+  // the user changed it relative to what's saved on the server.
+  const [inlineHtml, setInlineHtml] = useState<string>(normalizedBody);
+  const [inlineDirty, setInlineDirty] = useState(false);
   /** Right rail tabs — Зміни (suggestions) or Коментарі (inline). */
   const [railTab, setRailTab] = useState<'changes' | 'comments'>('changes');
   // Shared inline-comments query so the rail tab badge can show a
@@ -204,9 +205,29 @@ export function StandardBodyEditor({ target, bodyText, bodyUpdatedAt, bodyUpdate
     onSuccess: () => {
       invalidateBody();
       setBulkOpen(false);
+      setInlineDirty(false);
     },
     onError: (e) => alert(e.message),
   });
+
+  // When the server-side body changes (another user saved, an import,
+  // an accepted suggestion), reseed the inline buffer — but only if
+  // the local user hasn't started editing yet. Otherwise we'd nuke
+  // their typing.
+  useEffect(() => {
+    if (inlineDirty) return;
+    setInlineHtml(normalizedBody);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [normalizedBody]);
+
+  // Inline-edit mode is on for documents that the user can edit.
+  // Standards still use the paragraph-by-paragraph suggestion view.
+  const inlineEditMode = target.kind === 'document' && canEditMeta;
+
+  function saveInline() {
+    if (!inlineEditMode || !inlineDirty) return;
+    updateBodyMutation.mutate({ ...targetInput, bodyText: inlineHtml });
+  }
   const replaceBodyMutation = trpc.suggestion.replaceBody.useMutation({
     onSuccess: () => {
       invalidateBody();
@@ -216,20 +237,6 @@ export function StandardBodyEditor({ target, bodyText, bodyUpdatedAt, bodyUpdate
     },
     onError: (e) => alert(e.message),
   });
-
-  // Auto-open bulk WYSIWYG once for document targets so the user
-  // lands directly in the Word-style editor with the full formatting
-  // toolbar. Standards keep the paragraph-by-paragraph suggestion
-  // view since that's the consensus flow.
-  useEffect(() => {
-    if (target.kind !== 'document') return;
-    if (didAutoOpenBulkRef.current) return;
-    if (!canEditMeta) return;
-    didAutoOpenBulkRef.current = true;
-    setBulkText(normalizedBody);
-    setBulkOpen(true);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [target.kind, canEditMeta]);
 
   function openSuggest(idx: number, op: OpKind = 'REPLACE') {
     const original = paragraphs[idx] ?? '';
@@ -380,7 +387,7 @@ export function StandardBodyEditor({ target, bodyText, bodyUpdatedAt, bodyUpdate
               disabled={replaceBodyMutation.isPending}
             />
           )}
-          {canEditMeta && (
+          {canEditMeta && !inlineEditMode && (
             <button
               onClick={() => {
                 setBulkText(normalizedBody);
@@ -393,51 +400,80 @@ export function StandardBodyEditor({ target, bodyText, bodyUpdatedAt, bodyUpdate
               Редагувати все
             </button>
           )}
+          {inlineEditMode && (
+            <button
+              onClick={saveInline}
+              disabled={!inlineDirty || updateBodyMutation.isPending}
+              className="text-xs px-3 py-1 rounded bg-brand text-white hover:bg-brand-dark disabled:opacity-40 disabled:cursor-not-allowed inline-flex items-center gap-1.5"
+              title={inlineDirty ? 'Зберегти зміни в документі' : 'Немає змін'}
+            >
+              {updateBodyMutation.isPending && <Loader2 className="w-3 h-3 animate-spin" />}
+              {inlineDirty ? 'Зберегти' : 'Збережено'}
+            </button>
+          )}
         </div>
       </div>
 
       {/* Two columns under the sticky toolbar: body article on the
           left, comments + decisions rail on the right. */}
       <div className="grid grid-cols-1 lg:grid-cols-[1fr_300px] gap-5 items-start">
-        {/* Body blocks (HTML, rendered via prose classes).
-            space-y-1 ≈ Word's normal paragraph rhythm; hover actions
-            float on top of the text instead of expanding the layout. */}
-        <article
-          ref={articleRef}
-          className="bg-card rounded-xl border border-hairline p-5 sm:p-8 space-y-1"
-        >
-          {paragraphs.map((html, idx) => {
-            const pending = pendingBySection.get(idx) ?? [];
-            return (
-              <ParagraphBlock
-                key={idx}
-                idx={idx}
-                html={html}
-                pending={pending}
-                myUserId={me?.id ?? null}
-                canSuggest={canSuggest}
-                canResolve={canEditMeta}
-                onSuggestReplace={() => openSuggest(idx, 'REPLACE')}
-                onSuggestDelete={() => openSuggest(idx, 'DELETE')}
-                onSuggestInsert={() => openInsertAfter(idx)}
-                onReact={(sid, current, type) => toggleReaction(sid, current, type)}
-                onAccept={(sid) => acceptMutation.mutate({ id: sid })}
-                onReject={(sid) => rejectMutation.mutate({ id: sid })}
-              />
-            );
-          })}
-          {canSuggest && paragraphs.length > 0 && (
-            <div className="pt-3 border-t border-hairline">
-              <button
-                onClick={() => openInsertAfter(paragraphs.length - 1)}
-                className="text-xs inline-flex items-center gap-1.5 text-mid hover:text-brand"
-              >
-                <Plus className="w-3.5 h-3.5" />
-                Запропонувати новий параграф у кінці
-              </button>
-            </div>
-          )}
-        </article>
+        {/* Body. For documents we render an inline WYSIWYG editor so the
+            user gets the Word-style toolbar without leaving the page.
+            For standards we keep the paragraph-by-paragraph suggestion
+            view (committee-style consensus flow). */}
+        {inlineEditMode ? (
+          <article
+            ref={articleRef}
+            className="bg-card rounded-xl border border-hairline overflow-hidden"
+          >
+            <RichTextEditor
+              key="inline-doc-editor"
+              initialHtml={inlineHtml}
+              onChange={(html) => {
+                setInlineHtml(html);
+                if (!inlineDirty) setInlineDirty(true);
+              }}
+              className="bg-card"
+            />
+          </article>
+        ) : (
+          <article
+            ref={articleRef}
+            className="bg-card rounded-xl border border-hairline p-5 sm:p-8 space-y-1"
+          >
+            {paragraphs.map((html, idx) => {
+              const pending = pendingBySection.get(idx) ?? [];
+              return (
+                <ParagraphBlock
+                  key={idx}
+                  idx={idx}
+                  html={html}
+                  pending={pending}
+                  myUserId={me?.id ?? null}
+                  canSuggest={canSuggest}
+                  canResolve={canEditMeta}
+                  onSuggestReplace={() => openSuggest(idx, 'REPLACE')}
+                  onSuggestDelete={() => openSuggest(idx, 'DELETE')}
+                  onSuggestInsert={() => openInsertAfter(idx)}
+                  onReact={(sid, current, type) => toggleReaction(sid, current, type)}
+                  onAccept={(sid) => acceptMutation.mutate({ id: sid })}
+                  onReject={(sid) => rejectMutation.mutate({ id: sid })}
+                />
+              );
+            })}
+            {canSuggest && paragraphs.length > 0 && (
+              <div className="pt-3 border-t border-hairline">
+                <button
+                  onClick={() => openInsertAfter(paragraphs.length - 1)}
+                  className="text-xs inline-flex items-center gap-1.5 text-mid hover:text-brand"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  Запропонувати новий параграф у кінці
+                </button>
+              </div>
+            )}
+          </article>
+        )}
 
         {/* Right rail card with two tabs: Зміни (suggestions) and
             Коментарі (inline). Sticky so the rail stays put while the
@@ -501,13 +537,17 @@ export function StandardBodyEditor({ target, bodyText, bodyUpdatedAt, bodyUpdate
           {/* InlineComments overlay (no rail rendering) mounted
               always so selection capture, the floating composer, and
               inline highlights work regardless of which tab is
-              active. */}
-          <InlineComments
-            target={targetInput}
-            canComment={canSuggest}
-            articleRef={articleRef}
-            showRail={false}
-          />
+              active. Skipped for inline-edit mode — the overlay wraps
+              text nodes in spans which would fight TipTap's
+              contenteditable. */}
+          {!inlineEditMode && (
+            <InlineComments
+              target={targetInput}
+              canComment={canSuggest}
+              articleRef={articleRef}
+              showRail={false}
+            />
+          )}
         </div>
       </div>
 
