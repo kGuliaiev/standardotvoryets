@@ -1,6 +1,7 @@
 'use client';
 
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { X } from 'lucide-react';
 
 interface ModalProps {
@@ -36,6 +37,12 @@ export function Modal({
   closeOnOverlay = true,
 }: ModalProps) {
   const panelRef = useRef<HTMLDivElement>(null);
+  // We render via createPortal to <body>. `mounted` keeps the first
+  // SSR pass empty (no portal target yet) and renders client-side.
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   useEffect(() => {
     if (!open) return;
@@ -54,13 +61,18 @@ export function Modal({
     };
   }, [open, onClose]);
 
-  if (!open) return null;
+  if (!open || !mounted) return null;
 
-  return (
+  // Portal'd to <body> so the overlay covers the entire viewport
+  // regardless of stacking contexts on the Shell / Sidebar / Topbar
+  // wrappers. Without the portal, `fixed inset-0` is positioned
+  // relative to the nearest containing block whose transform/filter
+  // breaks viewport semantics, leaving the top edge uncovered.
+  return createPortal(
     <div
       role="dialog"
       aria-modal="true"
-      className="fixed inset-0 z-[200] flex md:items-center justify-center bg-page/95 backdrop-blur-2xl md:p-4 animate-fade-in items-end"
+      className="fixed inset-0 z-[200] flex md:items-center justify-center bg-[rgba(8,14,33,0.55)] backdrop-blur-md md:p-4 animate-fade-in items-end"
       onMouseDown={(e) => {
         if (closeOnOverlay && e.target === e.currentTarget) onClose();
       }}
@@ -79,8 +91,6 @@ export function Modal({
         {title && (
           // Sticky so the title (and close button) stay visible inside
           // long-scrolling modals — especially `size="full"` editors.
-          // `bg-card` matches the panel so content scrolling underneath
-          // doesn't bleed through.
           <div className="sticky top-0 z-30 bg-card/90 backdrop-blur-md flex items-start justify-between gap-4 px-5 md:px-7 pt-3 md:pt-7 pb-4 border-b border-hairline">
             <div>
               {title && (
@@ -105,6 +115,7 @@ export function Modal({
           </div>
         )}
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
