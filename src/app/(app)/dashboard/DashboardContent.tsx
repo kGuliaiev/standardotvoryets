@@ -210,17 +210,24 @@ export function DashboardContent() {
       <div className="grid grid-cols-1 lg:grid-cols-[1fr_316px] gap-5 items-start">
         {/* Left column (wide) */}
         <div className="space-y-5">
-          {/* My tasks */}
+          {/* My tasks. When the user has no open tasks we collapse to
+              just the header row with a friendly all-clear message —
+              no empty placeholder. */}
           <div className="card overflow-hidden">
             <div className="card-head">
-              <h2 className="font-bold text-ink">Мої завдання</h2>
+              <h2 className="font-bold text-ink">
+                Мої завдання
+                {myTasksTop.length === 0 && (
+                  <span className="ml-2 text-sm font-normal text-light">
+                    · Не виконані завдання відсутні! 🤝
+                  </span>
+                )}
+              </h2>
               <Link href="/tasks" className="text-xs font-semibold text-brand hover:underline">
                 Усі →
               </Link>
             </div>
-            {myTasksTop.length === 0 ? (
-              <div className="py-10 text-center text-light text-sm">Завдань немає</div>
-            ) : (
+            {myTasksTop.length === 0 ? null : (
               <ul className="divide-y divide-hairline">
                 {myTasksTop.map((t) => {
                   const isDone = t.status === 'DONE';
