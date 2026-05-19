@@ -427,10 +427,16 @@ export function StandardBodyEditor({ target, bodyText, bodyUpdatedAt, bodyUpdate
             never has to scroll as a unit. */}
         <div
           className={`${
-            isInModal ? 'lg:sticky lg:top-[88px] lg:self-start' : 'lg:sticky lg:top-4 lg:self-start'
+            isInModal
+              ? 'lg:sticky lg:top-[88px] lg:self-start lg:h-[calc(92vh-110px)]'
+              : 'lg:sticky lg:top-4 lg:self-start lg:h-[calc(100vh-3rem)]'
           }`}
         >
-          <div className="bg-card rounded-xl border border-hairline overflow-hidden flex flex-col lg:max-h-[calc(100vh-110px)]">
+          {/* Card with a hard-bounded height so sticky positioning
+              actually stays put. `h-[...]` (not max-h) keeps the
+              wrapper size predictable — sticky doesn't behave well
+              when its content can grow taller than the scrollport. */}
+          <div className="bg-card rounded-xl border border-hairline overflow-hidden flex flex-col h-full">
             <div className="flex border-b border-hairline shrink-0">
               <RailTabButton
                 active={railTab === 'changes'}
