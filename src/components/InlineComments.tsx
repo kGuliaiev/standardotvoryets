@@ -229,8 +229,23 @@ export function InlineComments({ target, canComment, articleRef }: Props) {
   // Inline highlighting — wrap commented ranges with a span so the
   // text itself shows where comments live, matching Google Docs. The
   // wrapping is reversible: each run unwraps previous marks first,
-  // then re-applies based on the current comments list. Runs whenever
-  // the comment list or body changes.
+  // then re-applies based on the current comments list.
+  //
+  // The effect uses a *content-stable* dependency key instead of the
+  // raw `comments` array. tRPC's 5s polling re-creates the array
+  // reference even when nothing actually changed, and re-running the
+  // unwrap-then-rewrap dance every poll caused the highlights to
+  // flicker on / off in the background. Building the key off only
+  // the fields that affect the marks (id, paragraph index, offsets,
+  // status) means the effect runs exactly when the marks need to
+  // change.
+  const highlightKey = useMemo(
+    () =>
+      (comments ?? [])
+        .map((c) => `${c.id}:${c.paragraphIndex}:${c.startOffset}:${c.endOffset}:${c.status}`)
+        .join('|'),
+    [comments],
+  );
   useEffect(() => {
     const article = articleRef.current;
     if (!article) return;
@@ -248,7 +263,8 @@ export function InlineComments({ target, canComment, articleRef }: Props) {
       if (!(para instanceof HTMLElement)) continue;
       wrapRange(para, c.startOffset, c.endOffset, c.id, c.status === 'RESOLVED');
     }
-  }, [comments, articleRef]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [highlightKey, articleRef]);
 
   // Click on a highlight → scroll the matching rail item into view and
   // pulse it briefly.
