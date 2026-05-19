@@ -167,6 +167,9 @@ export function StandardDetail({ id }: { id: string }) {
   // was opened via the "Імпортувати з Word" CTA — that flow is
   // specifically meant for collaborative-edit imports.
   const [uploadAllowEditsDefault, setUploadAllowEditsDefault] = useState(false);
+  // Which tab the document modal opens on — "+ Створити" → 'empty',
+  // "Імпортувати з Word" → 'upload'.
+  const [docModalMode, setDocModalMode] = useState<'upload' | 'empty'>('upload');
   // ID of the editable document whose collaborative editor is currently
   // shown as a fullscreen modal (null = no editor open).
   const [editDocId, setEditDocId] = useState<string | null>(null);
@@ -522,6 +525,7 @@ export function StandardDetail({ id }: { id: string }) {
                       <button
                         onClick={() => {
                           setUploadAllowEditsDefault(true);
+                          setDocModalMode('upload');
                           setDocModalOpen(true);
                         }}
                         className="inline-flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg bg-blue-700 text-white font-semibold hover:bg-blue-800 transition-colors"
@@ -532,6 +536,7 @@ export function StandardDetail({ id }: { id: string }) {
                       <button
                         onClick={() => {
                           setUploadAllowEditsDefault(false);
+                          setDocModalMode('empty');
                           setDocModalOpen(true);
                         }}
                         // Same filled-blue treatment as the import
@@ -1138,6 +1143,7 @@ export function StandardDetail({ id }: { id: string }) {
         standardId={id}
         onSaved={() => void refetch()}
         defaultAllowEdits={uploadAllowEditsDefault}
+        defaultMode={docModalMode}
       />
 
       {/* Second-stage confirmation for document deletion. The first

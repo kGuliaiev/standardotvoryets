@@ -14,6 +14,9 @@ interface DocumentUploadModalProps {
    *  by the "Імпортувати з Word" entry point that's specifically
    *  intended for collaborative-editing uploads. */
   defaultAllowEdits?: boolean;
+  /** Which tab the modal opens on. "+ Створити" opens on 'empty',
+   *  "Імпортувати з Word" / generic upload opens on 'upload'. */
+  defaultMode?: 'upload' | 'empty';
 }
 
 const TYPE_OPTIONS: {
@@ -50,11 +53,12 @@ export function DocumentUploadModal({
   standardId,
   onSaved,
   defaultAllowEdits = false,
+  defaultMode = 'upload',
 }: DocumentUploadModalProps) {
   const utils = trpc.useUtils();
   // 'upload' — pick a file from disk; 'empty' — type a filename and
   // open the WYSIWYG editor immediately on a blank doc.
-  const [mode, setMode] = useState<'upload' | 'empty'>('upload');
+  const [mode, setMode] = useState<'upload' | 'empty'>(defaultMode);
   const [file, setFile] = useState<File | null>(null);
   const [emptyFilename, setEmptyFilename] = useState('');
   const [version, setVersion] = useState('v1.0');
@@ -75,7 +79,7 @@ export function DocumentUploadModal({
 
   useEffect(() => {
     if (open) {
-      setMode('upload');
+      setMode(defaultMode);
       setFile(null);
       setEmptyFilename('');
       setVersion('v1.0');
@@ -86,7 +90,7 @@ export function DocumentUploadModal({
       setError(null);
       setProgress('idle');
     }
-  }, [open, defaultAllowEdits]);
+  }, [open, defaultAllowEdits, defaultMode]);
 
   // Only .docx can be inlined as editable HTML — the server will convert
   // it via mammoth. For PDF/XLSX/etc. we disable the option.
