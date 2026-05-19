@@ -305,8 +305,8 @@ export function StandardBodyEditor({ target, bodyText, bodyUpdatedAt, bodyUpdate
   // grid column.
   const isInModal = target.kind === 'document';
   const toolbarSticky = isInModal
-    ? 'sticky top-[51px] md:top-[71px] z-10 bg-card -mx-5 md:-mx-7 px-5 md:px-7 py-2 border-b border-hairline'
-    : 'sticky top-0 z-10 bg-card py-2 border-b border-hairline';
+    ? 'sticky top-[51px] md:top-[71px] z-10 bg-card/90 backdrop-blur-md -mx-5 md:-mx-7 px-5 md:px-7 py-2 border-b border-hairline'
+    : 'sticky top-0 z-10 bg-card/90 backdrop-blur-md py-2 border-b border-hairline';
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-[1fr_300px] gap-5 items-start">
@@ -399,19 +399,12 @@ export function StandardBodyEditor({ target, bodyText, bodyUpdatedAt, bodyUpdate
         </article>
       </div>
 
-      {/* Right rail: inline comments panel + recent suggestion decisions.
-          When the editor lives inside the document modal, the title +
-          toolbar are sticky-pinned at the top (~71px) — so the rail
-          must stick lower than that to stay visible, with a matching
-          max-height so the rail itself scrolls if it has lots of
-          comments. */}
-      <div
-        className={`space-y-3 ${
-          isInModal
-            ? 'lg:sticky lg:top-[88px] lg:max-h-[calc(100vh-120px)] lg:overflow-y-auto scrollbar-thin'
-            : 'lg:sticky lg:top-4 lg:max-h-[calc(100vh-2rem)] lg:overflow-y-auto scrollbar-thin'
-        }`}
-      >
+      {/* Right rail: inline comments panel + recent suggestion
+          decisions. Stacked, scrolls together with the body — sticky
+          positioning here fought with the modal's sticky title and
+          caused content overlaps. The rail will be a sibling that
+          follows the body height. */}
+      <div className="space-y-3">
         <InlineComments target={targetInput} canComment={canSuggest} articleRef={articleRef} />
         <aside className="bg-card rounded-xl border border-hairline overflow-hidden">
           <div className="px-4 py-3 border-b border-hairline">

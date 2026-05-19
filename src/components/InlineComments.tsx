@@ -80,6 +80,54 @@ function findParagraphAncestor(node: Node | null): HTMLElement | null {
   return el;
 }
 
+/**
+ * Wrap the [start, end) character range inside `root`'s plain text in
+ * `<span class="inline-comment-mark" data-comment-id=…>`. Splits the
+ * wrapping into per-text-node ranges so it works across formatted
+ * markup (bold, italics, links, …) without crossing element
+ * boundaries.
+ */
+function wrapRange(
+  root: HTMLElement,
+  start: number,
+  end: number,
+  commentId: string,
+  resolved: boolean,
+) {
+  if (end <= start) return;
+  const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+  const targets: { node: Text; from: number; to: number }[] = [];
+  let pos = 0;
+  let node: Text | null;
+  while ((node = walker.nextNode() as Text | null)) {
+    const len = node.nodeValue?.length ?? 0;
+    const nodeStart = pos;
+    const nodeEnd = pos + len;
+    if (nodeEnd > start && nodeStart < end) {
+      const from = Math.max(0, start - nodeStart);
+      const to = Math.min(len, end - nodeStart);
+      if (to > from) targets.push({ node, from, to });
+    }
+    pos = nodeEnd;
+    if (pos >= end) break;
+  }
+  for (const t of targets) {
+    try {
+      const range = document.createRange();
+      range.setStart(t.node, t.from);
+      range.setEnd(t.node, t.to);
+      const span = document.createElement('span');
+      span.className = `inline-comment-mark${resolved ? ' resolved' : ''}`;
+      span.dataset.commentId = commentId;
+      span.title = 'Натисніть, щоб перейти до коментаря';
+      range.surroundContents(span);
+    } catch {
+      // Skip if the range somehow crosses an element boundary — the
+      // worst case is one comment without its inline mark.
+    }
+  }
+}
+
 export function InlineComments({ target, canComment, articleRef }: Props) {
   const utils = trpc.useUtils();
   const { data: session } = useSession();
@@ -185,6 +233,51 @@ export function InlineComments({ target, canComment, articleRef }: Props) {
     return () => window.removeEventListener('keydown', onKey);
   }, [pending]);
 
+  // Inline highlighting — wrap commented ranges with a span so the
+  // text itself shows where comments live, matching Google Docs. The
+  // wrapping is reversible: each run unwraps previous marks first,
+  // then re-applies based on the current comments list. Runs whenever
+  // the comment list or body changes.
+  useEffect(() => {
+    const article = articleRef.current;
+    if (!article) return;
+    // Unwrap any previous marks.
+    article.querySelectorAll('span.inline-comment-mark').forEach((span) => {
+      const parent = span.parentNode;
+      if (!parent) return;
+      while (span.firstChild) parent.insertBefore(span.firstChild, span);
+      parent.removeChild(span);
+      parent.normalize();
+    });
+    if (!comments || comments.length === 0) return;
+    for (const c of comments) {
+      const para = article.querySelector(`[data-paragraph-idx="${c.paragraphIndex}"]`);
+      if (!(para instanceof HTMLElement)) continue;
+      wrapRange(para, c.startOffset, c.endOffset, c.id, c.status === 'RESOLVED');
+    }
+  }, [comments, articleRef]);
+
+  // Click on a highlight → scroll the matching rail item into view and
+  // pulse it briefly.
+  useEffect(() => {
+    const article = articleRef.current;
+    if (!article) return;
+    function onClick(e: MouseEvent) {
+      if (!(e.target instanceof Element)) return;
+      const mark = e.target.closest('.inline-comment-mark');
+      if (!(mark instanceof HTMLElement)) return;
+      const id = mark.dataset.commentId;
+      if (!id) return;
+      const railItem = document.querySelector(`[data-rail-comment-id="${id}"]`);
+      if (!(railItem instanceof HTMLElement)) return;
+      railItem.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      railItem.classList.add('inline-comment-flash');
+      setTimeout(() => railItem.classList.remove('inline-comment-flash'), 1500);
+    }
+    article.addEventListener('click', onClick);
+    return () => article.removeEventListener('click', onClick);
+  }, [articleRef]);
+
   function submitDraft() {
     if (!pending) return;
     const body = draft.trim();
@@ -266,6 +359,7 @@ export function InlineComments({ target, canComment, articleRef }: Props) {
                     return (
                       <li
                         key={c.id}
+                        data-rail-comment-id={c.id}
                         className={`rounded-md border px-2.5 py-2 text-[11px] ${
                           isResolved
                             ? 'border-hairline bg-pill/40 opacity-70'

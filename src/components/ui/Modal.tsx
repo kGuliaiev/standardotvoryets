@@ -60,7 +60,7 @@ export function Modal({
     <div
       role="dialog"
       aria-modal="true"
-      className="fixed inset-0 z-[200] flex md:items-center justify-center bg-[rgba(8,14,33,0.55)] backdrop-blur-sm md:p-4 animate-fade-in items-end"
+      className="fixed inset-0 z-[200] flex md:items-center justify-center bg-[rgba(8,14,33,0.70)] backdrop-blur-md md:p-4 animate-fade-in items-end"
       onMouseDown={(e) => {
         if (closeOnOverlay && e.target === e.currentTarget) onClose();
       }}
@@ -81,7 +81,7 @@ export function Modal({
           // long-scrolling modals — especially `size="full"` editors.
           // `bg-card` matches the panel so content scrolling underneath
           // doesn't bleed through.
-          <div className="sticky top-0 z-30 bg-card flex items-start justify-between gap-4 px-5 md:px-7 pt-3 md:pt-7 pb-4 border-b border-hairline">
+          <div className="sticky top-0 z-30 bg-card/90 backdrop-blur-md flex items-start justify-between gap-4 px-5 md:px-7 pt-3 md:pt-7 pb-4 border-b border-hairline">
             <div>
               {title && (
                 <h3 className="text-[16px] md:text-[18px] font-extrabold text-navy">{title}</h3>

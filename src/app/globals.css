@@ -268,6 +268,39 @@
     border-radius: 6px;
   }
 
+  /* In-body highlight on a selection that has at least one comment
+     anchored to it. Tinted amber for OPEN comments, muted grey for
+     RESOLVED ones. Clickable — InlineComments listens for a click on
+     `.inline-comment-mark` and scrolls the matching rail item into
+     view with a flash. */
+  .inline-comment-mark {
+    background-color: rgba(251, 191, 36, 0.22);
+    border-bottom: 1px dotted rgba(245, 158, 11, 0.65);
+    cursor: pointer;
+    border-radius: 2px;
+    padding: 0 1px;
+    transition: background-color 120ms ease;
+  }
+  .inline-comment-mark:hover {
+    background-color: rgba(251, 191, 36, 0.45);
+  }
+  .inline-comment-mark.resolved {
+    background-color: rgba(148, 163, 184, 0.18);
+    border-bottom-color: rgba(148, 163, 184, 0.55);
+  }
+  .inline-comment-mark.resolved:hover {
+    background-color: rgba(148, 163, 184, 0.32);
+  }
+  /* Dark-mode subtlety — lighter alpha so the amber doesn't burn. */
+  .dark .inline-comment-mark {
+    background-color: rgba(251, 191, 36, 0.18);
+    border-bottom-color: rgba(251, 191, 36, 0.5);
+  }
+  .dark .inline-comment-mark.resolved {
+    background-color: rgba(148, 163, 184, 0.12);
+    border-bottom-color: rgba(148, 163, 184, 0.45);
+  }
+
   /* Token utility classes (so bg-card / text-ink etc. work as Tailwind tokens via config) */
   .scrollbar-thin {
     scrollbar-width: thin;
