@@ -417,30 +417,45 @@ export function StandardBodyEditor({ target, bodyText, bodyUpdatedAt, bodyUpdate
       {/* Two columns under the sticky toolbar: body article on the
           left, comments + decisions rail on the right. */}
       <div className="grid grid-cols-1 lg:grid-cols-[1fr_300px] gap-5 items-start">
-        {/* Body. For documents we render an inline WYSIWYG editor so the
-            user gets the Word-style toolbar without leaving the page.
-            For standards we keep the paragraph-by-paragraph suggestion
-            view (committee-style consensus flow). */}
-        {inlineEditMode ? (
-          <article
-            ref={articleRef}
-            className="bg-card rounded-xl border border-hairline overflow-hidden"
-          >
-            <RichTextEditor
-              key="inline-doc-editor"
-              initialHtml={inlineHtml}
-              onChange={(html) => {
-                setInlineHtml(html);
-                if (!inlineDirty) setInlineDirty(true);
-              }}
-              className="bg-card"
-            />
-          </article>
-        ) : (
+        <div className="space-y-4">
+          {/* Sticky WYSIWYG editor for documents — toolbar stays pinned
+              to the top of the modal while the paragraph view below
+              scrolls. Edits saved via the "Зберегти" button in the
+              header strip. */}
+          {inlineEditMode && (
+            <div
+              className={
+                isInModal
+                  ? 'sticky top-[103px] md:top-[123px] z-[5] bg-card/95 backdrop-blur-md rounded-xl border border-hairline shadow-sm overflow-hidden'
+                  : 'sticky top-[52px] z-[5] bg-card/95 backdrop-blur-md rounded-xl border border-hairline shadow-sm overflow-hidden'
+              }
+            >
+              <RichTextEditor
+                key="inline-doc-editor"
+                initialHtml={inlineHtml}
+                onChange={(html) => {
+                  setInlineHtml(html);
+                  if (!inlineDirty) setInlineDirty(true);
+                }}
+                className="bg-card max-h-[42vh] overflow-y-auto"
+              />
+            </div>
+          )}
+
+          {/* Paragraph view — read-only article + per-paragraph
+              suggestion buttons + inline-comment overlay. Always
+              rendered so commenting and suggesting works alongside
+              the WYSIWYG editor above. */}
           <article
             ref={articleRef}
             className="bg-card rounded-xl border border-hairline p-5 sm:p-8 space-y-1"
           >
+            {inlineEditMode && (
+              <p className="text-[11px] text-light italic mb-3 -mt-1">
+                Нижче — обговорення документа за параграфами: коментарі та правки. Текст редагуйте у
+                редакторі зверху.
+              </p>
+            )}
             {paragraphs.map((html, idx) => {
               const pending = pendingBySection.get(idx) ?? [];
               return (
@@ -473,7 +488,7 @@ export function StandardBodyEditor({ target, bodyText, bodyUpdatedAt, bodyUpdate
               </div>
             )}
           </article>
-        )}
+        </div>
 
         {/* Right rail card with two tabs: Зміни (suggestions) and
             Коментарі (inline). Sticky so the rail stays put while the
@@ -537,17 +552,13 @@ export function StandardBodyEditor({ target, bodyText, bodyUpdatedAt, bodyUpdate
           {/* InlineComments overlay (no rail rendering) mounted
               always so selection capture, the floating composer, and
               inline highlights work regardless of which tab is
-              active. Skipped for inline-edit mode — the overlay wraps
-              text nodes in spans which would fight TipTap's
-              contenteditable. */}
-          {!inlineEditMode && (
-            <InlineComments
-              target={targetInput}
-              canComment={canSuggest}
-              articleRef={articleRef}
-              showRail={false}
-            />
-          )}
+              active. */}
+          <InlineComments
+            target={targetInput}
+            canComment={canSuggest}
+            articleRef={articleRef}
+            showRail={false}
+          />
         </div>
       </div>
 
