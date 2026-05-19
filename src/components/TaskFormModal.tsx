@@ -273,14 +273,17 @@ export function TaskFormModal({
           <div>
             <label className="field-label">Пріоритет</label>
             <div className="relative">
-              {/* Decorative dot — sits ~14px from the left edge.
-                  Select needs pl-9 (≈ 36px) so the first letter
-                  clears the dot rather than overlapping it. */}
+              {/* Decorative dot at 12px. The select's left padding is
+                  set via inline style (not a utility) because the
+                  `.select` component class applies px-3 in @layer
+                  components and the utility override was unreliable —
+                  inline style wins by specificity, guaranteed. */}
               <span
-                className={`absolute left-3 top-1/2 -translate-y-1/2 w-2 h-2 rounded-full pointer-events-none ${PRIORITY_DOT[form.priority]}`}
+                className={`absolute left-3 top-1/2 -translate-y-1/2 w-2 h-2 rounded-full pointer-events-none z-10 ${PRIORITY_DOT[form.priority]}`}
               />
               <select
-                className="select pl-9"
+                className="select"
+                style={{ paddingLeft: '2.25rem' }}
                 value={form.priority}
                 onChange={(e) =>
                   setForm((f) => ({
