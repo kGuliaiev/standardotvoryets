@@ -1,6 +1,7 @@
 'use client';
 
 import { type Session } from 'next-auth';
+import Image from 'next/image';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { signOut } from 'next-auth/react';
@@ -185,16 +186,16 @@ export function Sidebar({ session, forceExpanded = false }: SidebarProps) {
           type="button"
           onClick={() => setCollapsed((v) => !v)}
           title={collapsed ? 'Розгорнути меню' : 'Згорнути меню'}
-          className="w-8 h-8 bg-navy rounded-[10px] flex items-center justify-center shrink-0 hover:opacity-90 transition-opacity"
+          className="w-9 h-9 rounded-[10px] flex items-center justify-center shrink-0 hover:opacity-80 transition-opacity overflow-hidden"
         >
-          <svg width="16" height="16" viewBox="0 0 22 22" fill="none">
-            <path
-              d="M3 5h16M3 11h16M3 17h10"
-              stroke="white"
-              strokeWidth="2.5"
-              strokeLinecap="round"
-            />
-          </svg>
+          <Image
+            src="/logo.png"
+            alt="Стандартотворець"
+            width={36}
+            height={36}
+            priority
+            className="object-contain"
+          />
         </button>
         {!collapsed && (
           <>

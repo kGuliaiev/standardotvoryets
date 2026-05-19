@@ -131,28 +131,35 @@ export function SystemSettingsForm() {
 
   return (
     <div className="space-y-5">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-ink">Налаштування системи</h1>
-          <p className="text-sm text-mid mt-1">
-            Правила сповіщень, канали доставки та лід-час нагадувань
-          </p>
+      {/* Sticky page header with the Save button — settings forms get
+          long, and the only way to commit changes used to require
+          scrolling all the way back up. Negative margin + matching
+          padding extend the bg across the surrounding main padding so
+          scrolling content doesn't peek through on the sides. */}
+      <div className="sticky top-[-1rem] md:top-[-1.5rem] z-20 -mx-4 md:-mx-6 px-4 md:px-6 pt-4 md:pt-6 pb-3 bg-page/95 backdrop-blur-md border-b border-hairline">
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-2xl font-bold text-ink">Налаштування системи</h1>
+            <p className="text-sm text-mid mt-1">
+              Правила сповіщень, канали доставки та лід-час нагадувань
+            </p>
+          </div>
+          <button
+            onClick={save}
+            disabled={!form || update.isPending}
+            className="inline-flex items-center gap-1.5 rounded-lg bg-blue-700 px-4 py-2 text-sm font-medium text-white hover:bg-blue-800 transition-colors disabled:opacity-50"
+          >
+            <Save size={16} />
+            {update.isPending ? 'Збереження…' : 'Зберегти'}
+          </button>
         </div>
-        <button
-          onClick={save}
-          disabled={!form || update.isPending}
-          className="inline-flex items-center gap-1.5 rounded-lg bg-blue-700 px-4 py-2 text-sm font-medium text-white hover:bg-blue-800 transition-colors disabled:opacity-50"
-        >
-          <Save size={16} />
-          {update.isPending ? 'Збереження…' : 'Зберегти'}
-        </button>
-      </div>
 
-      {savedAt && (
-        <div className="rounded-lg bg-emerald-50 border border-emerald-200 px-4 py-2 text-sm text-emerald-800">
-          Збережено о {savedAt.toLocaleTimeString('uk-UA')}
-        </div>
-      )}
+        {savedAt && (
+          <div className="mt-3 rounded-lg bg-emerald-50 border border-emerald-200 px-4 py-2 text-sm text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-300 dark:border-emerald-700">
+            Збережено о {savedAt.toLocaleTimeString('uk-UA')}
+          </div>
+        )}
+      </div>
 
       {isLoading || !form ? (
         <div className="bg-card rounded-xl border border-hairline p-12 text-center text-light text-sm">

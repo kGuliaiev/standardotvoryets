@@ -8,6 +8,13 @@ export const metadata: Metadata = {
     default: 'Стандартотворець',
   },
   description: 'Платформа управління lifecycle стандартів у робочих групах',
+  icons: {
+    icon: [
+      { url: '/logo.png', type: 'image/png' },
+      { url: '/favicon.ico', sizes: 'any' },
+    ],
+    apple: '/logo.png',
+  },
 };
 
 // Inline script runs before React hydration to avoid theme flash
