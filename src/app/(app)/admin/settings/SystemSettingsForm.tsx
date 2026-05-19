@@ -130,7 +130,7 @@ export function SystemSettingsForm() {
   }
 
   return (
-    <div className="space-y-5 max-w-4xl">
+    <div className="space-y-5">
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-ink">Налаштування системи</h1>
@@ -160,222 +160,231 @@ export function SystemSettingsForm() {
         </div>
       ) : (
         <>
-          {/* Channels */}
-          <Card icon={<Bell size={18} />} title="Канали доставки">
-            <p className="text-xs text-mid mb-3">
-              Глобальні канали для всіх типів подій. Користувач може вимкнути для себе в профілі.
-            </p>
-            <Toggle
-              label="В додатку (дзвіночок у меню)"
-              checked={form.channelInApp}
-              onChange={(v) => set('channelInApp', v)}
-            />
-            <Toggle
-              label={
-                <span className="flex items-center gap-1.5">
-                  <Mail size={14} className="text-mid" /> Email
-                </span>
-              }
-              checked={form.channelEmail}
-              onChange={(v) => set('channelEmail', v)}
-            />
-          </Card>
+          {/* Settings cards in a 2-column grid on desktop so the
+              page doesn't waste the right half on wider screens. The
+              reference matrix at the bottom stays full-width because
+              its table needs the room. `auto-rows-min` keeps each card
+              sized to its own content instead of stretching to match
+              its row neighbour. */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-5 auto-rows-min items-start">
+            {/* Channels */}
+            <Card icon={<Bell size={18} />} title="Канали доставки">
+              <p className="text-xs text-mid mb-3">
+                Глобальні канали для всіх типів подій. Користувач може вимкнути для себе в профілі.
+              </p>
+              <Toggle
+                label="В додатку (дзвіночок у меню)"
+                checked={form.channelInApp}
+                onChange={(v) => set('channelInApp', v)}
+              />
+              <Toggle
+                label={
+                  <span className="flex items-center gap-1.5">
+                    <Mail size={14} className="text-mid" /> Email
+                  </span>
+                }
+                checked={form.channelEmail}
+                onChange={(v) => set('channelEmail', v)}
+              />
+            </Card>
 
-          {/* Meetings */}
-          <Card icon={<Calendar size={18} />} title="Засідання">
-            <Toggle
-              label="Сповіщати запрошення при створенні засідання"
-              checked={form.meetingInviteOnCreate}
-              onChange={(v) => set('meetingInviteOnCreate', v)}
-            />
-            <Toggle
-              label="Сповіщати при зміні дати або порядку денного"
-              checked={form.meetingChangeNotify}
-              onChange={(v) => set('meetingChangeNotify', v)}
-            />
-            <Toggle
-              label="Сповіщати голову та секретаря, коли учасник відмовляється"
-              checked={form.attendanceDeclinedNotify}
-              onChange={(v) => set('attendanceDeclinedNotify', v)}
-            />
-            <Toggle
-              label="Сповіщати РГ, коли протокол отримав номер (опубліковано)"
-              checked={form.protocolPublishedNotify}
-              onChange={(v) => set('protocolPublishedNotify', v)}
-            />
-            <Field label="Нагадування №1 — за скільки часу до засідання">
-              <select
-                value={form.meetingRemindLead1Hours}
-                onChange={(e) => set('meetingRemindLead1Hours', Number(e.target.value))}
-                className="select"
-              >
-                {HOUR_OPTIONS.map((o) => (
-                  <option key={o.v} value={o.v}>
-                    {o.l}
-                  </option>
-                ))}
-              </select>
-            </Field>
-            <Field label="Нагадування №2 (необов'язкове)">
-              <select
-                value={form.meetingRemindLead2Hours ?? -1}
-                onChange={(e) => {
-                  const n = Number(e.target.value);
-                  set('meetingRemindLead2Hours', n < 0 ? null : n);
-                }}
-                className="select"
-              >
-                <option value={-1}>— не використовувати —</option>
-                {HOUR_OPTIONS.map((o) => (
-                  <option key={o.v} value={o.v}>
-                    {o.l}
-                  </option>
-                ))}
-              </select>
-            </Field>
-          </Card>
+            {/* Meetings */}
+            <Card icon={<Calendar size={18} />} title="Засідання">
+              <Toggle
+                label="Сповіщати запрошення при створенні засідання"
+                checked={form.meetingInviteOnCreate}
+                onChange={(v) => set('meetingInviteOnCreate', v)}
+              />
+              <Toggle
+                label="Сповіщати при зміні дати або порядку денного"
+                checked={form.meetingChangeNotify}
+                onChange={(v) => set('meetingChangeNotify', v)}
+              />
+              <Toggle
+                label="Сповіщати голову та секретаря, коли учасник відмовляється"
+                checked={form.attendanceDeclinedNotify}
+                onChange={(v) => set('attendanceDeclinedNotify', v)}
+              />
+              <Toggle
+                label="Сповіщати РГ, коли протокол отримав номер (опубліковано)"
+                checked={form.protocolPublishedNotify}
+                onChange={(v) => set('protocolPublishedNotify', v)}
+              />
+              <Field label="Нагадування №1 — за скільки часу до засідання">
+                <select
+                  value={form.meetingRemindLead1Hours}
+                  onChange={(e) => set('meetingRemindLead1Hours', Number(e.target.value))}
+                  className="select"
+                >
+                  {HOUR_OPTIONS.map((o) => (
+                    <option key={o.v} value={o.v}>
+                      {o.l}
+                    </option>
+                  ))}
+                </select>
+              </Field>
+              <Field label="Нагадування №2 (необов'язкове)">
+                <select
+                  value={form.meetingRemindLead2Hours ?? -1}
+                  onChange={(e) => {
+                    const n = Number(e.target.value);
+                    set('meetingRemindLead2Hours', n < 0 ? null : n);
+                  }}
+                  className="select"
+                >
+                  <option value={-1}>— не використовувати —</option>
+                  {HOUR_OPTIONS.map((o) => (
+                    <option key={o.v} value={o.v}>
+                      {o.l}
+                    </option>
+                  ))}
+                </select>
+              </Field>
+            </Card>
 
-          {/* Stages */}
-          <Card icon={<Target size={18} />} title="Етапи стандартів (поетапний план)">
-            <Toggle
-              label="Сповіщати про наближення дедлайну етапу"
-              checked={form.stageDueSoonNotify}
-              onChange={(v) => set('stageDueSoonNotify', v)}
-            />
-            <Field label="Перше нагадування (in-app, всім членам РГ)">
-              <select
-                value={form.stageDueLeadDays1}
-                onChange={(e) => set('stageDueLeadDays1', Number(e.target.value))}
-                className="select"
-              >
-                {DAY_OPTIONS.map((o) => (
-                  <option key={o.v} value={o.v}>
-                    {o.l}
-                  </option>
-                ))}
-              </select>
-            </Field>
-            <Field label="Друге нагадування (in-app + email керівництву)">
-              <select
-                value={form.stageDueLeadDays2}
-                onChange={(e) => set('stageDueLeadDays2', Number(e.target.value))}
-                className="select"
-              >
-                {DAY_OPTIONS.map((o) => (
-                  <option key={o.v} value={o.v}>
-                    {o.l}
-                  </option>
-                ))}
-              </select>
-            </Field>
-            <Toggle
-              label="Сповіщати про прострочений етап (один раз)"
-              checked={form.stageOverdueNotify}
-              onChange={(v) => set('stageOverdueNotify', v)}
-            />
-            <Toggle
-              label="Сповіщати керівництво, коли етап підтверджено"
-              checked={form.stageCompletedNotify}
-              onChange={(v) => set('stageCompletedNotify', v)}
-            />
-          </Card>
+            {/* Stages */}
+            <Card icon={<Target size={18} />} title="Етапи стандартів (поетапний план)">
+              <Toggle
+                label="Сповіщати про наближення дедлайну етапу"
+                checked={form.stageDueSoonNotify}
+                onChange={(v) => set('stageDueSoonNotify', v)}
+              />
+              <Field label="Перше нагадування (in-app, всім членам РГ)">
+                <select
+                  value={form.stageDueLeadDays1}
+                  onChange={(e) => set('stageDueLeadDays1', Number(e.target.value))}
+                  className="select"
+                >
+                  {DAY_OPTIONS.map((o) => (
+                    <option key={o.v} value={o.v}>
+                      {o.l}
+                    </option>
+                  ))}
+                </select>
+              </Field>
+              <Field label="Друге нагадування (in-app + email керівництву)">
+                <select
+                  value={form.stageDueLeadDays2}
+                  onChange={(e) => set('stageDueLeadDays2', Number(e.target.value))}
+                  className="select"
+                >
+                  {DAY_OPTIONS.map((o) => (
+                    <option key={o.v} value={o.v}>
+                      {o.l}
+                    </option>
+                  ))}
+                </select>
+              </Field>
+              <Toggle
+                label="Сповіщати про прострочений етап (один раз)"
+                checked={form.stageOverdueNotify}
+                onChange={(v) => set('stageOverdueNotify', v)}
+              />
+              <Toggle
+                label="Сповіщати керівництво, коли етап підтверджено"
+                checked={form.stageCompletedNotify}
+                onChange={(v) => set('stageCompletedNotify', v)}
+              />
+            </Card>
 
-          {/* Weekly digest */}
-          <Card icon={<CalendarDays size={18} />} title="Тижневий звіт (понеділок 09:00)">
-            <Toggle
-              label="Надсилати тижневий звіт керівникам, заступникам, секретарям РГ та керівництву"
-              checked={form.weeklyDigestEnabled}
-              onChange={(v) => set('weeklyDigestEnabled', v)}
-            />
-            <p className="text-xs text-light leading-relaxed">
-              Звіт містить: прострочені етапи, дедлайни найближчих 7 днів, заплановані засідання
-              тижня, відкриті голосування. Порожні звіти не надсилаються.
-            </p>
-          </Card>
+            {/* Weekly digest */}
+            <Card icon={<CalendarDays size={18} />} title="Тижневий звіт (понеділок 09:00)">
+              <Toggle
+                label="Надсилати тижневий звіт керівникам, заступникам, секретарям РГ та керівництву"
+                checked={form.weeklyDigestEnabled}
+                onChange={(v) => set('weeklyDigestEnabled', v)}
+              />
+              <p className="text-xs text-light leading-relaxed">
+                Звіт містить: прострочені етапи, дедлайни найближчих 7 днів, заплановані засідання
+                тижня, відкриті голосування. Порожні звіти не надсилаються.
+              </p>
+            </Card>
 
-          {/* Tasks */}
-          <Card icon={<CheckSquare size={18} />} title="Завдання">
-            <Toggle
-              label="Сповіщати виконавця при призначенні завдання"
-              checked={form.taskAssignNotify}
-              onChange={(v) => set('taskAssignNotify', v)}
-            />
-            <Toggle
-              label="Сповіщати при прострочці дедлайну"
-              checked={form.taskOverdueNotify}
-              onChange={(v) => set('taskOverdueNotify', v)}
-            />
-            <Toggle
-              label="Сповіщати ініціатора про завершення завдання"
-              checked={form.taskCompleteNotify}
-              onChange={(v) => set('taskCompleteNotify', v)}
-            />
-            <Field label="Нагадування за скільки часу до терміну">
-              <select
-                value={form.taskDeadlineLeadHours}
-                onChange={(e) => set('taskDeadlineLeadHours', Number(e.target.value))}
-                className="select"
-              >
-                {HOUR_OPTIONS.map((o) => (
-                  <option key={o.v} value={o.v}>
-                    {o.l}
-                  </option>
-                ))}
-              </select>
-            </Field>
-          </Card>
+            {/* Tasks */}
+            <Card icon={<CheckSquare size={18} />} title="Завдання">
+              <Toggle
+                label="Сповіщати виконавця при призначенні завдання"
+                checked={form.taskAssignNotify}
+                onChange={(v) => set('taskAssignNotify', v)}
+              />
+              <Toggle
+                label="Сповіщати при прострочці дедлайну"
+                checked={form.taskOverdueNotify}
+                onChange={(v) => set('taskOverdueNotify', v)}
+              />
+              <Toggle
+                label="Сповіщати ініціатора про завершення завдання"
+                checked={form.taskCompleteNotify}
+                onChange={(v) => set('taskCompleteNotify', v)}
+              />
+              <Field label="Нагадування за скільки часу до терміну">
+                <select
+                  value={form.taskDeadlineLeadHours}
+                  onChange={(e) => set('taskDeadlineLeadHours', Number(e.target.value))}
+                  className="select"
+                >
+                  {HOUR_OPTIONS.map((o) => (
+                    <option key={o.v} value={o.v}>
+                      {o.l}
+                    </option>
+                  ))}
+                </select>
+              </Field>
+            </Card>
 
-          {/* Votes */}
-          <Card icon={<VoteIcon size={18} />} title="Голосування">
-            <Toggle
-              label="Сповіщати при відкритті голосування"
-              checked={form.voteOpenedNotify}
-              onChange={(v) => set('voteOpenedNotify', v)}
-            />
-            <Toggle
-              label="Сповіщати при закритті голосування"
-              checked={form.voteClosedNotify}
-              onChange={(v) => set('voteClosedNotify', v)}
-            />
-            <Field label="Нагадування за скільки часу до закриття">
-              <select
-                value={form.voteClosingLeadHours}
-                onChange={(e) => set('voteClosingLeadHours', Number(e.target.value))}
-                className="select"
-              >
-                {HOUR_OPTIONS.map((o) => (
-                  <option key={o.v} value={o.v}>
-                    {o.l}
-                  </option>
-                ))}
-              </select>
-            </Field>
-          </Card>
+            {/* Votes */}
+            <Card icon={<VoteIcon size={18} />} title="Голосування">
+              <Toggle
+                label="Сповіщати при відкритті голосування"
+                checked={form.voteOpenedNotify}
+                onChange={(v) => set('voteOpenedNotify', v)}
+              />
+              <Toggle
+                label="Сповіщати при закритті голосування"
+                checked={form.voteClosedNotify}
+                onChange={(v) => set('voteClosedNotify', v)}
+              />
+              <Field label="Нагадування за скільки часу до закриття">
+                <select
+                  value={form.voteClosingLeadHours}
+                  onChange={(e) => set('voteClosingLeadHours', Number(e.target.value))}
+                  className="select"
+                >
+                  {HOUR_OPTIONS.map((o) => (
+                    <option key={o.v} value={o.v}>
+                      {o.l}
+                    </option>
+                  ))}
+                </select>
+              </Field>
+            </Card>
 
-          {/* Standards & comments & docs */}
-          <Card icon={<FileText size={18} />} title="Стандарти, коментарі, документи">
-            <Toggle
-              label="Сповіщати при зміні статусу стандарту"
-              checked={form.standardStatusNotify}
-              onChange={(v) => set('standardStatusNotify', v)}
-            />
-            <Toggle
-              label={
-                <span className="flex items-center gap-1.5">
-                  <MessageSquare size={14} className="text-mid" /> Згадки в коментарях (@user)
-                </span>
-              }
-              checked={form.commentMentionNotify}
-              onChange={(v) => set('commentMentionNotify', v)}
-            />
-            <Toggle
-              label="Сповіщати при завантаженні документів"
-              checked={form.documentUploadNotify}
-              onChange={(v) => set('documentUploadNotify', v)}
-            />
-          </Card>
+            {/* Standards & comments & docs */}
+            <Card icon={<FileText size={18} />} title="Стандарти, коментарі, документи">
+              <Toggle
+                label="Сповіщати при зміні статусу стандарту"
+                checked={form.standardStatusNotify}
+                onChange={(v) => set('standardStatusNotify', v)}
+              />
+              <Toggle
+                label={
+                  <span className="flex items-center gap-1.5">
+                    <MessageSquare size={14} className="text-mid" /> Згадки в коментарях (@user)
+                  </span>
+                }
+                checked={form.commentMentionNotify}
+                onChange={(v) => set('commentMentionNotify', v)}
+              />
+              <Toggle
+                label="Сповіщати при завантаженні документів"
+                checked={form.documentUploadNotify}
+                onChange={(v) => set('documentUploadNotify', v)}
+              />
+            </Card>
+          </div>
 
-          {/* Reference: notification matrix */}
+          {/* Reference: notification matrix — kept full-width so the
+              4-column rules table has room to breathe. */}
           <Card icon={<Bell size={18} />} title="Правила сповіщень — коротко">
             <table className="w-full text-xs">
               <thead>
