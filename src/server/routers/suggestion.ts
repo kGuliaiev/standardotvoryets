@@ -554,8 +554,13 @@ export const suggestionRouter = createTRPCRouter({
       const before = { bodyText: target.body ?? '' };
 
       if (target.kind === 'standard') {
-        const [deleted, updated] = await ctx.db.$transaction([
+        // Wipe both suggestions AND inline comments — every anchor
+        // (paragraphIndex + char offsets) referenced the OLD body and
+        // is meaningless after the import. Leaving comments behind
+        // would silently point at the wrong text (or no text at all).
+        const [deletedSugg, deletedComments, updated] = await ctx.db.$transaction([
           ctx.db.standardSuggestion.deleteMany({ where: { standardId: target.standardId } }),
+          ctx.db.inlineComment.deleteMany({ where: { standardId: target.standardId } }),
           ctx.db.standard.update({
             where: { id: target.standardId },
             data: {
@@ -572,13 +577,20 @@ export const suggestionRouter = createTRPCRouter({
           entityId: target.standardId,
           before,
           after: { bodyText: updated.bodyText ?? '' },
-          note: `Замінено текст документа (імпорт). Видалено правок: ${deleted.count}.`,
+          note:
+            `Замінено текст документа (імпорт). Видалено правок: ${deletedSugg.count}, ` +
+            `inline-коментарів: ${deletedComments.count}.`,
         });
-        return { ...updated, droppedSuggestionCount: deleted.count };
+        return {
+          ...updated,
+          droppedSuggestionCount: deletedSugg.count,
+          droppedInlineCommentCount: deletedComments.count,
+        };
       }
 
-      const [deleted, updated] = await ctx.db.$transaction([
+      const [deletedSugg, deletedComments, updated] = await ctx.db.$transaction([
         ctx.db.standardSuggestion.deleteMany({ where: { documentId: target.documentId } }),
+        ctx.db.inlineComment.deleteMany({ where: { documentId: target.documentId } }),
         ctx.db.document.update({
           where: { id: target.documentId },
           data: {
@@ -595,8 +607,14 @@ export const suggestionRouter = createTRPCRouter({
         entityId: target.documentId,
         before,
         after: { bodyText: updated.bodyHtml ?? '' },
-        note: `Замінено текст документа (імпорт). Видалено правок: ${deleted.count}.`,
+        note:
+          `Замінено текст документа (імпорт). Видалено правок: ${deletedSugg.count}, ` +
+          `inline-коментарів: ${deletedComments.count}.`,
       });
-      return { ...updated, droppedSuggestionCount: deleted.count };
+      return {
+        ...updated,
+        droppedSuggestionCount: deletedSugg.count,
+        droppedInlineCommentCount: deletedComments.count,
+      };
     }),
 });

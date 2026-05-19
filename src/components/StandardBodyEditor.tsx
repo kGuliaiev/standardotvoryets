@@ -520,6 +520,7 @@ export function StandardBodyEditor({ target, bodyText, bodyUpdatedAt, bodyUpdate
       <ImportConfirmModal
         pending={pendingImport}
         pendingSuggestionCount={pendingSuggestionCount}
+        inlineCommentsCount={inlineCommentsTotal}
         isApplying={replaceBodyMutation.isPending}
         onCancel={() => setPendingImport(null)}
         onConfirm={() => {
@@ -1136,17 +1137,40 @@ function ChangesPanel({
 function ImportConfirmModal({
   pending,
   pendingSuggestionCount,
+  inlineCommentsCount,
   isApplying,
   onCancel,
   onConfirm,
 }: {
   pending: { html: string; filename: string } | null;
   pendingSuggestionCount: number;
+  inlineCommentsCount: number;
   isApplying: boolean;
   onCancel: () => void;
   onConfirm: () => void;
 }) {
   if (!pending) return null;
+  const willDelete: string[] = [];
+  if (pendingSuggestionCount > 0) {
+    willDelete.push(
+      `${pendingSuggestionCount} ${pluralizeUk(
+        pendingSuggestionCount,
+        'відкриту правку',
+        'відкриті правки',
+        'відкритих правок',
+      )}`,
+    );
+  }
+  if (inlineCommentsCount > 0) {
+    willDelete.push(
+      `${inlineCommentsCount} inline-${pluralizeUk(
+        inlineCommentsCount,
+        'коментар',
+        'коментарі',
+        'коментарів',
+      )}`,
+    );
+  }
   return (
     <Modal open={!!pending} onClose={onCancel} title="Замінити текст документа?" size="md">
       <div className="space-y-4">
@@ -1154,21 +1178,12 @@ function ImportConfirmModal({
           Імпорт <span className="font-semibold">«{pending.filename}»</span> повністю замінить
           поточний текст документа.
         </p>
-        {pendingSuggestionCount > 0 && (
+        {willDelete.length > 0 && (
           <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-700 rounded-lg px-3 py-2.5 text-xs text-amber-700 dark:text-amber-300 inline-flex items-start gap-2">
             <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
             <span>
-              Також буде видалено{' '}
-              <strong>
-                {pendingSuggestionCount}{' '}
-                {pluralizeUk(
-                  pendingSuggestionCount,
-                  'відкриту правку',
-                  'відкриті правки',
-                  'відкритих правок',
-                )}
-              </strong>{' '}
-              — їхні позиції в параграфах втратять сенс після заміни.
+              Також буде видалено <strong>{willDelete.join(' та ')}</strong> — вони прив&apos;язані
+              до параграфів попереднього тексту й не матимуть сенсу після заміни.
             </span>
           </div>
         )}
