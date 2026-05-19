@@ -32,7 +32,7 @@ function slugify(s: string): string {
     .slice(0, 80);
 }
 
-export async function GET(_req: Request, { params }: { params: { id: string } }) {
+export async function GET(req: Request, { params }: { params: { id: string } }) {
   const session = await getServerSession(authOptions);
   if (!session?.user) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -67,17 +67,41 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
 
-  const html = normalizeBodyHtml(standard.bodyText);
+  // When ?documentId=… is present we export THAT document's bodyHtml
+  // instead of the standard body. Used by the documents tab to let
+  // users download a .docx generated from an editor-only document
+  // (one that was created empty, no S3 object behind it).
+  const url = new URL(req.url);
+  const documentId = url.searchParams.get('documentId');
+  const customFilename = url.searchParams.get('filename');
+
+  let html: string;
+  let headerTitle: string;
+  let filenameBase: string;
+
+  if (documentId) {
+    const doc = await db.document.findUnique({
+      where: { id: documentId },
+      select: { standardId: true, filename: true, bodyHtml: true },
+    });
+    if (doc?.standardId !== params.id) {
+      return NextResponse.json({ error: 'Document not found' }, { status: 404 });
+    }
+    html = normalizeBodyHtml(doc.bodyHtml);
+    headerTitle = doc.filename.replace(/\.docx$/i, '');
+    filenameBase = slugify(customFilename ?? headerTitle) || 'document';
+  } else {
+    html = normalizeBodyHtml(standard.bodyText);
+    headerTitle = standard.code ? `${standard.code} ${standard.title}`.trim() : standard.title;
+    filenameBase = slugify(headerTitle) || 'standard';
+  }
+
   if (!html.trim()) {
     return NextResponse.json({ error: 'Текст документа порожній' }, { status: 422 });
   }
 
-  const headerTitle = standard.code ? `${standard.code} ${standard.title}`.trim() : standard.title;
-
   const doc = htmlBodyToDocx(html, headerTitle);
   const buffer = await Packer.toBuffer(doc);
-
-  const filenameBase = slugify(headerTitle) || 'standard';
   // RFC 5987 filename* lets us safely send Cyrillic characters.
   const dispositionAscii = `${filenameBase.replace(/[^\x20-\x7E]/g, '_')}.docx`;
   const dispositionUtf8 = encodeURIComponent(`${filenameBase}.docx`);

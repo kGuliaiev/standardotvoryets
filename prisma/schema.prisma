@@ -466,8 +466,11 @@ model Document {
   uploadedById String
   type         DocumentType
   filename     String
-  s3Key        String       @unique
-  sizeBytes    Int
+  /// Object-storage key for documents uploaded from a file. Null for
+  /// documents created empty in the editor — those live only as
+  /// bodyHtml until exported.
+  s3Key        String?      @unique
+  sizeBytes    Int          @default(0)
   version      String // "v0.4"
   isCurrent    Boolean      @default(false)
   note         String? // "What changed in this version"

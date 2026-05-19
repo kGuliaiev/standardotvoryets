@@ -115,6 +115,81 @@ export const documentRouter = createTRPCRouter({
       });
     }),
 
+  // ── createEmpty ───────────────────────────────────────────────────────
+  // Creates a document with no S3 object and an empty bodyHtml so the
+  // user can start writing in the WYSIWYG editor right away. The file
+  // can later be exported as .docx via the body-export endpoint.
+  createEmpty: protectedProcedure
+    .input(
+      z.object({
+        standardId: z.string().cuid(),
+        filename: z.string().min(1).max(255),
+        type: z.enum([
+          'DRAFT_STANDARD',
+          'TECH_SPEC',
+          'FEEDBACK',
+          'MEETING_MINUTES',
+          'AGENDA',
+          'ATTACHMENT',
+          'FINAL',
+        ]),
+        version: z.string().min(1).max(20).default('v0.1'),
+        note: z.string().max(2000).optional(),
+        isCurrent: z.boolean().default(false),
+      }),
+    )
+    .mutation(async ({ ctx, input }) => {
+      const standard = await ctx.db.standard.findUniqueOrThrow({
+        where: { id: input.standardId },
+        select: { workingGroupId: true },
+      });
+      if (!can(userCtx(ctx.session), 'document:upload', standard.workingGroupId)) {
+        throw new TRPCError({ code: 'FORBIDDEN' });
+      }
+
+      if (input.isCurrent) {
+        await ctx.db.document.updateMany({
+          where: { standardId: input.standardId, isCurrent: true },
+          data: { isCurrent: false },
+        });
+      }
+
+      // Filename guaranteed to end with .docx so the export endpoint
+      // can serve it under the right name.
+      const cleanName = input.filename.trim().toLowerCase().endsWith('.docx')
+        ? input.filename.trim()
+        : `${input.filename.trim()}.docx`;
+
+      const created = await ctx.db.document.create({
+        data: {
+          standardId: input.standardId,
+          uploadedById: ctx.session.user.id,
+          type: input.type,
+          filename: cleanName,
+          s3Key: null,
+          sizeBytes: 0,
+          version: input.version,
+          note: input.note ?? null,
+          isCurrent: input.isCurrent,
+          allowEdits: true,
+          bodyHtml: '',
+          bodyUpdatedAt: new Date(),
+          bodyUpdatedById: ctx.session.user.id,
+        },
+      });
+
+      await logActivity(ctx.db, {
+        userId: ctx.session.user.id,
+        action: 'CREATE',
+        entity: 'Document',
+        entityId: created.id,
+        after: created,
+        note: `Створено порожній документ: ${cleanName}`,
+      });
+
+      return created;
+    }),
+
   // ── confirmUpload ─────────────────────────────────────────────────────
   confirmUpload: protectedProcedure
     .input(
@@ -429,11 +504,14 @@ export const documentRouter = createTRPCRouter({
         throw new TRPCError({ code: 'FORBIDDEN' });
       }
 
-      // Delete from S3 (best-effort — log + continue if it fails)
-      try {
-        await s3.send(new DeleteObjectCommand({ Bucket: env.S3_BUCKET, Key: doc.s3Key }));
-      } catch (e) {
-        console.warn('[document.delete] S3 delete failed (continuing)', e);
+      // Delete from S3 (best-effort — log + continue if it fails).
+      // Documents created empty have no s3Key, skip S3 entirely.
+      if (doc.s3Key) {
+        try {
+          await s3.send(new DeleteObjectCommand({ Bucket: env.S3_BUCKET, Key: doc.s3Key }));
+        } catch (e) {
+          console.warn('[document.delete] S3 delete failed (continuing)', e);
+        }
       }
 
       const deleted = await ctx.db.document.delete({ where: { id: input.documentId } });
@@ -465,7 +543,14 @@ export const documentRouter = createTRPCRouter({
 
       if (!isAdmin && !isMember) throw new TRPCError({ code: 'FORBIDDEN' });
 
+      // Documents created empty have no S3 object. Caller should fall
+      // through to the body-export endpoint to generate a fresh .docx
+      // from bodyHtml. We signal that by returning url=null.
+      if (!doc.s3Key) {
+        return { url: null, filename: doc.filename, bodyOnly: true } as const;
+      }
+
       const url = await getPresignedDownloadUrl(doc.s3Key);
-      return { url, filename: doc.filename };
+      return { url, filename: doc.filename, bodyOnly: false } as const;
     }),
 });

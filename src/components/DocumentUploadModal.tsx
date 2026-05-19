@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { trpc } from '@/lib/trpc/client';
 import { Modal } from '@/components/ui/Modal';
-import { Loader2, UploadCloud, FileText, Pencil } from 'lucide-react';
+import { Loader2, UploadCloud, FileText, Pencil, FilePlus } from 'lucide-react';
 
 interface DocumentUploadModalProps {
   open: boolean;
@@ -52,7 +52,11 @@ export function DocumentUploadModal({
   defaultAllowEdits = false,
 }: DocumentUploadModalProps) {
   const utils = trpc.useUtils();
+  // 'upload' — pick a file from disk; 'empty' — type a filename and
+  // open the WYSIWYG editor immediately on a blank doc.
+  const [mode, setMode] = useState<'upload' | 'empty'>('upload');
   const [file, setFile] = useState<File | null>(null);
+  const [emptyFilename, setEmptyFilename] = useState('');
   const [version, setVersion] = useState('v1.0');
   const [type, setType] = useState<(typeof TYPE_OPTIONS)[number]['value']>('DRAFT_STANDARD');
   const [isCurrent, setIsCurrent] = useState(true);
@@ -67,9 +71,13 @@ export function DocumentUploadModal({
     'idle',
   );
 
+  const createEmptyMutation = trpc.document.createEmpty.useMutation();
+
   useEffect(() => {
     if (open) {
+      setMode('upload');
       setFile(null);
+      setEmptyFilename('');
       setVersion('v1.0');
       setType('DRAFT_STANDARD');
       setIsCurrent(true);
@@ -120,12 +128,41 @@ export function DocumentUploadModal({
 
   async function submit() {
     setError(null);
-    if (!file) {
-      setError('Оберіть файл');
-      return;
-    }
     if (!version.trim()) {
       setError('Введіть версію');
+      return;
+    }
+
+    // Create-empty branch — no S3, just a tRPC mutation that yields a
+    // Document row with bodyHtml=''. Caller can then open the WYSIWYG.
+    if (mode === 'empty') {
+      const name = emptyFilename.trim();
+      if (!name) {
+        setError('Введіть назву документа');
+        return;
+      }
+      try {
+        setProgress('confirming');
+        await createEmptyMutation.mutateAsync({
+          standardId,
+          filename: name,
+          type,
+          version: version.trim(),
+          note: note.trim() || undefined,
+          isCurrent,
+        });
+        invalidateAfterUpload();
+        onSaved?.();
+        onClose();
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'Не вдалося створити документ');
+        setProgress('idle');
+      }
+      return;
+    }
+
+    if (!file) {
+      setError('Оберіть файл');
       return;
     }
 
@@ -167,36 +204,80 @@ export function DocumentUploadModal({
   const busy = progress !== 'idle';
 
   return (
-    <Modal open={open} onClose={onClose} title="Завантажити документ" size="md">
+    <Modal open={open} onClose={onClose} title="Новий документ" size="md">
       <div className="space-y-4">
-        {/* File picker */}
-        <div>
-          <label className="field-label">Файл *</label>
-          <label className="flex flex-col items-center justify-center gap-2 border-2 border-dashed border-hairline rounded-[12px] py-7 cursor-pointer hover:border-brand transition-colors">
-            <input
-              type="file"
-              className="hidden"
-              accept={ALLOWED_MIMES.join(',')}
-              onChange={onPick}
-              disabled={busy}
-            />
-            {file ? (
-              <>
-                <FileText className="w-7 h-7 text-brand" />
-                <span className="text-sm font-semibold text-ink">{file.name}</span>
-                <span className="text-[11px] text-light">
-                  {(file.size / 1024).toFixed(1)} KB · {file.type || 'unknown'}
-                </span>
-              </>
-            ) : (
-              <>
-                <UploadCloud className="w-7 h-7 text-light" />
-                <span className="text-sm font-semibold text-ink">Натисніть, щоб обрати файл</span>
-                <span className="text-[11px] text-light">{ALLOWED_HINT} · до 25 МБ</span>
-              </>
-            )}
-          </label>
+        {/* Mode toggle: pick a file from disk or start with a blank
+            document and write straight into the WYSIWYG editor. */}
+        <div className="grid grid-cols-2 gap-2 p-1 bg-page rounded-[10px] border border-hairline">
+          <button
+            type="button"
+            onClick={() => setMode('upload')}
+            disabled={busy}
+            className={`text-xs font-semibold px-3 py-2 rounded-md inline-flex items-center justify-center gap-1.5 transition-colors ${
+              mode === 'upload' ? 'bg-card text-ink shadow-sm' : 'text-mid hover:text-ink'
+            }`}
+          >
+            <UploadCloud className="w-3.5 h-3.5" />
+            Завантажити файл
+          </button>
+          <button
+            type="button"
+            onClick={() => setMode('empty')}
+            disabled={busy}
+            className={`text-xs font-semibold px-3 py-2 rounded-md inline-flex items-center justify-center gap-1.5 transition-colors ${
+              mode === 'empty' ? 'bg-card text-ink shadow-sm' : 'text-mid hover:text-ink'
+            }`}
+          >
+            <FilePlus className="w-3.5 h-3.5" />
+            Створити порожній
+          </button>
         </div>
+
+        {/* File picker or filename input depending on mode. */}
+        {mode === 'upload' ? (
+          <div>
+            <label className="field-label">Файл *</label>
+            <label className="flex flex-col items-center justify-center gap-2 border-2 border-dashed border-hairline rounded-[12px] py-7 cursor-pointer hover:border-brand transition-colors">
+              <input
+                type="file"
+                className="hidden"
+                accept={ALLOWED_MIMES.join(',')}
+                onChange={onPick}
+                disabled={busy}
+              />
+              {file ? (
+                <>
+                  <FileText className="w-7 h-7 text-brand" />
+                  <span className="text-sm font-semibold text-ink">{file.name}</span>
+                  <span className="text-[11px] text-light">
+                    {(file.size / 1024).toFixed(1)} KB · {file.type || 'unknown'}
+                  </span>
+                </>
+              ) : (
+                <>
+                  <UploadCloud className="w-7 h-7 text-light" />
+                  <span className="text-sm font-semibold text-ink">Натисніть, щоб обрати файл</span>
+                  <span className="text-[11px] text-light">{ALLOWED_HINT} · до 25 МБ</span>
+                </>
+              )}
+            </label>
+          </div>
+        ) : (
+          <div>
+            <label className="field-label">Назва документа *</label>
+            <input
+              className="input"
+              value={emptyFilename}
+              onChange={(e) => setEmptyFilename(e.target.value)}
+              placeholder="Проєкт ТЗ"
+              disabled={busy}
+              autoFocus
+            />
+            <p className="text-[11px] text-light mt-1">
+              .docx буде додано автоматично. Після створення відкривається у WYSIWYG-редакторі.
+            </p>
+          </div>
+        )}
 
         <div className="grid grid-cols-2 gap-3">
           <div>
@@ -245,27 +326,34 @@ export function DocumentUploadModal({
             />
             <span className="text-ink">Позначити як актуальну версію</span>
           </label>
-          <label
-            className={`flex items-start gap-2 text-sm ${fileIsDocx ? 'cursor-pointer' : 'cursor-not-allowed opacity-60'}`}
-            title={
-              fileIsDocx
-                ? 'Документ можна буде відкривати у редакторі та лишати запити на правки'
-                : 'Доступно лише для файлів .docx (Microsoft Word)'
-            }
-          >
-            <input
-              type="checkbox"
-              checked={allowEdits}
-              disabled={!fileIsDocx}
-              onChange={(e) => setAllowEdits(e.target.checked)}
-              className="w-4 h-4 accent-brand mt-0.5"
-            />
-            <span className="text-ink flex items-center gap-1.5">
-              <Pencil className="w-3.5 h-3.5 text-mid" />
-              Дозволити правки (колаборативне редагування)
-              {!fileIsDocx && <span className="text-[11px] text-light">— тільки для .docx</span>}
-            </span>
-          </label>
+          {mode === 'upload' ? (
+            <label
+              className={`flex items-start gap-2 text-sm ${fileIsDocx ? 'cursor-pointer' : 'cursor-not-allowed opacity-60'}`}
+              title={
+                fileIsDocx
+                  ? 'Документ можна буде відкривати у редакторі та лишати запити на правки'
+                  : 'Доступно лише для файлів .docx (Microsoft Word)'
+              }
+            >
+              <input
+                type="checkbox"
+                checked={allowEdits}
+                disabled={!fileIsDocx}
+                onChange={(e) => setAllowEdits(e.target.checked)}
+                className="w-4 h-4 accent-brand mt-0.5"
+              />
+              <span className="text-ink flex items-center gap-1.5">
+                <Pencil className="w-3.5 h-3.5 text-mid" />
+                Дозволити правки (колаборативне редагування)
+                {!fileIsDocx && <span className="text-[11px] text-light">— тільки для .docx</span>}
+              </span>
+            </label>
+          ) : (
+            <p className="text-xs text-mid bg-page rounded-[10px] px-3 py-2 inline-flex items-center gap-1.5">
+              <Pencil className="w-3.5 h-3.5 text-brand" />
+              Документ буде створений як редагований — одразу можна писати у WYSIWYG.
+            </p>
+          )}
         </div>
 
         {error && (
@@ -284,7 +372,9 @@ export function DocumentUploadModal({
                 ? 'Завантажуємо…'
                 : progress === 'confirming'
                   ? 'Реєструємо…'
-                  : 'Завантажити'}
+                  : mode === 'empty'
+                    ? 'Створити'
+                    : 'Завантажити'}
           </button>
         </div>
       </div>

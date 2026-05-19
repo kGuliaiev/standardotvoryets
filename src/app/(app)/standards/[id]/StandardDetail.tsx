@@ -534,9 +534,13 @@ export function StandardDetail({ id }: { id: string }) {
                           setUploadAllowEditsDefault(false);
                           setDocModalOpen(true);
                         }}
-                        className="text-xs font-bold text-brand hover:underline"
+                        // Same filled-blue treatment as the import
+                        // button — both are primary entry points and
+                        // the old text-link style read as secondary.
+                        className="inline-flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg bg-blue-700 text-white font-semibold hover:bg-blue-800 transition-colors"
+                        title="Створити новий документ — порожній або з файла"
                       >
-                        + Завантажити
+                        + Створити
                       </button>
                     </div>
                   )}
@@ -637,7 +641,11 @@ export function StandardDetail({ id }: { id: string }) {
                               Текст
                             </button>
                           )}
-                          <DownloadButton documentId={doc.id} />
+                          <DownloadButton
+                            documentId={doc.id}
+                            standardId={id}
+                            filename={doc.filename}
+                          />
                           {canUpload && (
                             <button
                               onClick={() => setEditMetaDocId(doc.id)}
@@ -1330,16 +1338,30 @@ function StandardTaskRow({
 }
 
 // Окремий компонент для завантаження — lazy query per-document
-function DownloadButton({ documentId }: { documentId: string }) {
+function DownloadButton({
+  documentId,
+  standardId,
+  filename,
+}: {
+  documentId: string;
+  standardId: string;
+  filename: string;
+}) {
   const [enabled, setEnabled] = useState(false);
   const { data, isLoading } = trpc.document.getDownloadUrl.useQuery({ documentId }, { enabled });
 
   useEffect(() => {
-    if (data?.url) {
+    if (!data) return;
+    if (data.bodyOnly) {
+      // Document was created empty / has no S3 object — generate the
+      // .docx from its bodyHtml on the fly via the export endpoint.
+      const exportUrl = `/api/standards/${standardId}/export-body?documentId=${documentId}&filename=${encodeURIComponent(filename)}`;
+      window.open(exportUrl, '_blank');
+    } else if (data.url) {
       window.open(data.url, '_blank');
-      setEnabled(false);
     }
-  }, [data]);
+    setEnabled(false);
+  }, [data, standardId, documentId, filename]);
 
   return (
     <button
