@@ -228,6 +228,33 @@ export function StandardBodyEditor({ target, bodyText, bodyUpdatedAt, bodyUpdate
     if (!inlineEditMode || !inlineDirty) return;
     updateBodyMutation.mutate({ ...targetInput, bodyText: inlineHtml });
   }
+
+  // Tag each top-level child of TipTap's contenteditable with
+  // data-paragraph-idx="N" so the InlineComments overlay (which
+  // works by `[data-paragraph-idx="..."]` lookups) can map text
+  // selections back to a paragraph. Re-runs after every editor
+  // update via a MutationObserver — TipTap recreates DOM nodes on
+  // transactions so a one-shot tag wouldn't survive typing.
+  useEffect(() => {
+    if (!inlineEditMode) return;
+    const wrapper = articleRef.current;
+    if (!wrapper) return;
+    const pm = wrapper.querySelector('.ProseMirror');
+    if (!pm) return;
+
+    const tag = () => {
+      Array.from(pm.children).forEach((child, i) => {
+        if (child instanceof HTMLElement) {
+          child.setAttribute('data-paragraph-idx', String(i));
+        }
+      });
+    };
+
+    tag();
+    const obs = new MutationObserver(tag);
+    obs.observe(pm, { childList: true, subtree: false });
+    return () => obs.disconnect();
+  }, [inlineEditMode, inlineHtml]);
   const replaceBodyMutation = trpc.suggestion.replaceBody.useMutation({
     onSuccess: () => {
       invalidateBody();
@@ -417,45 +444,39 @@ export function StandardBodyEditor({ target, bodyText, bodyUpdatedAt, bodyUpdate
       {/* Two columns under the sticky toolbar: body article on the
           left, comments + decisions rail on the right. */}
       <div className="grid grid-cols-1 lg:grid-cols-[1fr_300px] gap-5 items-start">
-        <div className="space-y-4">
-          {/* Sticky WYSIWYG editor for documents — toolbar stays pinned
-              to the top of the modal while the paragraph view below
-              scrolls. Edits saved via the "Зберегти" button in the
-              header strip. */}
-          {inlineEditMode && (
-            <div
-              className={
-                isInModal
-                  ? 'sticky top-[103px] md:top-[123px] z-[5] bg-card/95 backdrop-blur-md rounded-xl border border-hairline shadow-sm overflow-hidden'
-                  : 'sticky top-[52px] z-[5] bg-card/95 backdrop-blur-md rounded-xl border border-hairline shadow-sm overflow-hidden'
-              }
-            >
-              <RichTextEditor
-                key="inline-doc-editor"
-                initialHtml={inlineHtml}
-                onChange={(html) => {
-                  setInlineHtml(html);
-                  if (!inlineDirty) setInlineDirty(true);
-                }}
-                className="bg-card max-h-[42vh] overflow-y-auto"
-              />
-            </div>
-          )}
-
-          {/* Paragraph view — read-only article + per-paragraph
-              suggestion buttons + inline-comment overlay. Always
-              rendered so commenting and suggesting works alongside
-              the WYSIWYG editor above. */}
+        {inlineEditMode ? (
+          /* For documents: ONE view. The WYSIWYG editor is the body —
+             contenteditable with its own sticky toolbar pinned at the
+             top via the `[&_.rt-toolbar]:sticky` rule inside
+             RichTextEditor. InlineComments overlay attaches to the
+             same article element for selection-based commenting and
+             suggesting. data-paragraph-idx is set on each top-level
+             editor child after every update so the overlay can map
+             selection → paragraph index. */
+          <article
+            ref={articleRef}
+            className="bg-card rounded-xl border border-hairline overflow-hidden"
+          >
+            <RichTextEditor
+              key="inline-doc-editor"
+              initialHtml={inlineHtml}
+              onChange={(html) => {
+                setInlineHtml(html);
+                if (!inlineDirty) setInlineDirty(true);
+              }}
+              className="bg-card"
+              stickyToolbar
+              toolbarTopOffset={isInModal ? 103 : 52}
+            />
+          </article>
+        ) : (
+          /* Standards (and read-only viewers of documents): the
+             paragraph-by-paragraph view with per-paragraph suggest
+             buttons. */
           <article
             ref={articleRef}
             className="bg-card rounded-xl border border-hairline p-5 sm:p-8 space-y-1"
           >
-            {inlineEditMode && (
-              <p className="text-[11px] text-light italic mb-3 -mt-1">
-                Нижче — обговорення документа за параграфами: коментарі та правки. Текст редагуйте у
-                редакторі зверху.
-              </p>
-            )}
             {paragraphs.map((html, idx) => {
               const pending = pendingBySection.get(idx) ?? [];
               return (
@@ -488,7 +509,7 @@ export function StandardBodyEditor({ target, bodyText, bodyUpdatedAt, bodyUpdate
               </div>
             )}
           </article>
-        </div>
+        )}
 
         {/* Right rail card with two tabs: Зміни (suggestions) and
             Коментарі (inline). Sticky so the rail stays put while the
@@ -552,12 +573,19 @@ export function StandardBodyEditor({ target, bodyText, bodyUpdatedAt, bodyUpdate
           {/* InlineComments overlay (no rail rendering) mounted
               always so selection capture, the floating composer, and
               inline highlights work regardless of which tab is
-              active. */}
+              active. For inline-edit mode we also wire a "Правка"
+              option so a text selection can open the suggestion
+              draft modal for that paragraph. */}
           <InlineComments
             target={targetInput}
             canComment={canSuggest}
             articleRef={articleRef}
             showRail={false}
+            onSuggestParagraph={
+              inlineEditMode && canSuggest
+                ? (paragraphIndex) => openSuggest(paragraphIndex, 'REPLACE')
+                : undefined
+            }
           />
         </div>
       </div>

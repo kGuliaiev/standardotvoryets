@@ -51,6 +51,12 @@ interface Props {
   /** Show or hide the floating toolbar. Defaults to editable. */
   toolbar?: boolean;
   autoFocus?: boolean;
+  /** When true, the formatting toolbar uses position: sticky so it
+   *  stays visible while the editor content scrolls under it. */
+  stickyToolbar?: boolean;
+  /** Pixels from the top of the scroll container to pin the sticky
+   *  toolbar — used to clear a fixed page header. */
+  toolbarTopOffset?: number;
 }
 
 const STARTER_KIT_OPTIONS = {
@@ -66,6 +72,8 @@ export function RichTextEditor({
   className,
   toolbar,
   autoFocus,
+  stickyToolbar = false,
+  toolbarTopOffset = 0,
 }: Props) {
   const editor = useEditor({
     extensions: [
@@ -118,7 +126,9 @@ export function RichTextEditor({
 
   return (
     <div className={className ?? 'rounded-[10px] border border-hairline bg-card'}>
-      {showToolbar && editable && <Toolbar editor={editor} />}
+      {showToolbar && editable && (
+        <Toolbar editor={editor} sticky={stickyToolbar} topOffset={toolbarTopOffset} />
+      )}
       <div className="px-4 py-2">
         <EditorContent editor={editor} />
       </div>
@@ -126,9 +136,22 @@ export function RichTextEditor({
   );
 }
 
-function Toolbar({ editor }: { editor: Editor }) {
+function Toolbar({
+  editor,
+  sticky = false,
+  topOffset = 0,
+}: {
+  editor: Editor;
+  sticky?: boolean;
+  topOffset?: number;
+}) {
   return (
-    <div className="flex items-center gap-0.5 px-2 py-1.5 border-b border-hairline overflow-x-auto scrollbar-thin">
+    <div
+      style={sticky ? { top: topOffset } : undefined}
+      className={`flex items-center gap-0.5 px-2 py-1.5 border-b border-hairline overflow-x-auto scrollbar-thin ${
+        sticky ? 'sticky z-10 bg-card/95 backdrop-blur-md' : ''
+      }`}
+    >
       <Btn
         on={editor.isActive('bold')}
         onClick={() => editor.chain().focus().toggleBold().run()}

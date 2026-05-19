@@ -5,7 +5,7 @@ import { createPortal } from 'react-dom';
 import { useSession } from 'next-auth/react';
 import { trpc } from '@/lib/trpc/client';
 import { Avatar } from '@/components/ui/Avatar';
-import { Check, X as XIcon, Loader2, MessageCirclePlus, Reply } from 'lucide-react';
+import { Check, X as XIcon, Loader2, MessageCirclePlus, Pencil, Reply } from 'lucide-react';
 import type { RouterOutputs } from '@/lib/trpc/client';
 
 /**
@@ -47,6 +47,13 @@ interface Props {
   /** No-op now — the rail aside lives in `InlineCommentsList`. Kept
    *  on the prop type so callers don't break, but ignored. */
   showRail?: boolean;
+  /** When set, the floating selection bubble shows an extra
+   *  "Правка" button alongside "Коментувати". Clicking it calls
+   *  this callback with the paragraph index from the selection so
+   *  the parent can open its own paragraph-level suggestion modal.
+   *  Provided by the document editor; for standards the existing
+   *  per-paragraph hover buttons handle suggestion entry. */
+  onSuggestParagraph?: (paragraphIndex: number) => void;
 }
 
 interface PendingSelection {
@@ -131,7 +138,7 @@ function wrapRange(
   }
 }
 
-export function InlineComments({ target, canComment, articleRef }: Props) {
+export function InlineComments({ target, canComment, articleRef, onSuggestParagraph }: Props) {
   const utils = trpc.useUtils();
 
   const queryInput = useMemo(() => target, [target]);
@@ -329,6 +336,7 @@ export function InlineComments({ target, canComment, articleRef }: Props) {
               e.preventDefault();
               setBubbleActive(true);
             }}
+            className="inline-flex items-center gap-1 bg-ink rounded-full shadow-modal overflow-hidden"
           >
             <button
               onClick={() => {
@@ -339,11 +347,29 @@ export function InlineComments({ target, canComment, articleRef }: Props) {
                 setDraft(' '); // non-empty draft triggers composer render
                 setTimeout(() => setDraft(''), 0); // clear so placeholder shows
               }}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-ink text-card rounded-full shadow-modal text-xs font-semibold hover:bg-brand"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-card text-xs font-semibold hover:bg-brand"
             >
               <MessageCirclePlus className="w-3.5 h-3.5" />
               Коментувати
             </button>
+            {onSuggestParagraph && (
+              <>
+                <span className="w-px h-4 bg-card/30 self-center" />
+                <button
+                  onClick={() => {
+                    const idx = pending.paragraphIndex;
+                    setPending(null);
+                    setBubbleActive(false);
+                    onSuggestParagraph(idx);
+                  }}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 text-card text-xs font-semibold hover:bg-brand"
+                  title="Запропонувати правку до цього параграфа"
+                >
+                  <Pencil className="w-3.5 h-3.5" />
+                  Правка
+                </button>
+              </>
+            )}
           </div>,
           document.body,
         )}
