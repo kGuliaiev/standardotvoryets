@@ -273,11 +273,14 @@ export function TaskFormModal({
           <div>
             <label className="field-label">Пріоритет</label>
             <div className="relative">
+              {/* Decorative dot — sits ~14px from the left edge.
+                  Select needs pl-9 (≈ 36px) so the first letter
+                  clears the dot rather than overlapping it. */}
               <span
                 className={`absolute left-3 top-1/2 -translate-y-1/2 w-2 h-2 rounded-full pointer-events-none ${PRIORITY_DOT[form.priority]}`}
               />
               <select
-                className="select pl-7"
+                className="select pl-9"
                 value={form.priority}
                 onChange={(e) =>
                   setForm((f) => ({

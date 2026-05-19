@@ -286,12 +286,12 @@ export function UsersAdmin() {
                       </td>
                       <td className="px-3 py-3.5 hidden md:table-cell">
                         {u.rank && u.rank !== 'CIVILIAN' ? (
-                          <div className="flex flex-col gap-0.5">
+                          <div className="flex flex-col items-center gap-0.5">
                             <RankBadge rank={u.rank} variant="icon" />
                             <span className="text-xs text-ink">{rankLabel(u.rank)}</span>
                           </div>
                         ) : (
-                          <span className="text-xs text-light">—</span>
+                          <span className="text-xs text-light block text-center">—</span>
                         )}
                       </td>
                       <td className="px-3 py-3.5 hidden lg:table-cell">
