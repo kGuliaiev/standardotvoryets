@@ -1,9 +1,24 @@
 import type { WorkingGroupRole, GlobalRole } from '@prisma/client';
-import { getOverride } from '@/lib/permissionsCache';
 
 interface UserContext {
   globalRole: GlobalRole;
   memberships: { workingGroupId: string; role: WorkingGroupRole }[];
+}
+
+/**
+ * Runtime-registered override lookup. The cache lives in
+ * `src/lib/permissionsCache.ts` which imports `@/server/db` —
+ * importing that file directly from rbac.ts would drag Prisma into
+ * the client bundle and either crash on load or silently break
+ * `can()` for everyone. Instead the server bootstrap calls
+ * `registerOverrideLookup(getOverride)` once (see trpc.ts), and
+ * client `can()` calls simply skip the override step.
+ */
+let overrideLookup: ((role: string, action: string) => boolean | undefined) | null = null;
+export function registerOverrideLookup(
+  fn: ((role: string, action: string) => boolean | undefined) | null,
+): void {
+  overrideLookup = fn;
 }
 
 export function getUserRoleInGroup(
@@ -30,8 +45,10 @@ export function can(user: UserContext, action: string, workingGroupId: string): 
   // DIRECTOR has full read access but follows normal role-based write permissions
   if (user.globalRole === 'DIRECTOR' && READ_ACTIONS.includes(action)) return true;
   // DB override wins over the hardcoded default — lets admins flip a
-  // toggle in the UI without a redeploy.
-  const override = getOverride(role, action);
+  // toggle in the UI without a redeploy. On the client `overrideLookup`
+  // is null so we just fall through to the hardcoded matrix; the
+  // server has the authoritative check anyway.
+  const override = overrideLookup?.(role, action);
   if (override !== undefined) return override;
   return PERMISSIONS[action]?.includes(role) ?? false;
 }

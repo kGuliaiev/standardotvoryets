@@ -54,6 +54,12 @@ interface Props {
    *  Provided by the document editor; for standards the existing
    *  per-paragraph hover buttons handle suggestion entry. */
   onSuggestParagraph?: (paragraphIndex: number) => void;
+  /** Set when the wrapped body is a contenteditable (TipTap). The
+   *  DOM-wrap highlighting is skipped because rewriting children
+   *  inside a contenteditable fights the editor's own DOM updates
+   *  and causes typing to hang. The rail list still shows comments
+   *  so existing comments stay browsable. */
+  isEditableSurface?: boolean;
 }
 
 interface PendingSelection {
@@ -138,7 +144,13 @@ function wrapRange(
   }
 }
 
-export function InlineComments({ target, canComment, articleRef, onSuggestParagraph }: Props) {
+export function InlineComments({
+  target,
+  canComment,
+  articleRef,
+  onSuggestParagraph,
+  isEditableSurface = false,
+}: Props) {
   const utils = trpc.useUtils();
 
   const queryInput = useMemo(() => target, [target]);
@@ -254,6 +266,11 @@ export function InlineComments({ target, canComment, articleRef, onSuggestParagr
     [comments],
   );
   useEffect(() => {
+    // In editable surfaces (TipTap contenteditable), rewriting DOM
+    // children via wrapRange tramples the editor's own DOM diffing
+    // and causes typing to hang. Skip highlight wrap there; rail
+    // list still shows comments.
+    if (isEditableSurface) return;
     const article = articleRef.current;
     if (!article) return;
     // Unwrap any previous marks.

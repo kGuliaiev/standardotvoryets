@@ -5,7 +5,13 @@ import { ZodError } from 'zod';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/server/auth';
 import { db } from '@/server/db';
-import { ensureLoaded } from '@/lib/permissionsCache';
+import { ensureLoaded, getOverride } from '@/lib/permissionsCache';
+import { registerOverrideLookup } from '@/lib/rbac';
+
+// Wire the override lookup into rbac.can() at module load on the
+// server side. rbac.ts intentionally doesn't import permissionsCache
+// directly — that would pull Prisma into the client bundle.
+registerOverrideLookup(getOverride);
 
 // ─── Context ─────────────────────────────────────────────────────────────────
 

@@ -232,29 +232,45 @@ export function StandardBodyEditor({ target, bodyText, bodyUpdatedAt, bodyUpdate
   // Tag each top-level child of TipTap's contenteditable with
   // data-paragraph-idx="N" so the InlineComments overlay (which
   // works by `[data-paragraph-idx="..."]` lookups) can map text
-  // selections back to a paragraph. Re-runs after every editor
-  // update via a MutationObserver — TipTap recreates DOM nodes on
-  // transactions so a one-shot tag wouldn't survive typing.
+  // selections back to a paragraph. A single MutationObserver
+  // handles all subsequent edits — recreating it on every keystroke
+  // (the old `inlineHtml` dep) caused a noticeable hang on long
+  // documents because we'd disconnect/reconnect + retag every input.
   useEffect(() => {
     if (!inlineEditMode) return;
-    const wrapper = articleRef.current;
-    if (!wrapper) return;
-    const pm = wrapper.querySelector('.ProseMirror');
-    if (!pm) return;
+    let obs: MutationObserver | null = null;
+    let retryTimer: number | null = null;
 
-    const tag = () => {
-      Array.from(pm.children).forEach((child, i) => {
-        if (child instanceof HTMLElement) {
-          child.setAttribute('data-paragraph-idx', String(i));
-        }
-      });
+    const setup = () => {
+      const wrapper = articleRef.current;
+      if (!wrapper) {
+        retryTimer = window.setTimeout(setup, 100);
+        return;
+      }
+      const pm = wrapper.querySelector('.ProseMirror');
+      if (!pm) {
+        // TipTap may not have mounted yet — retry a few ticks later.
+        retryTimer = window.setTimeout(setup, 100);
+        return;
+      }
+      const tag = () => {
+        Array.from(pm.children).forEach((child, i) => {
+          if (child instanceof HTMLElement && child.dataset.paragraphIdx !== String(i)) {
+            child.setAttribute('data-paragraph-idx', String(i));
+          }
+        });
+      };
+      tag();
+      obs = new MutationObserver(tag);
+      obs.observe(pm, { childList: true, subtree: false });
     };
 
-    tag();
-    const obs = new MutationObserver(tag);
-    obs.observe(pm, { childList: true, subtree: false });
-    return () => obs.disconnect();
-  }, [inlineEditMode, inlineHtml]);
+    setup();
+    return () => {
+      if (retryTimer != null) window.clearTimeout(retryTimer);
+      obs?.disconnect();
+    };
+  }, [inlineEditMode]);
   const replaceBodyMutation = trpc.suggestion.replaceBody.useMutation({
     onSuccess: () => {
       invalidateBody();
@@ -581,6 +597,7 @@ export function StandardBodyEditor({ target, bodyText, bodyUpdatedAt, bodyUpdate
             canComment={canSuggest}
             articleRef={articleRef}
             showRail={false}
+            isEditableSurface={inlineEditMode}
             onSuggestParagraph={
               inlineEditMode && canSuggest
                 ? (paragraphIndex) => openSuggest(paragraphIndex, 'REPLACE')

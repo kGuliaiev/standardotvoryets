@@ -16,8 +16,11 @@
  * hardcoded default from PERMISSIONS in rbac.ts.
  */
 
+// Server-only: imports `@/server/db` (Prisma). Don't import this file
+// from client components. rbac.ts deliberately depends on a
+// runtime-registered lookup instead of importing this directly so
+// the client bundle stays Prisma-free.
 import { db } from '@/server/db';
-import type { WorkingGroupRole } from '@prisma/client';
 
 let cache: Map<string, boolean> | null = null;
 let loading: Promise<void> | null = null;
@@ -50,8 +53,10 @@ export function ensureLoaded(): Promise<void> {
 }
 
 /** Synchronous override lookup. Returns undefined when no row
- *  exists — callers should fall back to the hardcoded default. */
-export function getOverride(role: WorkingGroupRole, action: string): boolean | undefined {
+ *  exists — callers should fall back to the hardcoded default.
+ *  Signature accepts `string` so it slots into `registerOverrideLookup`
+ *  in rbac.ts without dragging the Prisma enum into the client. */
+export function getOverride(role: string, action: string): boolean | undefined {
   return cache?.get(key(role, action));
 }
 
