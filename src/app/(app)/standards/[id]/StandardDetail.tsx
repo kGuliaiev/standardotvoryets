@@ -1321,6 +1321,7 @@ function StandardTaskRow({
             avatarUrl={task.assignee.avatarUrl ?? undefined}
             size="xs"
           />
+          <span className="text-[11px] text-mid">{task.assignee.name}</span>
         </div>
       )}
       <DueDateChip due={due} isDone={isDone} />

@@ -59,6 +59,48 @@ export function DirectorAnalytics() {
         <Kpi icon={CheckCircle} label="Завершено цей квартал" value={kpis.completedThisQuarter} />
       </div>
 
+      {/* Most at-risk — moved above the charts because the director's
+          first question on opening this tab is "what's slipping the
+          worst", not "what's the funnel shape". */}
+      <div className="bg-card rounded-xl border border-hairline overflow-hidden">
+        <div className="px-5 py-3 border-b border-hairline">
+          <h3 className="text-sm font-bold text-ink inline-flex items-center gap-2">
+            <AlertTriangle size={15} className="text-red-500" />
+            Найвища простроченість (топ-5)
+          </h3>
+        </div>
+        {mostAtRisk.length === 0 ? (
+          <div className="py-10 text-center text-light text-sm">
+            Прострочених стандартів немає 👌
+          </div>
+        ) : (
+          <ul className="divide-y divide-hairline">
+            {mostAtRisk.map((s) => (
+              <li key={s.id} className="px-5 py-3 flex items-center gap-3">
+                <span
+                  className="w-2 h-2 rounded-full shrink-0"
+                  style={{ backgroundColor: s.wgColor }}
+                />
+                <span className="font-mono text-xs text-light shrink-0">{s.wgCode}</span>
+                <Link
+                  href={`/standards/${s.id}`}
+                  className="flex-1 text-sm text-ink hover:text-brand truncate"
+                >
+                  <span className="font-mono text-xs text-light mr-2">{s.code}</span>
+                  {s.title}
+                </Link>
+                <span className="text-xs text-mid shrink-0 tabular-nums">
+                  {s.overdue} {s.overdue === 1 ? 'етап' : s.overdue < 5 ? 'етапи' : 'етапів'}
+                </span>
+                <span className="text-xs font-bold text-red-600 dark:text-red-400 shrink-0 tabular-nums">
+                  {s.oldestOverdueDays} дн
+                </span>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
         {/* Funnel */}
         <div className="bg-card rounded-xl border border-hairline p-5">
@@ -197,46 +239,6 @@ export function DirectorAnalytics() {
             </tbody>
           </table>
         </div>
-      </div>
-
-      {/* Most at-risk */}
-      <div className="bg-card rounded-xl border border-hairline overflow-hidden">
-        <div className="px-5 py-3 border-b border-hairline">
-          <h3 className="text-sm font-bold text-ink inline-flex items-center gap-2">
-            <AlertTriangle size={15} className="text-red-500" />
-            Найвища простроченість (топ-5)
-          </h3>
-        </div>
-        {mostAtRisk.length === 0 ? (
-          <div className="py-10 text-center text-light text-sm">
-            Прострочених стандартів немає 👌
-          </div>
-        ) : (
-          <ul className="divide-y divide-hairline">
-            {mostAtRisk.map((s) => (
-              <li key={s.id} className="px-5 py-3 flex items-center gap-3">
-                <span
-                  className="w-2 h-2 rounded-full shrink-0"
-                  style={{ backgroundColor: s.wgColor }}
-                />
-                <span className="font-mono text-xs text-light shrink-0">{s.wgCode}</span>
-                <Link
-                  href={`/standards/${s.id}`}
-                  className="flex-1 text-sm text-ink hover:text-brand truncate"
-                >
-                  <span className="font-mono text-xs text-light mr-2">{s.code}</span>
-                  {s.title}
-                </Link>
-                <span className="text-xs text-mid shrink-0 tabular-nums">
-                  {s.overdue} {s.overdue === 1 ? 'етап' : s.overdue < 5 ? 'етапи' : 'етапів'}
-                </span>
-                <span className="text-xs font-bold text-red-600 dark:text-red-400 shrink-0 tabular-nums">
-                  {s.oldestOverdueDays} дн
-                </span>
-              </li>
-            ))}
-          </ul>
-        )}
       </div>
     </div>
   );

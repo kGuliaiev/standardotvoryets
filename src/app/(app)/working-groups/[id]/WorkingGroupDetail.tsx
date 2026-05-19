@@ -10,6 +10,8 @@ import { RankBadge } from '@/components/ui/RankBadge';
 import { SortableHeader } from '@/components/ui/SortableHeader';
 import { useSort, sortedRows } from '@/lib/useSort';
 import { rankLabel } from '@/lib/ranks';
+import { ConfirmModal } from '@/components/ui/ConfirmModal';
+import { X as XIcon } from 'lucide-react';
 import { StatusBadge } from '@/components/ui/StatusBadge';
 import { formatDate } from '@/lib/utils';
 import { can } from '@/lib/rbac';
@@ -101,6 +103,10 @@ export function WorkingGroupDetail({ id }: Props) {
   const [editForm, setEditForm] = useState({ code: '', name: '', description: '' });
   const [editError, setEditError] = useState<string | null>(null);
   const [addError, setAddError] = useState('');
+  const [removeMemberCandidate, setRemoveMemberCandidate] = useState<{
+    userId: string;
+    name: string;
+  } | null>(null);
   const [memberSort, setMemberSort] = useSort<'name' | 'email' | 'role' | 'joined' | 'rank'>(
     'role',
     'asc',
@@ -453,13 +459,13 @@ export function WorkingGroupDetail({ id }: Props) {
                         <td className="px-3 py-3 text-right">
                           {session?.user.id !== m.userId && (
                             <button
-                              onClick={() => {
-                                if (confirm(`Видалити ${m.user.name} з групи?`)) {
-                                  removeMutation.mutate({ workingGroupId: id, userId: m.userId });
-                                }
-                              }}
-                              className="text-xs text-red-500 hover:text-red-700 transition-colors px-2 py-1 rounded hover:bg-red-50"
+                              onClick={() =>
+                                setRemoveMemberCandidate({ userId: m.userId, name: m.user.name })
+                              }
+                              className="text-xs px-2.5 py-1 rounded border border-red-200 dark:border-red-800/60 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors inline-flex items-center gap-1 flex-shrink-0"
+                              title="Видалити з групи"
                             >
+                              <XIcon className="w-3 h-3" />
                               Видалити
                             </button>
                           )}
@@ -996,6 +1002,32 @@ export function WorkingGroupDetail({ id }: Props) {
           </div>
         </div>
       )}
+
+      <ConfirmModal
+        open={!!removeMemberCandidate}
+        title="Видалити учасника?"
+        message={
+          removeMemberCandidate ? (
+            <>
+              <span className="font-semibold text-ink">{removeMemberCandidate.name}</span> більше не
+              матиме доступу до цієї робочої групи.
+            </>
+          ) : (
+            ''
+          )
+        }
+        confirmLabel="Видалити"
+        destructive
+        isPending={removeMutation.isPending}
+        onClose={() => setRemoveMemberCandidate(null)}
+        onConfirm={() => {
+          if (!removeMemberCandidate) return;
+          removeMutation.mutate(
+            { workingGroupId: id, userId: removeMemberCandidate.userId },
+            { onSuccess: () => setRemoveMemberCandidate(null) },
+          );
+        }}
+      />
     </div>
   );
 }

@@ -182,6 +182,13 @@ export const standardRouter = createTRPCRouter({
         category: z.string().optional(),
         deadline: z.date().optional(),
         responsibleId: z.string().cuid().optional(),
+        // Stage deadlines collected upfront in the create form so the
+        // poetap diagram on the standard page is populated from day one.
+        techSpecDueDate: z.date().optional(),
+        draftDueDate: z.date().optional(),
+        feedbackDueDate: z.date().optional(),
+        techReviewDueDate: z.date().optional(),
+        finalDueDate: z.date().optional(),
       }),
     )
     .mutation(async ({ ctx, input }) => {

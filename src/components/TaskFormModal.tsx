@@ -242,22 +242,25 @@ export function TaskFormModal({
           />
         </div>
 
-        <div className="grid grid-cols-3 gap-3">
-          <div>
-            <label className="field-label">Виконавець</label>
-            <select
-              className="select"
-              value={form.assigneeId}
-              onChange={(e) => setForm((f) => ({ ...f, assigneeId: e.target.value }))}
-            >
-              <option value="">— не вказано —</option>
-              {members.map((m) => (
-                <option key={m.userId} value={m.userId}>
-                  {m.user.name}
-                </option>
-              ))}
-            </select>
-          </div>
+        {/* Виконавець на цілий рядок — це найважливіше поле, з
+            довгим списком імен. Термін і Пріоритет нижче рівними
+            половинками, обидва компактні. */}
+        <div>
+          <label className="field-label">Виконавець</label>
+          <select
+            className="select"
+            value={form.assigneeId}
+            onChange={(e) => setForm((f) => ({ ...f, assigneeId: e.target.value }))}
+          >
+            <option value="">— не вказано —</option>
+            {members.map((m) => (
+              <option key={m.userId} value={m.userId}>
+                {m.user.name}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div className="grid grid-cols-2 gap-3">
           <div>
             <label className="field-label">Термін</label>
             <input

@@ -21,6 +21,11 @@ const schema = z.object({
   category: z.string().max(100).optional().or(z.literal('')),
   deadline: z.string().optional().or(z.literal('')),
   responsibleId: z.string().cuid().optional().or(z.literal('')),
+  techSpecDueDate: z.string().optional().or(z.literal('')),
+  draftDueDate: z.string().optional().or(z.literal('')),
+  feedbackDueDate: z.string().optional().or(z.literal('')),
+  techReviewDueDate: z.string().optional().or(z.literal('')),
+  finalDueDate: z.string().optional().or(z.literal('')),
 });
 
 type FormData = z.infer<typeof schema>;
@@ -64,6 +69,11 @@ export function StandardForm({ preselectedWgId }: { preselectedWgId?: string }) 
       category: '',
       deadline: '',
       responsibleId: '',
+      techSpecDueDate: '',
+      draftDueDate: '',
+      feedbackDueDate: '',
+      techReviewDueDate: '',
+      finalDueDate: '',
     },
   });
 
@@ -87,6 +97,7 @@ export function StandardForm({ preselectedWgId }: { preselectedWgId?: string }) 
       const t = v.trim();
       return t === '' ? undefined : t;
     };
+    const toDate = (v?: string) => (v ? new Date(v) : undefined);
     createMutation.mutate({
       workingGroupId: data.workingGroupId,
       code: data.code.trim(),
@@ -94,8 +105,13 @@ export function StandardForm({ preselectedWgId }: { preselectedWgId?: string }) 
       description: trim(data.description),
       isoAnalog: trim(data.isoAnalog),
       category: trim(data.category),
-      deadline: data.deadline ? new Date(data.deadline) : undefined,
+      deadline: toDate(data.deadline),
       responsibleId: trim(data.responsibleId),
+      techSpecDueDate: toDate(data.techSpecDueDate),
+      draftDueDate: toDate(data.draftDueDate),
+      feedbackDueDate: toDate(data.feedbackDueDate),
+      techReviewDueDate: toDate(data.techReviewDueDate),
+      finalDueDate: toDate(data.finalDueDate),
     });
   }
 
@@ -252,6 +268,60 @@ export function StandardForm({ preselectedWgId }: { preselectedWgId?: string }) 
             {!selectedWgId && (
               <p className="text-xs text-light mt-1">Спочатку оберіть робочу групу</p>
             )}
+          </div>
+        </div>
+
+        {/* Stage deadlines — populate the poetap diagram from creation.
+            All optional, but having them upfront avoids the post-create
+            walk through five inline stage editors on the standard page. */}
+        <div className="border border-hairline rounded-xl p-4 space-y-3 bg-page/30">
+          <div className="flex items-baseline justify-between">
+            <h3 className="text-sm font-semibold text-ink">Поетапні терміни</h3>
+            <span className="text-[11px] text-light">
+              необов&apos;язково · можна редагувати пізніше
+            </span>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-5 gap-3">
+            <div>
+              <label className="block text-[11px] font-medium text-mid mb-1">1 · ТЗ</label>
+              <input
+                type="date"
+                {...register('techSpecDueDate')}
+                className="w-full px-2.5 py-1.5 text-sm border border-hairline rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-card"
+              />
+            </div>
+            <div>
+              <label className="block text-[11px] font-medium text-mid mb-1">2 · Проєкт</label>
+              <input
+                type="date"
+                {...register('draftDueDate')}
+                className="w-full px-2.5 py-1.5 text-sm border border-hairline rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-card"
+              />
+            </div>
+            <div>
+              <label className="block text-[11px] font-medium text-mid mb-1">3 · Відгуки</label>
+              <input
+                type="date"
+                {...register('feedbackDueDate')}
+                className="w-full px-2.5 py-1.5 text-sm border border-hairline rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-card"
+              />
+            </div>
+            <div>
+              <label className="block text-[11px] font-medium text-mid mb-1">4 · Перевірка</label>
+              <input
+                type="date"
+                {...register('techReviewDueDate')}
+                className="w-full px-2.5 py-1.5 text-sm border border-hairline rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-card"
+              />
+            </div>
+            <div>
+              <label className="block text-[11px] font-medium text-mid mb-1">5 · Фіналізація</label>
+              <input
+                type="date"
+                {...register('finalDueDate')}
+                className="w-full px-2.5 py-1.5 text-sm border border-hairline rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-card"
+              />
+            </div>
           </div>
         </div>
 

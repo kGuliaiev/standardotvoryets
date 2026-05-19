@@ -6,6 +6,7 @@ import { useSession } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
 import { Avatar } from '@/components/ui/Avatar';
 import { Modal } from '@/components/ui/Modal';
+import { ConfirmModal } from '@/components/ui/ConfirmModal';
 import { RankBadge } from '@/components/ui/RankBadge';
 import { SortableHeader } from '@/components/ui/SortableHeader';
 import { useSort, sortedRows } from '@/lib/useSort';
@@ -109,6 +110,11 @@ export function UsersAdmin() {
   } | null>(null);
   const [newWgId, setNewWgId] = useState('');
   const [newWgRole, setNewWgRole] = useState<WGRole>('MEMBER');
+  const [activeCandidate, setActiveCandidate] = useState<{
+    userId: string;
+    name: string;
+    wantActive: boolean;
+  } | null>(null);
   const editingUserData = users?.find((u) => u.id === editingUser?.id);
 
   // Identity form (rank/position/org/name/email/phone) — populated when modal opens
@@ -270,9 +276,8 @@ export function UsersAdmin() {
                         <div className="flex items-center gap-3">
                           <Avatar name={u.name} avatarUrl={u.avatarUrl ?? undefined} size="sm" />
                           <div>
-                            <p className="font-medium text-ink flex items-center gap-1.5">
-                              <RankBadge rank={u.rank} variant="icon" />
-                              <span>{u.name}</span>
+                            <p className="font-medium text-ink">
+                              {u.name}
                               {isSelf && <span className="ml-1 text-xs text-light">(ви)</span>}
                             </p>
                             <p className="text-xs text-light">{u.email}</p>
@@ -281,7 +286,10 @@ export function UsersAdmin() {
                       </td>
                       <td className="px-3 py-3.5 hidden md:table-cell">
                         {u.rank && u.rank !== 'CIVILIAN' ? (
-                          <span className="text-xs text-ink">{rankLabel(u.rank)}</span>
+                          <div className="flex flex-col gap-0.5">
+                            <RankBadge rank={u.rank} variant="icon" />
+                            <span className="text-xs text-ink">{rankLabel(u.rank)}</span>
+                          </div>
                         ) : (
                           <span className="text-xs text-light">—</span>
                         )}
@@ -358,20 +366,23 @@ export function UsersAdmin() {
                           </button>
                           {!isSelf && (
                             <button
-                              onClick={() => {
-                                const wantActive = !(u as { isActive?: boolean }).isActive
-                                  ? true
-                                  : false;
-                                if (
-                                  confirm(
-                                    `${wantActive ? 'Активувати' : 'Деактивувати'} користувача "${u.name}"?`,
-                                  )
-                                ) {
-                                  setActiveMutation.mutate({ userId: u.id, isActive: wantActive });
-                                }
-                              }}
+                              onClick={() =>
+                                setActiveCandidate({
+                                  userId: u.id,
+                                  name: u.name,
+                                  // wantActive is true when re-activating, false when deactivating.
+                                  wantActive: (u as { isActive?: boolean }).isActive === false,
+                                })
+                              }
                               disabled={setActiveMutation.isPending}
-                              className="text-xs text-mid hover:text-ink inline-flex items-center gap-1 border border-hairline rounded-lg px-2.5 py-1 hover:bg-page disabled:opacity-50"
+                              className={
+                                (u as { isActive?: boolean }).isActive === false
+                                  ? // Activate: neutral pill.
+                                    'text-xs text-mid hover:text-ink inline-flex items-center gap-1 border border-hairline rounded-lg px-2.5 py-1 hover:bg-page disabled:opacity-50'
+                                  : // Deactivate is destructive → red treatment to
+                                    // match other row-level destructive actions.
+                                    'text-xs inline-flex items-center gap-1 border border-red-200 dark:border-red-800/60 text-red-600 dark:text-red-400 rounded-lg px-2.5 py-1 hover:bg-red-50 dark:hover:bg-red-900/20 disabled:opacity-50'
+                              }
                               title={
                                 (u as { isActive?: boolean }).isActive === false
                                   ? 'Активувати'
@@ -762,6 +773,42 @@ export function UsersAdmin() {
           </div>
         )}
       </Modal>
+
+      <ConfirmModal
+        open={!!activeCandidate}
+        title={
+          activeCandidate?.wantActive ? 'Активувати користувача?' : 'Деактивувати користувача?'
+        }
+        message={
+          activeCandidate ? (
+            activeCandidate.wantActive ? (
+              <>
+                <span className="font-semibold text-ink">{activeCandidate.name}</span> зможе знову
+                заходити в систему.
+              </>
+            ) : (
+              <>
+                <span className="font-semibold text-ink">{activeCandidate.name}</span> не зможе
+                заходити в систему до повторної активації. Дані залишаться, ролі в робочих групах
+                теж.
+              </>
+            )
+          ) : (
+            ''
+          )
+        }
+        confirmLabel={activeCandidate?.wantActive ? 'Активувати' : 'Деактивувати'}
+        destructive={!activeCandidate?.wantActive}
+        isPending={setActiveMutation.isPending}
+        onClose={() => setActiveCandidate(null)}
+        onConfirm={() => {
+          if (!activeCandidate) return;
+          setActiveMutation.mutate(
+            { userId: activeCandidate.userId, isActive: activeCandidate.wantActive },
+            { onSuccess: () => setActiveCandidate(null) },
+          );
+        }}
+      />
     </div>
   );
 }
