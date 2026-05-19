@@ -431,11 +431,14 @@ export function StandardBodyEditor({ target, bodyText, bodyUpdatedAt, bodyUpdate
               a tall containing block to scroll-anchor against —
               that's required for `position: sticky` to actually
               engage. The card has a hard `h-[...]` so it never
-              exceeds the modal's visible viewport. */}
+              exceeds the modal's visible viewport.
+              The top offset clears the modal title (~64 px) AND the
+              sticky action toolbar (~52 px) so the card's tab bar
+              isn't hidden behind them. */}
           <div
             className={`bg-card rounded-xl border border-hairline overflow-hidden flex flex-col ${
               isInModal
-                ? 'lg:sticky lg:top-[88px] lg:h-[calc(92vh-110px)]'
+                ? 'lg:sticky lg:top-[130px] lg:h-[calc(92vh-170px)]'
                 : 'lg:sticky lg:top-4 lg:h-[calc(100vh-3rem)]'
             }`}
           >
