@@ -124,9 +124,26 @@ export function CommentsThread({ standardId }: { standardId: string }) {
     },
     onError: (e) => setError(e.message),
   });
+  // Optimistic delete — pull the row out of the local cache before the
+  // server round-trip so the user sees it disappear immediately.
+  // `onMutate` snapshots + edits the cache; `onError` restores it;
+  // `onSettled` invalidates to reconcile with whatever the server
+  // ultimately stored. Pattern lifted from TanStack Query docs.
   const deleteMutation = trpc.comment.delete.useMutation({
-    onSuccess: invalidate,
-    onError: (e) => setError(e.message),
+    onMutate: async ({ id }) => {
+      await utils.comment.list.cancel({ standardId });
+      const prev = utils.comment.list.getData({ standardId });
+      utils.comment.list.setData({ standardId }, (old) =>
+        old ? old.filter((c) => c.id !== id && c.parentId !== id) : old,
+      );
+      return { prev };
+    },
+    onError: (e, _input, ctx) => {
+      // Restore the snapshot so the comment reappears.
+      if (ctx?.prev) utils.comment.list.setData({ standardId }, ctx.prev);
+      setError(e.message);
+    },
+    onSettled: invalidate,
   });
 
   const tree = useMemo(() => {
