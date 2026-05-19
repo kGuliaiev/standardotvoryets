@@ -11,52 +11,52 @@ interface CellProps {
   completedAt?: Date | string | null;
 }
 
-function fmtShort(d: Date | string) {
-  const dt = d instanceof Date ? d : new Date(d);
-  const day = String(dt.getDate()).padStart(2, '0');
-  const months = [
-    'січня',
-    'лютого',
-    'березня',
-    'квітня',
-    'травня',
-    'червня',
-    'липня',
-    'серпня',
-    'вересня',
-    'жовтня',
-    'листопада',
-    'грудня',
-  ];
-  return `${day} ${months[dt.getMonth()]}`;
-}
+const MONTHS_UA_GENITIVE = [
+  'січня',
+  'лютого',
+  'березня',
+  'квітня',
+  'травня',
+  'червня',
+  'липня',
+  'серпня',
+  'вересня',
+  'жовтня',
+  'листопада',
+  'грудня',
+];
 
-function fmtDot(d: Date | string) {
+/** Unified short Ukrainian date: "13 травня". Used everywhere in this
+ *  table so the planned-vs-completed comparison reads at a glance —
+ *  no more mixing "до 14 травня" with strikethrough "13.05.2026". */
+function fmtUaDate(d: Date | string): string {
   const dt = d instanceof Date ? d : new Date(d);
-  return `${String(dt.getDate()).padStart(2, '0')}.${String(dt.getMonth() + 1).padStart(2, '0')}.${dt.getFullYear()}`;
+  return `${dt.getDate()} ${MONTHS_UA_GENITIVE[dt.getMonth()]}`;
 }
 
 function StageCell({ due, completedAt }: CellProps) {
-  if (!due) return <span className="text-light">—</span>;
+  if (!due && !completedAt) return <span className="text-light">—</span>;
   const isDone = !!completedAt;
-  const dueDate = due instanceof Date ? due : new Date(due);
-  const isOverdue = !isDone && dueDate.getTime() < Date.now();
+  const dueDate = due ? (due instanceof Date ? due : new Date(due)) : null;
+  const isOverdue = !isDone && dueDate && dueDate.getTime() < Date.now();
   return (
     <div className="flex flex-col items-center gap-0.5 text-center">
-      <span
-        className={
-          isDone
-            ? 'text-mid line-through'
-            : isOverdue
-              ? 'text-red-600 dark:text-red-400 font-semibold'
-              : 'text-ink'
-        }
-      >
-        до {fmtShort(due)}
-      </span>
+      {dueDate && (
+        <span
+          className={
+            isDone
+              ? 'text-mid line-through'
+              : isOverdue
+                ? 'text-red-600 dark:text-red-400 font-semibold'
+                : 'text-ink'
+          }
+        >
+          {fmtUaDate(dueDate)}
+        </span>
+      )}
       {isDone && completedAt && (
         <span className="inline-flex items-center gap-1 text-[11px] text-emerald-600 dark:text-emerald-400 font-semibold whitespace-nowrap">
-          <Check className="w-3 h-3" strokeWidth={3} /> {fmtDot(completedAt)}
+          <Check className="w-3 h-3" strokeWidth={3} /> {fmtUaDate(completedAt)}
         </span>
       )}
     </div>
@@ -69,8 +69,17 @@ export function ReportProgramPlan() {
     { refetchOnMount: 'always', staleTime: 0 },
   );
   const [sort, setSort] = useSort<
-    'num' | 'part' | 'indeks' | 'title' | 'wg' | 'techSpec' | 'final'
-  >('num', 'asc');
+    | 'num'
+    | 'part'
+    | 'indeks'
+    | 'title'
+    | 'wg'
+    | 'techSpec'
+    | 'draft'
+    | 'feedback'
+    | 'techReview'
+    | 'final'
+  >('indeks', 'asc');
 
   if (error) {
     return (
@@ -105,6 +114,12 @@ export function ReportProgramPlan() {
         return s.workingGroup.code;
       case 'techSpec':
         return s.techSpecDueDate ? new Date(s.techSpecDueDate) : null;
+      case 'draft':
+        return s.draftDueDate ? new Date(s.draftDueDate) : null;
+      case 'feedback':
+        return s.feedbackDueDate ? new Date(s.feedbackDueDate) : null;
+      case 'techReview':
+        return s.techReviewDueDate ? new Date(s.techReviewDueDate) : null;
       case 'final':
         return s.finalDueDate ? new Date(s.finalDueDate) : null;
       default:
@@ -181,9 +196,21 @@ export function ReportProgramPlan() {
                   ТЗ
                 </SortableHeader>
               </th>
-              <th className="px-2 py-2.5 font-medium text-center">Проєкт</th>
-              <th className="px-2 py-2.5 font-medium text-center">Відгуки</th>
-              <th className="px-2 py-2.5 font-medium text-center">Перевірка</th>
+              <th className="px-2 py-2.5 font-medium text-center">
+                <SortableHeader columnKey="draft" sort={sort} onSort={setSort}>
+                  Проєкт
+                </SortableHeader>
+              </th>
+              <th className="px-2 py-2.5 font-medium text-center">
+                <SortableHeader columnKey="feedback" sort={sort} onSort={setSort}>
+                  Відгуки
+                </SortableHeader>
+              </th>
+              <th className="px-2 py-2.5 font-medium text-center">
+                <SortableHeader columnKey="techReview" sort={sort} onSort={setSort}>
+                  Перевірка
+                </SortableHeader>
+              </th>
               <th className="px-2 py-2.5 font-medium text-center">
                 <SortableHeader columnKey="final" sort={sort} onSort={setSort}>
                   Остаточно

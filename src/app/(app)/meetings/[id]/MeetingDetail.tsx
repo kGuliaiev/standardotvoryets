@@ -7,6 +7,7 @@ import { useSession } from 'next-auth/react';
 import { Pencil } from 'lucide-react';
 import { Avatar } from '@/components/ui/Avatar';
 import { Modal } from '@/components/ui/Modal';
+import { ConfirmModal } from '@/components/ui/ConfirmModal';
 import { ActivityFeed } from '@/components/ActivityFeed';
 import { formatDate } from '@/lib/utils';
 import { can } from '@/lib/rbac';
@@ -73,6 +74,7 @@ export function MeetingDetail({ id }: Props) {
     chairmanId: '',
   });
   const [editError, setEditError] = useState<string | null>(null);
+  const [cancelConfirmOpen, setCancelConfirmOpen] = useState(false);
 
   const utils = trpc.useUtils();
   const { data: meeting, isLoading } = trpc.meeting.byId.useQuery({ id });
@@ -210,10 +212,7 @@ export function MeetingDetail({ id }: Props) {
               )}
               {canCancel && meeting.status === 'PLANNED' && (
                 <button
-                  onClick={() => {
-                    if (confirm('Скасувати засідання?'))
-                      changeStatusMutation.mutate({ meetingId: id, status: 'CANCELLED' });
-                  }}
+                  onClick={() => setCancelConfirmOpen(true)}
                   className="text-xs bg-red-50 text-red-600 hover:bg-red-100 dark:bg-red-900/30 dark:text-red-300 dark:hover:bg-red-900/50 px-3 py-1.5 rounded-lg transition-colors font-medium"
                 >
                   Скасувати
@@ -749,6 +748,22 @@ export function MeetingDetail({ id }: Props) {
           </div>
         </div>
       </Modal>
+
+      <ConfirmModal
+        open={cancelConfirmOpen}
+        title="Скасувати засідання?"
+        message="Засідання отримає статус «Скасоване». Учасники отримають сповіщення. Цю дію можна повернути зі сторінки протоколу."
+        confirmLabel="Скасувати засідання"
+        destructive
+        isPending={changeStatusMutation.isPending}
+        onClose={() => setCancelConfirmOpen(false)}
+        onConfirm={() =>
+          changeStatusMutation.mutate(
+            { meetingId: id, status: 'CANCELLED' },
+            { onSuccess: () => setCancelConfirmOpen(false) },
+          )
+        }
+      />
     </div>
   );
 }

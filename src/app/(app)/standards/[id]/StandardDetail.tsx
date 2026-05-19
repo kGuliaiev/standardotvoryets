@@ -6,6 +6,7 @@ import { useSession } from 'next-auth/react';
 import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { Pencil, ChevronDown, FileText } from 'lucide-react';
+import { DueDateChip } from '@/lib/dueDate';
 import { StatusBadge, type StandardStatus } from '@/components/ui/StatusBadge';
 import { Avatar } from '@/components/ui/Avatar';
 import { Modal } from '@/components/ui/Modal';
@@ -650,24 +651,18 @@ export function StandardDetail({ id }: { id: string }) {
                           {canDeleteDoc && (
                             <button
                               onClick={() => {
-                                // Stage 1: native confirm.
-                                if (
-                                  confirm(
-                                    `Видалити документ "${doc.filename}"?\n\nЦе перший із двох підтверджень — далі потрібно ввести 6-значний код підтвердження.`,
-                                  )
-                                ) {
-                                  // Stage 2: open a modal that demands
-                                  // a fresh 6-digit code. The code is
-                                  // generated per-attempt so muscle
-                                  // memory can't bypass the prompt.
-                                  const code = String(Math.floor(100000 + Math.random() * 900000));
-                                  setDeleteDocCandidate({
-                                    id: doc.id,
-                                    filename: doc.filename,
-                                    code,
-                                  });
-                                  setDeleteDocConfirmText('');
-                                }
+                                // Open the 6-digit-code modal directly.
+                                // The code is generated per-attempt so
+                                // muscle memory can't bypass the
+                                // prompt — that's the real safety
+                                // gate, not a system confirm() dialog.
+                                const code = String(Math.floor(100000 + Math.random() * 900000));
+                                setDeleteDocCandidate({
+                                  id: doc.id,
+                                  filename: doc.filename,
+                                  code,
+                                });
+                                setDeleteDocConfirmText('');
                               }}
                               disabled={deleteDocMutation.isPending}
                               className="text-xs px-2 py-1 rounded border border-red-200 dark:border-red-800/60 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors inline-flex items-center gap-1 flex-shrink-0 disabled:opacity-50"
@@ -818,11 +813,16 @@ export function StandardDetail({ id }: { id: string }) {
             )}
 
             {activeTab === 'tasks' && (
-              <div className="space-y-4">
-                <div className="bg-card rounded-xl border border-hairline">
-                  <div className="px-5 py-4 border-b border-hairline flex items-center justify-between">
-                    <h3 className="font-semibold text-ink">
-                      Відкриті завдання ({openTasks.length})
+              <div className="space-y-5">
+                {/* Matches the visual rhythm of the global /tasks list
+                    so the user moves between the two without
+                    relearning the row. The standard-code pill is
+                    suppressed since every row already lives under
+                    this one standard. */}
+                <section>
+                  <div className="flex items-baseline justify-between mb-2">
+                    <h3 className="text-[11px] font-bold uppercase tracking-[0.8px] text-light">
+                      Відкриті · {openTasks.length}
                     </h3>
                     <button
                       onClick={() => setTaskModalOpen(true)}
@@ -832,53 +832,26 @@ export function StandardDetail({ id }: { id: string }) {
                     </button>
                   </div>
                   {openTasks.length === 0 ? (
-                    <div className="py-10 text-center text-light text-sm">Завдань немає</div>
+                    <p className="text-sm text-light px-1 py-3">Завдань немає</p>
                   ) : (
-                    <div className="divide-y divide-hairline">
+                    <ul className="space-y-2">
                       {openTasks.map((task) => (
-                        <div key={task.id} className="flex items-center gap-4 px-5 py-3.5">
-                          <div
-                            className={`w-2 h-2 rounded-full flex-shrink-0 ${
-                              task.priority === 'HIGH'
-                                ? 'bg-red-500'
-                                : task.priority === 'MEDIUM'
-                                  ? 'bg-amber-400'
-                                  : 'bg-slate-300'
-                            }`}
-                          />
-                          <div className="flex-1 min-w-0">
-                            <p className="text-sm font-medium text-ink">{task.title}</p>
-                            <p className="text-xs text-light">
-                              {task.status === 'IN_PROGRESS' ? 'В роботі' : 'Відкрито'}
-                              {task.dueDate && ` · до ${formatDate(task.dueDate)}`}
-                            </p>
-                          </div>
-                          {task.assignee && (
-                            <Avatar
-                              name={task.assignee.name}
-                              avatarUrl={task.assignee.avatarUrl}
-                              size="xs"
-                            />
-                          )}
-                        </div>
+                        <StandardTaskRow key={task.id} task={task} standardId={id} />
                       ))}
-                    </div>
+                    </ul>
                   )}
-                </div>
+                </section>
                 {doneTasks.length > 0 && (
-                  <div className="bg-card rounded-xl border border-hairline">
-                    <div className="px-5 py-4 border-b border-hairline">
-                      <h3 className="font-semibold text-ink">Виконані ({doneTasks.length})</h3>
-                    </div>
-                    <div className="divide-y divide-hairline">
+                  <section>
+                    <h3 className="text-[11px] font-bold uppercase tracking-[0.8px] text-light mb-2">
+                      Виконані · {doneTasks.length}
+                    </h3>
+                    <ul className="space-y-2">
                       {doneTasks.map((task) => (
-                        <div key={task.id} className="flex items-center gap-4 px-5 py-3 opacity-60">
-                          <span className="text-green-600 text-xs">✓</span>
-                          <p className="text-sm text-mid line-through">{task.title}</p>
-                        </div>
+                        <StandardTaskRow key={task.id} task={task} standardId={id} />
                       ))}
-                    </div>
-                  </div>
+                    </ul>
+                  </section>
                 )}
               </div>
             )}
@@ -1281,6 +1254,77 @@ export function StandardDetail({ id }: { id: string }) {
           );
         })()}
     </div>
+  );
+}
+
+/** Single task row used inside the standard's Завдання tab. Same
+ *  visual rhythm as the global tasks list's TaskRowItem, minus the
+ *  standard-code pill (everything here is for this one standard).
+ *  Checkbox toggles status, click on title navigates to the task. */
+function StandardTaskRow({
+  task,
+  standardId: _standardId,
+}: {
+  task: {
+    id: string;
+    title: string;
+    status: 'OPEN' | 'IN_PROGRESS' | 'DONE' | 'CANCELLED';
+    priority: 'HIGH' | 'MEDIUM' | 'LOW';
+    dueDate: Date | string | null;
+    assigneeId: string | null;
+    assignee?: { id: string; name: string; avatarUrl: string | null } | null;
+  };
+  standardId: string;
+}) {
+  const isDone = task.status === 'DONE';
+  const due = task.dueDate ? new Date(task.dueDate) : null;
+  const utils = trpc.useUtils();
+  const toggle = trpc.task.changeStatus.useMutation({
+    onSuccess: () => void utils.task.list.invalidate(),
+  });
+  return (
+    <li className="group flex items-center gap-3 bg-card border border-hairline rounded-[10px] px-4 py-3 hover:border-brand/40 transition-colors">
+      <button
+        onClick={() => toggle.mutate({ id: task.id, status: isDone ? 'OPEN' : 'DONE' })}
+        className={`w-[18px] h-[18px] rounded-md border-[1.5px] inline-flex items-center justify-center transition shrink-0 ${
+          isDone ? 'bg-emerald-500 border-emerald-500' : 'border-hairline hover:border-brand'
+        }`}
+        aria-label={isDone ? 'Відновити' : 'Виконати'}
+      >
+        {isDone && (
+          <svg viewBox="0 0 12 12" className="w-3 h-3 fill-none stroke-white stroke-[2.5]">
+            <path d="M2.5 6.5 5 9l4.5-5.5" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
+        )}
+      </button>
+      <span
+        className={`w-2 h-2 rounded-full shrink-0 ${
+          task.priority === 'HIGH'
+            ? 'bg-red-500'
+            : task.priority === 'MEDIUM'
+              ? 'bg-amber-400'
+              : 'bg-slate-300'
+        }`}
+      />
+      <Link
+        href={`/tasks/${task.id}`}
+        className={`flex-1 text-left text-sm truncate transition-colors ${
+          isDone ? 'text-light line-through' : 'text-ink hover:text-brand'
+        }`}
+      >
+        {task.title}
+      </Link>
+      {task.assignee && (
+        <div className="inline-flex items-center gap-1.5 shrink-0">
+          <Avatar
+            name={task.assignee.name}
+            avatarUrl={task.assignee.avatarUrl ?? undefined}
+            size="xs"
+          />
+        </div>
+      )}
+      <DueDateChip due={due} isDone={isDone} />
+    </li>
   );
 }
 

@@ -8,6 +8,8 @@ import { useSession } from 'next-auth/react';
 import { Avatar } from '@/components/ui/Avatar';
 import { TaskFormModal } from '@/components/TaskFormModal';
 import { PageHeader } from '@/components/ui/PageHeader';
+import { ConfirmModal } from '@/components/ui/ConfirmModal';
+import { DueDateChip } from '@/lib/dueDate';
 import { getInitials } from '@/lib/utils';
 
 const PRIORITY_DOT: Record<string, string> = {
@@ -15,21 +17,6 @@ const PRIORITY_DOT: Record<string, string> = {
   MEDIUM: 'bg-amber-400',
   LOW: 'bg-emerald-400',
 };
-
-const MONTHS_UA_SHORT = [
-  'січ',
-  'лют',
-  'бер',
-  'кві',
-  'тра',
-  'чер',
-  'лип',
-  'сер',
-  'вер',
-  'жов',
-  'лис',
-  'гру',
-];
 
 type FilterMode = 'all' | 'open' | 'done' | 'mine';
 
@@ -47,44 +34,9 @@ interface TaskRow {
   createdById: string;
 }
 
-function dueChip(due: Date | null, isDone: boolean) {
-  if (!due) return null;
-  const dueDay = new Date(due.getFullYear(), due.getMonth(), due.getDate());
-  const now = new Date();
-  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-  if (isDone) {
-    return (
-      <span className="text-[10px] font-bold rounded-full px-2 py-0.5 bg-pill text-light">
-        Виконано
-      </span>
-    );
-  }
-  if (dueDay < today) {
-    return (
-      <span className="text-[10px] font-bold rounded-full px-2 py-0.5 pill-rose inline-flex items-center gap-1">
-        <AlertTriangle className="w-3 h-3" /> Прострочено
-      </span>
-    );
-  }
-  if (dueDay.getTime() === today.getTime()) {
-    return (
-      <span className="text-[10px] font-bold rounded-full px-2 py-0.5 pill-rose">Сьогодні</span>
-    );
-  }
-  const diffDays = Math.round((dueDay.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
-  if (diffDays <= 3) {
-    return (
-      <span className="text-[10px] font-bold rounded-full px-2 py-0.5 pill-amber">
-        {due.getDate()} {MONTHS_UA_SHORT[due.getMonth()]}
-      </span>
-    );
-  }
-  return (
-    <span className="text-[10px] font-bold rounded-full px-2 py-0.5 pill-green">
-      {due.getDate()} {MONTHS_UA_SHORT[due.getMonth()]}
-    </span>
-  );
-}
+// Due chip + days-remaining label moved to @/lib/dueDate so the
+// standard's Завдання tab can render identical rows without
+// importing from the global page.
 
 export function TasksList() {
   const { data: session } = useSession();
@@ -98,6 +50,7 @@ export function TasksList() {
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   const [showCreate, setShowCreate] = useState(false);
   const [editingTask, setEditingTask] = useState<TaskRow | null>(null);
+  const [deleteCandidate, setDeleteCandidate] = useState<TaskRow | null>(null);
 
   const { data: groups } = trpc.workingGroup.list.useQuery();
   const { data: standardsResp } = trpc.standard.list.useQuery({ page: 1, pageSize: 200 });
@@ -378,10 +331,7 @@ export function TasksList() {
                         task={t}
                         toggle={() => toggleTask.mutate({ id: t.id, status: 'DONE' })}
                         onEdit={() => setEditingTask(t)}
-                        onDelete={() => {
-                          if (confirm(`Видалити завдання "${t.title}"?`))
-                            deleteTask.mutate({ id: t.id });
-                        }}
+                        onDelete={() => setDeleteCandidate(t)}
                         showStandard={selectedScope.kind !== 'std'}
                         canDelete={t.createdById === userId || session?.user.globalRole === 'ADMIN'}
                       />
@@ -409,10 +359,7 @@ export function TasksList() {
                         task={t}
                         toggle={() => toggleTask.mutate({ id: t.id, status: 'OPEN' })}
                         onEdit={() => setEditingTask(t)}
-                        onDelete={() => {
-                          if (confirm(`Видалити завдання "${t.title}"?`))
-                            deleteTask.mutate({ id: t.id });
-                        }}
+                        onDelete={() => setDeleteCandidate(t)}
                         showStandard={selectedScope.kind !== 'std'}
                         canDelete={t.createdById === userId || session?.user.globalRole === 'ADMIN'}
                       />
@@ -458,6 +405,32 @@ export function TasksList() {
             : undefined
         }
       />
+
+      <ConfirmModal
+        open={!!deleteCandidate}
+        title="Видалити завдання?"
+        message={
+          deleteCandidate ? (
+            <>
+              <span className="font-semibold text-ink">«{deleteCandidate.title}»</span> буде
+              видалено остаточно. Цю дію не можна скасувати.
+            </>
+          ) : (
+            ''
+          )
+        }
+        confirmLabel="Видалити"
+        destructive
+        isPending={deleteTask.isPending}
+        onClose={() => setDeleteCandidate(null)}
+        onConfirm={() => {
+          if (!deleteCandidate) return;
+          deleteTask.mutate(
+            { id: deleteCandidate.id },
+            { onSuccess: () => setDeleteCandidate(null) },
+          );
+        }}
+      />
     </div>
   );
 }
@@ -479,7 +452,7 @@ function TaskRowItem({
 }) {
   const isDone = task.status === 'DONE';
   const due = task.dueDate ? new Date(task.dueDate) : null;
-  const dueLabel = dueChip(due, isDone);
+  const dueLabel = <DueDateChip due={due} isDone={isDone} />;
 
   return (
     <li className="group flex items-center gap-3 bg-card border border-hairline rounded-[10px] px-4 py-3 hover:border-brand/40 transition-colors">

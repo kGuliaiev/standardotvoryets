@@ -9,6 +9,7 @@ import { Pencil, Trash2, Check, Clock, AlertTriangle, User, Calendar } from 'luc
 import { Avatar } from '@/components/ui/Avatar';
 import { ActivityFeed } from '@/components/ActivityFeed';
 import { TaskFormModal } from '@/components/TaskFormModal';
+import { ConfirmModal } from '@/components/ui/ConfirmModal';
 import { formatDate, formatDateTime } from '@/lib/utils';
 
 const STATUS_TONE: Record<string, { label: string; cls: string }> = {
@@ -33,6 +34,7 @@ export function TaskDetail({ id }: { id: string }) {
   const utils = trpc.useUtils();
   const { data: task, isLoading } = trpc.task.byId.useQuery({ id });
   const [editOpen, setEditOpen] = useState(false);
+  const [deleteOpen, setDeleteOpen] = useState(false);
 
   const invalidate = () => {
     void utils.task.byId.invalidate({ id });
@@ -143,10 +145,7 @@ export function TaskDetail({ id }: { id: string }) {
             )}
             {canDelete && (
               <button
-                onClick={() => {
-                  if (confirm(`Видалити завдання "${task.title}"?`))
-                    deleteMutation.mutate({ id: task.id });
-                }}
+                onClick={() => setDeleteOpen(true)}
                 className="btn-secondary text-red-600 hover:text-red-700 hover:border-red-300"
               >
                 <Trash2 className="w-3.5 h-3.5" />
@@ -248,6 +247,24 @@ export function TaskDetail({ id }: { id: string }) {
           dueDate: task.dueDate ? new Date(task.dueDate).toISOString().slice(0, 10) : '',
         }}
         onSaved={invalidate}
+      />
+
+      <ConfirmModal
+        open={deleteOpen}
+        title="Видалити завдання?"
+        message={
+          <>
+            <span className="font-semibold text-ink">«{task.title}»</span> буде видалено остаточно.
+            Цю дію не можна скасувати.
+          </>
+        }
+        confirmLabel="Видалити"
+        destructive
+        isPending={deleteMutation.isPending}
+        onClose={() => setDeleteOpen(false)}
+        onConfirm={() =>
+          deleteMutation.mutate({ id: task.id }, { onSuccess: () => setDeleteOpen(false) })
+        }
       />
     </div>
   );
