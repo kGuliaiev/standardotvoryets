@@ -1,6 +1,7 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { useSearchParams } from 'next/navigation';
 import { trpc } from '@/lib/trpc/client';
 import { useSession } from 'next-auth/react';
 import { Avatar } from '@/components/ui/Avatar';
@@ -54,6 +55,50 @@ export function CommentsThread({ standardId }: { standardId: string }) {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editDraft, setEditDraft] = useState('');
   const [error, setError] = useState<string | null>(null);
+
+  /** Click "Відповісти" → set replyingTo, scroll the comment into
+   *  view, and let the reply textarea autoFocus once mounted. */
+  function openReply(id: string) {
+    setReplyingTo(id);
+    setReplyDraft('');
+    setError(null);
+    // Defer one frame so the reply composer mounts before we scroll
+    // (and the new height is included in the scroll target).
+    requestAnimationFrame(() => {
+      const el = document.getElementById(`comment-${id}`);
+      el?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    });
+  }
+
+  function submitDraft() {
+    if (!draft.trim()) return;
+    createMutation.mutate({ standardId, body: draft });
+  }
+  function submitReply() {
+    if (!replyDraft.trim() || !replyingTo) return;
+    createMutation.mutate({ standardId, body: replyDraft, parentId: replyingTo });
+  }
+
+  // Deep-link support from /discussions:
+  //   ?reply=<id>   → auto-open the reply composer + scroll to it
+  //   ?compose=1    → autofocus the main "Залишити коментар" textarea
+  const searchParams = useSearchParams();
+  const composerRef = useRef<HTMLDivElement>(null);
+  const replyParam = searchParams.get('reply');
+  const composeParam = searchParams.get('compose');
+  useEffect(() => {
+    if (!comments) return;
+    if (replyParam) {
+      openReply(replyParam);
+    } else if (composeParam) {
+      const ta = composerRef.current?.querySelector('textarea');
+      if (ta instanceof HTMLTextAreaElement) {
+        ta.focus();
+        composerRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [comments, replyParam, composeParam]);
 
   const invalidate = () => {
     void utils.comment.list.invalidate({ standardId });
@@ -114,7 +159,7 @@ export function CommentsThread({ standardId }: { standardId: string }) {
       <div className="p-5 space-y-5">
         {/* Composer */}
         {session?.user && (
-          <div className="flex gap-3">
+          <div ref={composerRef} className="flex gap-3">
             <Avatar
               name={session.user.name ?? 'U'}
               avatarUrl={session.user.image ?? undefined}
@@ -127,14 +172,15 @@ export function CommentsThread({ standardId }: { standardId: string }) {
                 candidates={mentionCandidates}
                 rows={2}
                 placeholder="Залишити коментар…  Використовуйте @ для згадки колег."
+                onSubmit={submitDraft}
               />
               <div className="flex items-center justify-between">
-                <p className="text-[11px] text-light">{draft.trim().length}/5000</p>
+                <p className="text-[11px] text-light">
+                  {draft.trim().length}/5000
+                  <span className="ml-2 text-light/70">· ⌘+Enter — надіслати</span>
+                </p>
                 <button
-                  onClick={() => {
-                    if (!draft.trim()) return;
-                    createMutation.mutate({ standardId, body: draft });
-                  }}
+                  onClick={submitDraft}
                   disabled={!draft.trim() || createMutation.isPending}
                   className="btn-primary"
                 >
@@ -168,25 +214,14 @@ export function CommentsThread({ standardId }: { standardId: string }) {
                 canDelete={canDelete(c)}
                 mentionCandidates={mentionCandidates}
                 replyingTo={replyingTo}
-                onReply={(id) => {
-                  setReplyingTo(id);
-                  setReplyDraft('');
-                  setError(null);
-                }}
+                onReply={openReply}
                 onCancelReply={() => {
                   setReplyingTo(null);
                   setReplyDraft('');
                 }}
                 replyDraft={replyDraft}
                 setReplyDraft={setReplyDraft}
-                onSubmitReply={() => {
-                  if (!replyDraft.trim() || !replyingTo) return;
-                  createMutation.mutate({
-                    standardId,
-                    body: replyDraft,
-                    parentId: replyingTo,
-                  });
-                }}
+                onSubmitReply={submitReply}
                 editingId={editingId}
                 editDraft={editDraft}
                 onStartEdit={(id, body) => {
@@ -280,7 +315,8 @@ function CommentItem({
         mentionCandidates={mentionCandidates}
       />
 
-      {/* Reply composer */}
+      {/* Reply composer — appears right under the message being
+          replied to. autoFocus + onSubmit gives ⌘+Enter shortcut. */}
       {isReplying && (
         <div className="ml-11 mt-3 flex gap-2 items-start">
           <div className="flex-1">
@@ -291,7 +327,9 @@ function CommentItem({
               rows={2}
               placeholder={`Відповісти ${comment.author.name}…`}
               autoFocus
+              onSubmit={onSubmitReply}
             />
+            <p className="text-[10px] text-light/80 mt-1">⌘+Enter — надіслати · Esc — скасувати</p>
           </div>
           <div className="flex flex-col gap-1.5">
             <button
@@ -380,10 +418,21 @@ function CommentRow({
         size="sm"
       />
       <div className="flex-1 min-w-0">
-        <div className="flex items-baseline gap-2 flex-wrap">
+        <div className="flex items-center gap-2 flex-wrap">
           <span className="font-semibold text-ink text-[13px]">{comment.author.name}</span>
           <span className="text-[11px] text-light">{formatDateTime(comment.createdAt)}</span>
           {edited && <span className="text-[10px] text-light italic">· редаговано</span>}
+          {/* Reply lives inline with the timestamp so it's always
+              discoverable — much better than a hover-only action. */}
+          {onReply && !isEditing && (
+            <button
+              onClick={onReply}
+              className="ml-auto inline-flex items-center gap-1 text-[11px] text-brand hover:text-navy font-semibold"
+            >
+              <Reply className="w-3.5 h-3.5" />
+              Відповісти
+            </button>
+          )}
         </div>
         {isEditing ? (
           <div className="mt-1.5 space-y-2">
@@ -393,8 +442,9 @@ function CommentRow({
               candidates={mentionCandidates}
               rows={3}
               autoFocus
+              onSubmit={onSaveEdit}
             />
-            <div className="flex gap-2">
+            <div className="flex gap-2 items-center">
               <button
                 onClick={onSaveEdit}
                 disabled={!editDraft.trim() || pending}
@@ -406,6 +456,7 @@ function CommentRow({
               <button onClick={onCancelEdit} className="btn-secondary">
                 Скасувати
               </button>
+              <span className="text-[10px] text-light/80">⌘+Enter — зберегти</span>
             </div>
           </div>
         ) : (
@@ -417,17 +468,8 @@ function CommentRow({
           </p>
         )}
 
-        {!isEditing && (
+        {!isEditing && (isOwn || canDelete) && (
           <div className="flex items-center gap-3 mt-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
-            {onReply && (
-              <button
-                onClick={onReply}
-                className="inline-flex items-center gap-1 text-[11px] text-mid hover:text-brand"
-              >
-                <Reply className="w-3.5 h-3.5" />
-                Відповісти
-              </button>
-            )}
             {isOwn && (
               <button
                 onClick={onStartEdit}

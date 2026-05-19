@@ -19,6 +19,10 @@ interface Props {
   rows?: number;
   autoFocus?: boolean;
   className?: string;
+  /** Fired when the user presses ⌘+Enter (or Ctrl+Enter on non-Mac).
+   *  The mention dropdown takes priority over this — if the menu is
+   *  open Enter just picks the candidate. */
+  onSubmit?: () => void;
 }
 
 /**
@@ -35,6 +39,7 @@ export function MentionTextarea({
   rows = 2,
   autoFocus,
   className,
+  onSubmit,
 }: Props) {
   const ref = useRef<HTMLTextAreaElement>(null);
   const [query, setQuery] = useState<string | null>(null); // null = menu closed
@@ -94,6 +99,13 @@ export function MentionTextarea({
   }
 
   function handleKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
+    // ⌘/Ctrl + Enter — submit when the mention menu is closed. Menu
+    // open: Enter picks the highlighted candidate (handled below).
+    if ((e.metaKey || e.ctrlKey) && e.key === 'Enter' && query === null && onSubmit) {
+      e.preventDefault();
+      onSubmit();
+      return;
+    }
     if (query === null || filtered.length === 0) return;
     if (e.key === 'ArrowDown') {
       e.preventDefault();

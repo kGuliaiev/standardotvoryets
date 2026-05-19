@@ -6,7 +6,7 @@ import { trpc } from '@/lib/trpc/client';
 import { Avatar } from '@/components/ui/Avatar';
 import { RankBadge } from '@/components/ui/RankBadge';
 import { useLocalStorageState } from '@/lib/useLocalStorageState';
-import { MessageSquare, Sparkles } from 'lucide-react';
+import { MessageSquare, Sparkles, Reply, PenSquare } from 'lucide-react';
 import { renderMentions } from '@/components/ui/MentionTextarea';
 
 const STORAGE_KEY = 'discussions.lastVisit.v1';
@@ -148,10 +148,11 @@ export function DiscussionsFeed() {
                       </span>
                     )}
                     <Link
-                      href={`/standards/${g.standard.id}?tab=comments`}
-                      className="text-xs font-semibold text-brand hover:underline"
+                      href={`/standards/${g.standard.id}?tab=comments&compose=1`}
+                      className="text-xs font-semibold text-brand hover:underline inline-flex items-center gap-1"
                     >
-                      Відповісти →
+                      <PenSquare className="w-3.5 h-3.5" />
+                      Написати на стандарт
                     </Link>
                   </div>
                 </div>
@@ -186,6 +187,15 @@ export function DiscussionsFeed() {
                           <p className="text-sm text-ink mt-1 leading-relaxed whitespace-pre-wrap break-words">
                             {renderMentions(c.body)}
                           </p>
+                          <div className="mt-1.5">
+                            <Link
+                              href={`/standards/${g.standard.id}?tab=comments&reply=${c.id}`}
+                              className="text-[11px] text-brand hover:underline inline-flex items-center gap-1 font-semibold"
+                            >
+                              <Reply className="w-3.5 h-3.5" />
+                              Відповісти
+                            </Link>
+                          </div>
                         </div>
                       </li>
                     );
