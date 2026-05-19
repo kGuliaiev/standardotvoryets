@@ -352,6 +352,7 @@ export const suggestionRouter = createTRPCRouter({
 
       const paras = splitParagraphs(currentBody);
       const originalPlain = stripTags(sug.originalText);
+      const proposedPlain = stripTags(sug.proposedText);
       let appliedIndex = sug.paragraphIndex;
       const direct = paras[appliedIndex];
       if (direct === undefined || stripTags(direct) !== originalPlain) {
@@ -359,16 +360,39 @@ export const suggestionRouter = createTRPCRouter({
         appliedIndex = found;
       }
 
+      // Detect "already applied" — if the proposed text is already
+      // present in the body (any block), a previous accept of an
+      // identical suggestion most likely did this work. Mark the row
+      // resolved without re-applying (which would duplicate the
+      // content at the end).
+      const alreadyApplied =
+        appliedIndex < 0 &&
+        sug.operation !== 'DELETE' &&
+        proposedPlain.length > 0 &&
+        paras.some((p) => stripTags(p) === proposedPlain);
+
       // Apply the operation
       const nextParas = [...paras];
-      if (appliedIndex < 0) {
+      if (alreadyApplied) {
+        // No-op — proposed content is already in the document.
+      } else if (appliedIndex < 0) {
         // Original block isn't in the document any more.
         if (sug.operation === 'DELETE') {
           // Already deleted by an earlier action — nothing to do.
-        } else {
-          // For REPLACE / INSERT_AFTER, drop the proposed content at
-          // the end so the leader's edit isn't silently lost.
+        } else if (sug.operation === 'INSERT_AFTER') {
+          // INSERT_AFTER's intent is "add this content". Anchor is
+          // gone, content isn't here yet → append to end.
           nextParas.push(sug.proposedText);
+        } else {
+          // REPLACE without a target and the proposed isn't here yet
+          // — that's a genuine conflict. Tell the leader to re-review
+          // rather than guessing where to put the new text.
+          throw new TRPCError({
+            code: 'CONFLICT',
+            message:
+              `Оригінальний текст параграфа №${sug.paragraphIndex + 1} вже не знайдено в документі (хтось його змінив). ` +
+              `Перегляньте правку та створіть нову, якщо потрібно.`,
+          });
         }
       } else if (sug.operation === 'REPLACE') {
         nextParas[appliedIndex] = sug.proposedText;
