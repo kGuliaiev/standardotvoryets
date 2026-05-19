@@ -142,12 +142,6 @@ export function StandardBodyEditor({ target, bodyText, bodyUpdatedAt, bodyUpdate
   const [draft, setDraft] = useState<DraftSuggestion | null>(null);
   const [bulkOpen, setBulkOpen] = useState(false);
   const [bulkText, setBulkText] = useState(normalizedBody);
-  // For per-document editing we replace the read-only paragraph view
-  // with an editable rich-text surface (Word-style toolbar inline).
-  // `inlineHtml` is the live buffer; `inlineDirty` tracks whether
-  // the user changed it relative to what's saved on the server.
-  const [inlineHtml, setInlineHtml] = useState<string>(normalizedBody);
-  const [inlineDirty, setInlineDirty] = useState(false);
   /** Right rail tabs — Зміни (suggestions) or Коментарі (inline). */
   const [railTab, setRailTab] = useState<'changes' | 'comments'>('changes');
   // Shared inline-comments query so the rail tab badge can show a
@@ -205,72 +199,9 @@ export function StandardBodyEditor({ target, bodyText, bodyUpdatedAt, bodyUpdate
     onSuccess: () => {
       invalidateBody();
       setBulkOpen(false);
-      setInlineDirty(false);
     },
     onError: (e) => alert(e.message),
   });
-
-  // When the server-side body changes (another user saved, an import,
-  // an accepted suggestion), reseed the inline buffer — but only if
-  // the local user hasn't started editing yet. Otherwise we'd nuke
-  // their typing.
-  useEffect(() => {
-    if (inlineDirty) return;
-    setInlineHtml(normalizedBody);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [normalizedBody]);
-
-  // Inline-edit mode is on for documents that the user can edit.
-  // Standards still use the paragraph-by-paragraph suggestion view.
-  const inlineEditMode = target.kind === 'document' && canEditMeta;
-
-  function saveInline() {
-    if (!inlineEditMode || !inlineDirty) return;
-    updateBodyMutation.mutate({ ...targetInput, bodyText: inlineHtml });
-  }
-
-  // Tag each top-level child of TipTap's contenteditable with
-  // data-paragraph-idx="N" so the InlineComments overlay (which
-  // works by `[data-paragraph-idx="..."]` lookups) can map text
-  // selections back to a paragraph. A single MutationObserver
-  // handles all subsequent edits — recreating it on every keystroke
-  // (the old `inlineHtml` dep) caused a noticeable hang on long
-  // documents because we'd disconnect/reconnect + retag every input.
-  useEffect(() => {
-    if (!inlineEditMode) return;
-    let obs: MutationObserver | null = null;
-    let retryTimer: number | null = null;
-
-    const setup = () => {
-      const wrapper = articleRef.current;
-      if (!wrapper) {
-        retryTimer = window.setTimeout(setup, 100);
-        return;
-      }
-      const pm = wrapper.querySelector('.ProseMirror');
-      if (!pm) {
-        // TipTap may not have mounted yet — retry a few ticks later.
-        retryTimer = window.setTimeout(setup, 100);
-        return;
-      }
-      const tag = () => {
-        Array.from(pm.children).forEach((child, i) => {
-          if (child instanceof HTMLElement && child.dataset.paragraphIdx !== String(i)) {
-            child.setAttribute('data-paragraph-idx', String(i));
-          }
-        });
-      };
-      tag();
-      obs = new MutationObserver(tag);
-      obs.observe(pm, { childList: true, subtree: false });
-    };
-
-    setup();
-    return () => {
-      if (retryTimer != null) window.clearTimeout(retryTimer);
-      obs?.disconnect();
-    };
-  }, [inlineEditMode]);
   const replaceBodyMutation = trpc.suggestion.replaceBody.useMutation({
     onSuccess: () => {
       invalidateBody();
@@ -430,7 +361,7 @@ export function StandardBodyEditor({ target, bodyText, bodyUpdatedAt, bodyUpdate
               disabled={replaceBodyMutation.isPending}
             />
           )}
-          {canEditMeta && !inlineEditMode && (
+          {canEditMeta && (
             <button
               onClick={() => {
                 setBulkText(normalizedBody);
@@ -443,89 +374,53 @@ export function StandardBodyEditor({ target, bodyText, bodyUpdatedAt, bodyUpdate
               Редагувати все
             </button>
           )}
-          {inlineEditMode && (
-            <button
-              onClick={saveInline}
-              disabled={!inlineDirty || updateBodyMutation.isPending}
-              className="text-xs px-3 py-1 rounded bg-brand text-white hover:bg-brand-dark disabled:opacity-40 disabled:cursor-not-allowed inline-flex items-center gap-1.5"
-              title={inlineDirty ? 'Зберегти зміни в документі' : 'Немає змін'}
-            >
-              {updateBodyMutation.isPending && <Loader2 className="w-3 h-3 animate-spin" />}
-              {inlineDirty ? 'Зберегти' : 'Збережено'}
-            </button>
-          )}
         </div>
       </div>
 
       {/* Two columns under the sticky toolbar: body article on the
           left, comments + decisions rail on the right. */}
       <div className="grid grid-cols-1 lg:grid-cols-[1fr_300px] gap-5 items-start">
-        {inlineEditMode ? (
-          /* For documents: ONE view. The WYSIWYG editor is the body —
-             contenteditable with its own sticky toolbar pinned at the
-             top via the `[&_.rt-toolbar]:sticky` rule inside
-             RichTextEditor. InlineComments overlay attaches to the
-             same article element for selection-based commenting and
-             suggesting. data-paragraph-idx is set on each top-level
-             editor child after every update so the overlay can map
-             selection → paragraph index. */
-          <article
-            ref={articleRef}
-            className="bg-card rounded-xl border border-hairline overflow-hidden"
-          >
-            <RichTextEditor
-              key="inline-doc-editor"
-              initialHtml={inlineHtml}
-              onChange={(html) => {
-                setInlineHtml(html);
-                if (!inlineDirty) setInlineDirty(true);
-              }}
-              className="bg-card"
-              stickyToolbar
-              toolbarTopOffset={isInModal ? 103 : 52}
-            />
-          </article>
-        ) : (
-          /* Standards (and read-only viewers of documents): the
-             paragraph-by-paragraph view with per-paragraph suggest
-             buttons. */
-          <article
-            ref={articleRef}
-            className="bg-card rounded-xl border border-hairline p-5 sm:p-8 space-y-1"
-          >
-            {paragraphs.map((html, idx) => {
-              const pending = pendingBySection.get(idx) ?? [];
-              return (
-                <ParagraphBlock
-                  key={idx}
-                  idx={idx}
-                  html={html}
-                  pending={pending}
-                  myUserId={me?.id ?? null}
-                  canSuggest={canSuggest}
-                  canResolve={canEditMeta}
-                  onSuggestReplace={() => openSuggest(idx, 'REPLACE')}
-                  onSuggestDelete={() => openSuggest(idx, 'DELETE')}
-                  onSuggestInsert={() => openInsertAfter(idx)}
-                  onReact={(sid, current, type) => toggleReaction(sid, current, type)}
-                  onAccept={(sid) => acceptMutation.mutate({ id: sid })}
-                  onReject={(sid) => rejectMutation.mutate({ id: sid })}
-                />
-              );
-            })}
-            {canSuggest && paragraphs.length > 0 && (
-              <div className="pt-3 border-t border-hairline">
-                <button
-                  onClick={() => openInsertAfter(paragraphs.length - 1)}
-                  className="text-xs inline-flex items-center gap-1.5 text-mid hover:text-brand"
-                >
-                  <Plus className="w-3.5 h-3.5" />
-                  Запропонувати новий параграф у кінці
-                </button>
-              </div>
-            )}
-          </article>
-        )}
+        {/* Read-only paragraph view with per-paragraph suggest buttons
+            and the InlineComments overlay. For free Word-style editing
+            the user clicks "Редагувати все" — opens the WYSIWYG in a
+            separate modal. Inline WYSIWYG inside this view was tried
+            and reverted because it hung the renderer on real docs. */}
+        <article
+          ref={articleRef}
+          className="bg-card rounded-xl border border-hairline p-5 sm:p-8 space-y-1"
+        >
+          {paragraphs.map((html, idx) => {
+            const pending = pendingBySection.get(idx) ?? [];
+            return (
+              <ParagraphBlock
+                key={idx}
+                idx={idx}
+                html={html}
+                pending={pending}
+                myUserId={me?.id ?? null}
+                canSuggest={canSuggest}
+                canResolve={canEditMeta}
+                onSuggestReplace={() => openSuggest(idx, 'REPLACE')}
+                onSuggestDelete={() => openSuggest(idx, 'DELETE')}
+                onSuggestInsert={() => openInsertAfter(idx)}
+                onReact={(sid, current, type) => toggleReaction(sid, current, type)}
+                onAccept={(sid) => acceptMutation.mutate({ id: sid })}
+                onReject={(sid) => rejectMutation.mutate({ id: sid })}
+              />
+            );
+          })}
+          {canSuggest && paragraphs.length > 0 && (
+            <div className="pt-3 border-t border-hairline">
+              <button
+                onClick={() => openInsertAfter(paragraphs.length - 1)}
+                className="text-xs inline-flex items-center gap-1.5 text-mid hover:text-brand"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                Запропонувати новий параграф у кінці
+              </button>
+            </div>
+          )}
+        </article>
 
         {/* Right rail card with two tabs: Зміни (suggestions) and
             Коментарі (inline). Sticky so the rail stays put while the
@@ -589,20 +484,12 @@ export function StandardBodyEditor({ target, bodyText, bodyUpdatedAt, bodyUpdate
           {/* InlineComments overlay (no rail rendering) mounted
               always so selection capture, the floating composer, and
               inline highlights work regardless of which tab is
-              active. For inline-edit mode we also wire a "Правка"
-              option so a text selection can open the suggestion
-              draft modal for that paragraph. */}
+              active. */}
           <InlineComments
             target={targetInput}
             canComment={canSuggest}
             articleRef={articleRef}
             showRail={false}
-            isEditableSurface={inlineEditMode}
-            onSuggestParagraph={
-              inlineEditMode && canSuggest
-                ? (paragraphIndex) => openSuggest(paragraphIndex, 'REPLACE')
-                : undefined
-            }
           />
         </div>
       </div>
