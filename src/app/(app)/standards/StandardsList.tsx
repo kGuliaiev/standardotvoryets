@@ -8,6 +8,7 @@ import { StatusBadge, type StandardStatus } from '@/components/ui/StatusBadge';
 import { Avatar } from '@/components/ui/Avatar';
 import { StandardProgress, hasOverdueStage } from '@/components/standards/StandardProgress';
 import { SortableHeader } from '@/components/ui/SortableHeader';
+import { PageHeader } from '@/components/ui/PageHeader';
 import { useSort, sortedRows } from '@/lib/useSort';
 import { useLocalStorageState } from '@/lib/useLocalStorageState';
 import { AlertCircle, ChevronDown, Check, X as XIcon } from 'lucide-react';
@@ -120,16 +121,17 @@ export function StandardsList() {
 
   return (
     <div className="space-y-5">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold text-ink">Стандарти</h1>
-        <Link
-          href="/standards/new"
-          className="inline-flex items-center gap-1.5 rounded-lg bg-blue-700 px-4 py-2 text-sm font-medium text-white hover:bg-blue-800 transition-colors"
-        >
-          + Новий стандарт
-        </Link>
-      </div>
+      <PageHeader
+        title="Стандарти"
+        actions={
+          <Link
+            href="/standards/new"
+            className="inline-flex items-center gap-1.5 rounded-lg bg-blue-700 px-4 py-2 text-sm font-medium text-white hover:bg-blue-800 transition-colors"
+          >
+            + Новий стандарт
+          </Link>
+        }
+      />
 
       {/* Filters */}
       <div className="bg-card rounded-xl border border-hairline p-4 space-y-3">

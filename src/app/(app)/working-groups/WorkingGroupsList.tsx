@@ -5,6 +5,7 @@ import { trpc } from '@/lib/trpc/client';
 import Link from 'next/link';
 import { useSession } from 'next-auth/react';
 import { useEscape } from '@/lib/useEscape';
+import { PageHeader } from '@/components/ui/PageHeader';
 
 const ROLE_LABELS: Record<string, string> = {
   LEADER: 'Керівник',
@@ -46,18 +47,19 @@ export function WorkingGroupsList() {
 
   return (
     <div className="space-y-5">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold text-ink">Робочі групи</h1>
-        {isAdmin && (
-          <button
-            onClick={() => setShowCreate(true)}
-            className="inline-flex items-center gap-1.5 rounded-lg bg-blue-700 px-4 py-2 text-sm font-medium text-white hover:bg-blue-800 transition-colors"
-          >
-            + Нова група
-          </button>
-        )}
-      </div>
+      <PageHeader
+        title="Робочі групи"
+        actions={
+          isAdmin && (
+            <button
+              onClick={() => setShowCreate(true)}
+              className="inline-flex items-center gap-1.5 rounded-lg bg-blue-700 px-4 py-2 text-sm font-medium text-white hover:bg-blue-800 transition-colors"
+            >
+              + Нова група
+            </button>
+          )
+        }
+      />
 
       {/* Grid */}
       {isLoading ? (

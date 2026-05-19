@@ -12,6 +12,7 @@ import { SortableHeader } from '@/components/ui/SortableHeader';
 import { can } from '@/lib/rbac';
 import { formatDate } from '@/lib/utils';
 import type { GlobalRole, WorkingGroupRole } from '@prisma/client';
+import { PageHeader } from '@/components/ui/PageHeader';
 
 const RANK_LABELS: Record<string, string> = {
   CIVILIAN: '',
@@ -115,17 +116,15 @@ export function ProtocolsList() {
 
   return (
     <div className="space-y-5">
-      <div className="flex items-center justify-between flex-wrap gap-3">
-        <div>
-          <h1 className="text-2xl font-bold text-ink">Протоколи засідань</h1>
-          <p className="text-sm text-mid mt-1">
-            Усі протоколи робочих груп, до яких ви маєте доступ
-          </p>
-        </div>
-        <span className="text-xs text-light">
-          Знайдено: <span className="font-bold text-ink">{ordered.length}</span>
-        </span>
-      </div>
+      <PageHeader
+        title="Протоколи засідань"
+        subtitle="Усі протоколи робочих груп, до яких ви маєте доступ"
+        actions={
+          <span className="text-xs text-light">
+            Знайдено: <span className="font-bold text-ink">{ordered.length}</span>
+          </span>
+        }
+      />
 
       {/* Filters */}
       <div className="bg-card rounded-xl border border-hairline p-4 space-y-3">

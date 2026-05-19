@@ -21,6 +21,7 @@ import {
 import type { LucideIcon } from 'lucide-react';
 import { useLocalStorageState } from '@/lib/useLocalStorageState';
 import type { NotificationType } from '@prisma/client';
+import { PageHeader } from '@/components/ui/PageHeader';
 
 interface TypeCategory {
   key: string;
@@ -186,17 +187,11 @@ export function NotificationsList() {
 
   return (
     <div className="space-y-5">
-      <div className="flex items-center justify-between flex-wrap gap-3">
-        <h1 className="text-[19px] font-extrabold text-navy inline-flex items-center gap-2">
-          Сповіщення
-          {unread.length > 0 && (
-            <span className="inline-flex items-center justify-center text-xs bg-brand text-white rounded-full px-2 py-0.5">
-              {unread.length}
-            </span>
-          )}
-        </h1>
-        <div className="inline-flex items-center gap-2">
-          {unread.length > 0 && (
+      <PageHeader
+        title="Сповіщення"
+        subtitle={unread.length > 0 ? `${unread.length} непрочитаних` : undefined}
+        actions={
+          unread.length > 0 && (
             <button
               onClick={() => markAllReadMutation.mutate()}
               disabled={markAllReadMutation.isPending}
@@ -205,9 +200,9 @@ export function NotificationsList() {
               <CheckCheck className="w-3.5 h-3.5" />
               Прочитати всі
             </button>
-          )}
-        </div>
-      </div>
+          )
+        }
+      />
 
       {/* Filter chips */}
       <div className="card p-3 space-y-3">

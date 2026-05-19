@@ -16,6 +16,7 @@ import {
   Target,
   CalendarDays,
 } from 'lucide-react';
+import { PageHeader } from '@/components/ui/PageHeader';
 
 interface SettingsState {
   meetingRemindLead1Hours: number;
@@ -131,19 +132,10 @@ export function SystemSettingsForm() {
 
   return (
     <div className="space-y-5">
-      {/* Sticky page header with the Save button — settings forms get
-          long, and the only way to commit changes used to require
-          scrolling all the way back up. Negative margin + matching
-          padding extend the bg across the surrounding main padding so
-          scrolling content doesn't peek through on the sides. */}
-      <div className="sticky top-[-1rem] md:top-[-1.5rem] z-20 -mx-4 md:-mx-6 px-4 md:px-6 pt-4 md:pt-6 pb-3 bg-page/95 backdrop-blur-md border-b border-hairline">
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-2xl font-bold text-ink">Налаштування системи</h1>
-            <p className="text-sm text-mid mt-1">
-              Правила сповіщень, канали доставки та лід-час нагадувань
-            </p>
-          </div>
+      <PageHeader
+        title="Налаштування системи"
+        subtitle="Правила сповіщень, канали доставки та лід-час нагадувань"
+        actions={
           <button
             onClick={save}
             disabled={!form || update.isPending}
@@ -152,14 +144,13 @@ export function SystemSettingsForm() {
             <Save size={16} />
             {update.isPending ? 'Збереження…' : 'Зберегти'}
           </button>
+        }
+      />
+      {savedAt && (
+        <div className="rounded-lg bg-emerald-50 border border-emerald-200 px-4 py-2 text-sm text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-300 dark:border-emerald-700">
+          Збережено о {savedAt.toLocaleTimeString('uk-UA')}
         </div>
-
-        {savedAt && (
-          <div className="mt-3 rounded-lg bg-emerald-50 border border-emerald-200 px-4 py-2 text-sm text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-300 dark:border-emerald-700">
-            Збережено о {savedAt.toLocaleTimeString('uk-UA')}
-          </div>
-        )}
-      </div>
+      )}
 
       {isLoading || !form ? (
         <div className="bg-card rounded-xl border border-hairline p-12 text-center text-light text-sm">
@@ -167,13 +158,13 @@ export function SystemSettingsForm() {
         </div>
       ) : (
         <>
-          {/* Settings cards in a 2-column grid on desktop so the
-              page doesn't waste the right half on wider screens. The
-              reference matrix at the bottom stays full-width because
-              its table needs the room. `auto-rows-min` keeps each card
-              sized to its own content instead of stretching to match
-              its row neighbour. */}
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-5 auto-rows-min items-start">
+          {/* Settings cards flow into 2 columns on desktop. Using CSS
+              multi-column instead of grid means each column stacks
+              cards independently (masonry-style) — no forced row
+              alignment so a short card next to a tall one doesn't
+              stretch or leave a gap. `break-inside-avoid` keeps each
+              card whole within its column. */}
+          <div className="columns-1 lg:columns-2 gap-5 [&>*]:break-inside-avoid [&>*]:mb-5">
             {/* Channels */}
             <Card icon={<Bell size={18} />} title="Канали доставки">
               <p className="text-xs text-mid mb-3">

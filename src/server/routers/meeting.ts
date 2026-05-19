@@ -265,12 +265,17 @@ export const meetingRouter = createTRPCRouter({
       // Carry the actor's own name in the log payload so the activity
       // feed renderer can present "<Name>: <status before> → <after>"
       // without an extra round-trip.
+      // Write the audit entry under the Meeting entity so it shows up
+      // in the meeting page's journal (entity-scoped feed). The
+      // `userName` carried in before/after lets the renderer pick out
+      // attendance entries and present them with the coloured status
+      // pill row.
       const targetName = ctx.session.user.name;
       await logActivity(ctx.db, {
         userId: ctx.session.user.id,
         action: 'STATUS_CHANGE',
-        entity: 'Attendance',
-        entityId: `${input.meetingId}:${ctx.session.user.id}`,
+        entity: 'Meeting',
+        entityId: input.meetingId,
         before: before ? { status: before.status, userName: targetName } : null,
         after: { status: input.status, userName: targetName },
         note: `Підтвердження участі: ${targetName}`,
@@ -331,8 +336,11 @@ export const meetingRouter = createTRPCRouter({
       await logActivity(ctx.db, {
         userId: ctx.session.user.id,
         action: before ? 'STATUS_CHANGE' : 'CREATE',
-        entity: 'Attendance',
-        entityId: `${input.meetingId}:${input.userId}`,
+        // Attendance entries live under the Meeting entity so they
+        // show up in the meeting page's journal alongside other
+        // meeting changes.
+        entity: 'Meeting',
+        entityId: input.meetingId,
         before: before ? { status: before.status, userName: targetName } : null,
         after: { status: input.status, userName: targetName },
         note: `Зміна явки: ${targetName}`,

@@ -14,6 +14,7 @@ import { formatDate } from '@/lib/utils';
 import { useEscape } from '@/lib/useEscape';
 import { UserX, UserCheck, Pencil, X, Plus, Save } from 'lucide-react';
 import type { MilitaryRank, Organization } from '@prisma/client';
+import { PageHeader } from '@/components/ui/PageHeader';
 
 // Numeric ordering for ranks (lowest → highest) for proper sort
 const RANK_ORDER: Record<MilitaryRank, number> = {
@@ -160,16 +161,17 @@ export function UsersAdmin() {
 
   return (
     <div className="space-y-5">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold text-ink">Користувачі</h1>
-        <button
-          onClick={() => setShowInvite(true)}
-          className="inline-flex items-center gap-1.5 rounded-lg bg-blue-700 px-4 py-2 text-sm font-medium text-white hover:bg-blue-800 transition-colors"
-        >
-          + Запросити
-        </button>
-      </div>
+      <PageHeader
+        title="Користувачі"
+        actions={
+          <button
+            onClick={() => setShowInvite(true)}
+            className="inline-flex items-center gap-1.5 rounded-lg bg-blue-700 px-4 py-2 text-sm font-medium text-white hover:bg-blue-800 transition-colors"
+          >
+            + Запросити
+          </button>
+        }
+      />
 
       {/* Search */}
       <div className="bg-card rounded-xl border border-hairline p-4">

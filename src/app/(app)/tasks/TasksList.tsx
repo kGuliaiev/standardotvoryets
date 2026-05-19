@@ -7,6 +7,7 @@ import { ChevronRight, ChevronDown, Plus, Pencil, Trash2, AlertTriangle } from '
 import { useSession } from 'next-auth/react';
 import { Avatar } from '@/components/ui/Avatar';
 import { TaskFormModal } from '@/components/TaskFormModal';
+import { PageHeader } from '@/components/ui/PageHeader';
 import { getInitials } from '@/lib/utils';
 
 const PRIORITY_DOT: Record<string, string> = {
@@ -204,22 +205,23 @@ export function TasksList() {
   ).length;
 
   return (
-    <div className="pg-enter">
-      {/* Header */}
-      <div className="flex items-center justify-between mb-5">
-        <div className="flex items-center gap-4 text-sm">
-          <h1 className="text-[19px] font-extrabold text-navy">Завдання</h1>
-          <span className="text-light">
+    <div className="pg-enter space-y-5">
+      <PageHeader
+        title="Завдання"
+        subtitle={
+          <>
             Всього: <b className="text-ink">{totalCount}</b>
             {' · '}Виконано: <b className="text-emerald-600">{doneCount}</b>
             {' · '}Прострочено: <b className="text-red-600">{overdueCount}</b>
-          </span>
-        </div>
-        <button onClick={() => setShowCreate(true)} className="btn-primary">
-          <Plus className="w-4 h-4" />
-          Завдання
-        </button>
-      </div>
+          </>
+        }
+        actions={
+          <button onClick={() => setShowCreate(true)} className="btn-primary">
+            <Plus className="w-4 h-4" />
+            Завдання
+          </button>
+        }
+      />
 
       <div className="grid grid-cols-1 lg:grid-cols-[260px_1fr] gap-5 items-start">
         {/* LEFT: Tree (full-width on mobile, fixed sidebar on lg+) */}

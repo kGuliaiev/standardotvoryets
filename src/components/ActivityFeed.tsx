@@ -245,39 +245,44 @@ export function ActivityFeed({
                       )}
                     </div>
                     {e.note && <p className="text-xs text-mid mt-1.5">{e.note}</p>}
-                    {/* Pretty render for Attendance — show coloured
-                        status pills "before → after" instead of the
-                        generic Поле/Було/Стало diff table. */}
-                    {e.entity === 'Attendance' && (
+                    {/* Attendance entries are stored under the Meeting
+                        entity but carry `userName` + `status` in their
+                        before/after payload — detect by shape rather
+                        than by entity so the journal renders them as a
+                        coloured status pill row instead of the generic
+                        Поле/Було/Стало diff table. */}
+                    {isAttendanceEntry(e.before, e.after) ? (
                       <AttendanceChange before={e.before} after={e.after} />
-                    )}
-                    {e.entity !== 'Attendance' && diff && Object.keys(diff).length > 0 && (
-                      <div className="mt-2.5 border border-hairline rounded-[10px] overflow-hidden">
-                        <table className="w-full text-[11px]">
-                          <thead className="bg-page">
-                            <tr className="text-left text-light uppercase tracking-wide">
-                              <th className="px-3 py-1.5 font-bold w-1/4">Поле</th>
-                              <th className="px-3 py-1.5 font-bold w-3/8">Було</th>
-                              <th className="px-3 py-1.5 font-bold w-3/8">Стало</th>
-                            </tr>
-                          </thead>
-                          <tbody className="divide-y divide-hairline">
-                            {Object.entries(diff).map(([field, val]) => (
-                              <tr key={field}>
-                                <td className="px-3 py-1.5 font-semibold text-ink align-top">
-                                  {FIELD_LABELS[field] ?? field}
-                                </td>
-                                <td className="px-3 py-1.5 text-mid line-through bg-red-50 dark:bg-red-900/20 align-top break-words">
-                                  {fmtValue(val.before)}
-                                </td>
-                                <td className="px-3 py-1.5 text-ink bg-emerald-50 dark:bg-emerald-900/20 align-top break-words">
-                                  {fmtValue(val.after)}
-                                </td>
+                    ) : (
+                      diff &&
+                      Object.keys(diff).length > 0 && (
+                        <div className="mt-2.5 border border-hairline rounded-[10px] overflow-hidden">
+                          <table className="w-full text-[11px]">
+                            <thead className="bg-page">
+                              <tr className="text-left text-light uppercase tracking-wide">
+                                <th className="px-3 py-1.5 font-bold w-1/4">Поле</th>
+                                <th className="px-3 py-1.5 font-bold w-3/8">Було</th>
+                                <th className="px-3 py-1.5 font-bold w-3/8">Стало</th>
                               </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                      </div>
+                            </thead>
+                            <tbody className="divide-y divide-hairline">
+                              {Object.entries(diff).map(([field, val]) => (
+                                <tr key={field}>
+                                  <td className="px-3 py-1.5 font-semibold text-ink align-top">
+                                    {FIELD_LABELS[field] ?? field}
+                                  </td>
+                                  <td className="px-3 py-1.5 text-mid line-through bg-red-50 dark:bg-red-900/20 align-top break-words">
+                                    {fmtValue(val.before)}
+                                  </td>
+                                  <td className="px-3 py-1.5 text-ink bg-emerald-50 dark:bg-emerald-900/20 align-top break-words">
+                                    {fmtValue(val.after)}
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      )
                     )}
                   </div>
                 </div>
@@ -288,6 +293,16 @@ export function ActivityFeed({
       )}
     </div>
   );
+}
+
+/** Detect attendance entries by their payload shape rather than by
+ *  the audit entity column — they're stored under entity="Meeting"
+ *  alongside other meeting changes so they show up in the same feed. */
+function isAttendanceEntry(before: unknown, after: unknown): boolean {
+  const a = after as { userName?: unknown; status?: unknown } | null;
+  const b = before as { userName?: unknown; status?: unknown } | null;
+  const payload = a ?? b;
+  return !!(payload && typeof payload === 'object' && 'userName' in payload && 'status' in payload);
 }
 
 /**
