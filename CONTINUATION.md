@@ -1,3 +1,10 @@
+### Companion docs (attach alongside this one for full context)
+
+- **`OPS.md`** — operations runbook: Cloudflare, custom domain, Railway env vars, deploy pipeline, debugging cycle (redirect loops, build failures, auth, S3, cron). Read first when production is misbehaving.
+- **`DESIGN.md`** — UI/UX rules: theming tokens, dark+light parity, sidebar, tabs/badges, modals, mobile responsiveness, empty states, forms, polling for live updates. Read first when building any screen.
+
+---
+
 # Стандартотворець — Continuation Brief
 
 This document is the handoff for a new Claude session to pick up the project mid-flight. It captures **what's live**, **what's pending**, and **how to resume work**.
