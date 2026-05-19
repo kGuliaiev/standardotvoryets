@@ -245,7 +245,13 @@ export function ActivityFeed({
                       )}
                     </div>
                     {e.note && <p className="text-xs text-mid mt-1.5">{e.note}</p>}
-                    {diff && Object.keys(diff).length > 0 && (
+                    {/* Pretty render for Attendance — show coloured
+                        status pills "before → after" instead of the
+                        generic Поле/Було/Стало diff table. */}
+                    {e.entity === 'Attendance' && (
+                      <AttendanceChange before={e.before} after={e.after} />
+                    )}
+                    {e.entity !== 'Attendance' && diff && Object.keys(diff).length > 0 && (
                       <div className="mt-2.5 border border-hairline rounded-[10px] overflow-hidden">
                         <table className="w-full text-[11px]">
                           <thead className="bg-page">
@@ -281,5 +287,58 @@ export function ActivityFeed({
         </ul>
       )}
     </div>
+  );
+}
+
+/**
+ * Compact "Пилип Іванов:  Очікується → ✓ Присутній" line for the
+ * attendance-change activity entries. Pulls the user name + statuses
+ * out of the audit log's before/after JSON which the meeting router
+ * writes specifically for this display.
+ */
+function AttendanceChange({ before, after }: { before: unknown; after: unknown }) {
+  const a = (after as { status?: string; userName?: string } | null) ?? null;
+  const b = (before as { status?: string; userName?: string } | null) ?? null;
+  if (!a) return null;
+  const name = a.userName ?? b?.userName ?? null;
+  const bStatus = b?.status;
+  const aStatus = a.status;
+  return (
+    <div className="mt-2 flex items-center gap-2 flex-wrap text-[11px]">
+      {name && <span className="text-mid font-medium">{name}</span>}
+      <span className="text-light">·</span>
+      {bStatus ? (
+        <StatusPill value={bStatus} />
+      ) : (
+        <span className="text-light italic">не зафіксовано</span>
+      )}
+      <span className="text-light">→</span>
+      {aStatus && <StatusPill value={aStatus} />}
+    </div>
+  );
+}
+
+function StatusPill({ value }: { value: string }) {
+  const map: Record<string, { label: string; cls: string }> = {
+    CONFIRMED: {
+      label: '✓ Присутній',
+      cls: 'bg-emerald-50 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300',
+    },
+    DECLINED: {
+      label: '✕ Відсутній',
+      cls: 'bg-red-50 text-red-700 dark:bg-red-900/30 dark:text-red-300',
+    },
+    PENDING: {
+      label: '⋯ Очікується',
+      cls: 'bg-pill text-mid',
+    },
+  };
+  const m = map[value] ?? { label: value, cls: 'bg-pill text-mid' };
+  return (
+    <span
+      className={`inline-flex items-center text-[10px] font-semibold px-2 py-0.5 rounded-full ${m.cls}`}
+    >
+      {m.label}
+    </span>
   );
 }

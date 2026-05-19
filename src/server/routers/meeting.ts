@@ -262,14 +262,18 @@ export const meetingRouter = createTRPCRouter({
         },
         data: { status: input.status, note: input.note },
       });
+      // Carry the actor's own name in the log payload so the activity
+      // feed renderer can present "<Name>: <status before> → <after>"
+      // without an extra round-trip.
+      const targetName = ctx.session.user.name;
       await logActivity(ctx.db, {
         userId: ctx.session.user.id,
         action: 'STATUS_CHANGE',
         entity: 'Attendance',
         entityId: `${input.meetingId}:${ctx.session.user.id}`,
-        before: before ? { status: before.status, note: before.note } : null,
-        after: { status: input.status, note: input.note },
-        note: 'Підтвердження участі',
+        before: before ? { status: before.status, userName: targetName } : null,
+        after: { status: input.status, userName: targetName },
+        note: `Підтвердження участі: ${targetName}`,
       });
 
       // Notify chairman + WG leadership when someone declines
@@ -304,9 +308,15 @@ export const meetingRouter = createTRPCRouter({
       const isPrivileged = isAdmin || can(uctx, 'meeting:uploadMinutes', meeting.workingGroupId);
       if (!isPrivileged) throw new TRPCError({ code: 'FORBIDDEN' });
 
-      const before = await ctx.db.attendance.findUnique({
-        where: { meetingId_userId: { meetingId: input.meetingId, userId: input.userId } },
-      });
+      const [before, targetUser] = await Promise.all([
+        ctx.db.attendance.findUnique({
+          where: { meetingId_userId: { meetingId: input.meetingId, userId: input.userId } },
+        }),
+        ctx.db.user.findUnique({
+          where: { id: input.userId },
+          select: { name: true },
+        }),
+      ]);
       const updated = await ctx.db.attendance.upsert({
         where: { meetingId_userId: { meetingId: input.meetingId, userId: input.userId } },
         update: { status: input.status, note: input.note },
@@ -317,14 +327,15 @@ export const meetingRouter = createTRPCRouter({
           note: input.note,
         },
       });
+      const targetName = targetUser?.name ?? 'учасник';
       await logActivity(ctx.db, {
         userId: ctx.session.user.id,
         action: before ? 'STATUS_CHANGE' : 'CREATE',
         entity: 'Attendance',
         entityId: `${input.meetingId}:${input.userId}`,
-        before: before ? { status: before.status, note: before.note } : null,
-        after: { status: input.status, note: input.note },
-        note: 'Зміна явки секретарем',
+        before: before ? { status: before.status, userName: targetName } : null,
+        after: { status: input.status, userName: targetName },
+        note: `Зміна явки: ${targetName}`,
       });
 
       // Notify chairman + WG leadership when the participant transitions to DECLINED
