@@ -24,7 +24,11 @@ const ACTION_META: Record<string, { label: string; icon: typeof Pencil; cls: str
   CREATE: { label: 'Створено', icon: Plus, cls: 'bg-[#ECFDF5] text-[#065F46]' },
   UPDATE: { label: 'Оновлено', icon: Pencil, cls: 'bg-[#EEF4FF] text-[#1A3A8F]' },
   DELETE: { label: 'Видалено', icon: Trash2, cls: 'bg-[#FEF2F2] text-[#991B1B]' },
-  STATUS_CHANGE: { label: 'Зміна статусу', icon: ArrowRight, cls: 'bg-[#FFF7E6] text-[#92400E]' },
+  STATUS_CHANGE: {
+    label: 'Зміна статусу',
+    icon: ArrowRight,
+    cls: 'bg-sky-50 text-sky-700 dark:bg-sky-900/30 dark:text-sky-300',
+  },
   ARCHIVE: { label: 'Архівовано', icon: Archive, cls: 'bg-pill text-mid' },
   RESTORE: { label: 'Відновлено', icon: Undo2, cls: 'bg-[#ECFDF5] text-[#065F46]' },
 };

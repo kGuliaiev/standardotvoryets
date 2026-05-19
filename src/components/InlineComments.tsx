@@ -227,8 +227,11 @@ export function InlineComments({ target, canComment, articleRef }: Props) {
 
   return (
     <>
-      {/* Right-rail panel of all inline comments grouped by paragraph */}
-      <aside className="bg-card rounded-xl border border-hairline overflow-hidden lg:sticky lg:top-4">
+      {/* Right-rail panel of all inline comments grouped by paragraph.
+          Sticky/scroll behaviour is handled by the parent rail
+          wrapper in StandardBodyEditor — both this panel and the
+          neighbouring "Останні рішення" panel scroll together. */}
+      <aside className="bg-card rounded-xl border border-hairline overflow-hidden">
         <div className="px-4 py-3 border-b border-hairline flex items-center justify-between">
           <div className="flex items-center gap-1.5">
             <MessageSquare className="w-3.5 h-3.5 text-mid" />

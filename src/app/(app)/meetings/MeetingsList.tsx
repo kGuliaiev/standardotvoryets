@@ -48,7 +48,10 @@ const FORMAT_LABELS: Record<string, string> = {
 
 const STATUS_TONE: Record<string, { label: string; cls: string }> = {
   PLANNED: { label: 'Підготовка', cls: 'bg-[#EEF4FF] text-[#1A3A8F]' },
-  IN_PROGRESS: { label: 'Триває', cls: 'bg-[#FFF7E6] text-[#92400E]' },
+  IN_PROGRESS: {
+    label: 'Триває',
+    cls: 'bg-sky-50 text-sky-700 dark:bg-sky-900/30 dark:text-sky-300',
+  },
   COMPLETED: { label: 'Завершено', cls: 'bg-[#ECFDF5] text-[#065F46]' },
   CANCELLED: { label: 'Скасовано', cls: 'bg-pill text-light' },
 };

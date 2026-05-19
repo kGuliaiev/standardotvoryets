@@ -13,7 +13,10 @@ import { formatDate, formatDateTime } from '@/lib/utils';
 
 const STATUS_TONE: Record<string, { label: string; cls: string }> = {
   OPEN: { label: 'Відкрите', cls: 'bg-[#EEF4FF] text-[#1A3A8F]' },
-  IN_PROGRESS: { label: 'В роботі', cls: 'bg-[#FFF7E6] text-[#92400E]' },
+  IN_PROGRESS: {
+    label: 'В роботі',
+    cls: 'bg-sky-50 text-sky-700 dark:bg-sky-900/30 dark:text-sky-300',
+  },
   DONE: { label: 'Виконано', cls: 'bg-[#ECFDF5] text-[#065F46]' },
   CANCELLED: { label: 'Скасовано', cls: 'bg-pill text-mid' },
 };

@@ -48,7 +48,7 @@ interface NavSection {
 const BADGE_CLS: Record<BadgeTone, string> = {
   brand: 'bg-[#ECFDF5] text-[#065F46]',
   rose: 'bg-red-500 text-white',
-  amber: 'bg-[#FFF7E6] text-[#92400E]',
+  amber: 'bg-sky-50 text-sky-700 dark:bg-sky-900/30 dark:text-sky-300',
   gray: 'bg-pill text-mid',
 };
 

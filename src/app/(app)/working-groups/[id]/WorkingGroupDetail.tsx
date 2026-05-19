@@ -51,7 +51,10 @@ const DOC_TYPE_LABELS: Record<string, { label: string; cls: string }> = {
   TECH_SPEC: { label: 'ТЗ', cls: 'bg-amber-50 text-amber-700' },
   FEEDBACK: { label: 'Відгук', cls: 'bg-cyan-50 text-cyan-700' },
   MEETING_MINUTES: { label: 'Протокол', cls: 'bg-[#ECFDF5] text-[#065F46]' },
-  AGENDA: { label: 'Порядок денний', cls: 'bg-[#FFF7E6] text-[#92400E]' },
+  AGENDA: {
+    label: 'Порядок денний',
+    cls: 'bg-sky-50 text-sky-700 dark:bg-sky-900/30 dark:text-sky-300',
+  },
   ATTACHMENT: { label: 'Додаток', cls: 'bg-[#EDF0F7] text-[#4B5880]' },
   FINAL: { label: 'Фінальна версія', cls: 'bg-violet-50 text-violet-700' },
 };
@@ -289,29 +292,28 @@ export function WorkingGroupDetail({ id }: Props) {
       {/* Tab content */}
       {tab === 'info' && (
         <div className="bg-card rounded-xl border border-hairline p-5 sm:p-6 space-y-5">
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6">
-            <div>
-              <p className="text-xs text-light uppercase tracking-wide mb-1">Код</p>
-              <p className="font-mono font-semibold text-ink">{group.code}</p>
-            </div>
-            <div>
-              <p className="text-xs text-light uppercase tracking-wide mb-1">Колір</p>
-              <div className="flex items-center gap-2">
-                <span className="w-5 h-5 rounded" style={{ backgroundColor: group.color }} />
-                <span className="font-mono text-sm text-mid">{group.color}</span>
-              </div>
-            </div>
-            <div className="col-span-2">
-              <p className="text-xs text-light uppercase tracking-wide mb-1">Назва</p>
-              <p className="font-semibold text-ink">{group.name}</p>
-            </div>
-            {group.description && (
-              <div className="col-span-2">
-                <p className="text-xs text-light uppercase tracking-wide mb-1">Опис</p>
-                <p className="text-sm text-mid leading-relaxed">{group.description}</p>
-              </div>
-            )}
+          {/* Code · Name · Colour on a single horizontal strip — saves
+              vertical space and reads as one identity row. Code stays
+              monospace and tight; name flexes to fill; colour pill
+              floats to the right. */}
+          <div className="flex flex-wrap items-baseline gap-x-4 gap-y-1">
+            <span className="font-mono font-semibold text-ink shrink-0">{group.code}</span>
+            <span className="text-light">·</span>
+            <span className="font-semibold text-ink flex-1 min-w-0">{group.name}</span>
+            <span className="inline-flex items-center gap-1.5 shrink-0">
+              <span
+                className="w-4 h-4 rounded border border-hairline"
+                style={{ backgroundColor: group.color }}
+              />
+              <span className="font-mono text-[11px] text-light">{group.color}</span>
+            </span>
           </div>
+          {group.description && (
+            <div>
+              <p className="text-xs text-light uppercase tracking-wide mb-1">Опис</p>
+              <p className="text-sm text-mid leading-relaxed">{group.description}</p>
+            </div>
+          )}
           <div className="grid grid-cols-3 gap-4 pt-4 border-t border-hairline">
             <div className="text-center">
               <p className="text-2xl font-bold text-ink">{group.members.length}</p>

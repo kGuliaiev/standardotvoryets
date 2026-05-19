@@ -399,10 +399,21 @@ export function StandardBodyEditor({ target, bodyText, bodyUpdatedAt, bodyUpdate
         </article>
       </div>
 
-      {/* Right rail: inline comments panel + recent suggestion decisions */}
-      <div className="space-y-3">
+      {/* Right rail: inline comments panel + recent suggestion decisions.
+          When the editor lives inside the document modal, the title +
+          toolbar are sticky-pinned at the top (~71px) — so the rail
+          must stick lower than that to stay visible, with a matching
+          max-height so the rail itself scrolls if it has lots of
+          comments. */}
+      <div
+        className={`space-y-3 ${
+          isInModal
+            ? 'lg:sticky lg:top-[88px] lg:max-h-[calc(100vh-120px)] lg:overflow-y-auto scrollbar-thin'
+            : 'lg:sticky lg:top-4 lg:max-h-[calc(100vh-2rem)] lg:overflow-y-auto scrollbar-thin'
+        }`}
+      >
         <InlineComments target={targetInput} canComment={canSuggest} articleRef={articleRef} />
-        <aside className="bg-card rounded-xl border border-hairline overflow-hidden lg:sticky lg:top-4">
+        <aside className="bg-card rounded-xl border border-hairline overflow-hidden">
           <div className="px-4 py-3 border-b border-hairline">
             <h3 className="text-xs font-bold uppercase tracking-wide text-ink">Останні рішення</h3>
           </div>
