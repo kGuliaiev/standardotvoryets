@@ -172,6 +172,9 @@ model User {
   suggestionsCreated   StandardSuggestion[]    @relation("SuggestionAuthor")
   suggestionsResolved  StandardSuggestion[]    @relation("SuggestionResolver")
   suggestionReactions  SuggestionReaction[]
+  inlineCommentsCreated   InlineComment[]      @relation("InlineCommentAuthor")
+  inlineCommentsResolved  InlineComment[]      @relation("InlineCommentResolver")
+  inlineCommentReplies    InlineCommentReply[] @relation("InlineCommentReplyAuthor")
   activityLogs    ActivityLog[]
   statusChanges   StandardStatusHistory[] @relation("StatusChanger")
 
@@ -338,9 +341,10 @@ model Standard {
   documents     Document[]
   comments      Comment[]
   votes         Voting[]
-  tasks         Task[]
-  statusHistory StandardStatusHistory[]
-  suggestions   StandardSuggestion[]
+  tasks          Task[]
+  statusHistory  StandardStatusHistory[]
+  suggestions    StandardSuggestion[]
+  inlineComments InlineComment[]
 
   @@unique([workingGroupId, code])
   @@map("standards")
@@ -465,9 +469,10 @@ model Document {
   bodyUpdatedById  String?
   bodyUpdatedBy    User?         @relation("DocumentBodyEditor", fields: [bodyUpdatedById], references: [id])
 
-  standard   Standard @relation(fields: [standardId], references: [id], onDelete: Cascade)
-  uploadedBy User     @relation(fields: [uploadedById], references: [id])
-  suggestions StandardSuggestion[]
+  standard       Standard             @relation(fields: [standardId], references: [id], onDelete: Cascade)
+  uploadedBy     User                 @relation(fields: [uploadedById], references: [id])
+  suggestions    StandardSuggestion[]
+  inlineComments InlineComment[]
 
   @@map("documents")
 }
@@ -491,6 +496,68 @@ model Comment {
   replies  Comment[] @relation("CommentReplies")
 
   @@map("comments")
+}
+
+/// Inline comment anchored to a text selection inside a body block
+/// (paragraph, heading, list item, …). Like Google Docs comments —
+/// users select text and leave feedback that doesn't propose a textual
+/// change (otherwise they'd use StandardSuggestion).
+///
+/// Polymorphic parent: exactly one of standardId / documentId is set,
+/// matching the StandardSuggestion convention so the same UI can target
+/// either the standard's main body or a per-document editable body.
+///
+/// Anchor: paragraphIndex + char offsets within that block's plain
+/// text. `selectionText` is a snapshot so the comment can be re-anchored
+/// (best-effort) if the underlying text shifts.
+model InlineComment {
+  id             String                @id @default(cuid())
+  /// Set when the comment targets a Standard's main bodyText.
+  standardId     String?
+  /// Set when the comment targets a Document's bodyHtml.
+  documentId     String?
+  authorId       String
+  paragraphIndex Int
+  startOffset    Int
+  endOffset      Int
+  /// Plain-text snapshot of the originally-selected range. Used to
+  /// re-anchor (or mark stale) when the block changes.
+  selectionText  String                @db.Text
+  body           String                @db.Text
+  status         InlineCommentStatus   @default(OPEN)
+  createdAt      DateTime              @default(now())
+  updatedAt      DateTime              @updatedAt
+  resolvedAt     DateTime?
+  resolvedById   String?
+
+  standard   Standard?              @relation(fields: [standardId], references: [id], onDelete: Cascade)
+  document   Document?              @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  author     User                   @relation("InlineCommentAuthor", fields: [authorId], references: [id])
+  resolvedBy User?                  @relation("InlineCommentResolver", fields: [resolvedById], references: [id])
+  replies    InlineCommentReply[]
+
+  @@index([standardId, status])
+  @@index([documentId, status])
+  @@map("inline_comments")
+}
+
+model InlineCommentReply {
+  id         String        @id @default(cuid())
+  commentId  String
+  authorId   String
+  body       String        @db.Text
+  createdAt  DateTime      @default(now())
+
+  comment    InlineComment @relation(fields: [commentId], references: [id], onDelete: Cascade)
+  author     User          @relation("InlineCommentReplyAuthor", fields: [authorId], references: [id])
+
+  @@index([commentId])
+  @@map("inline_comment_replies")
+}
+
+enum InlineCommentStatus {
+  OPEN
+  RESOLVED
 }
 
 // ─────────────────────────────────────────

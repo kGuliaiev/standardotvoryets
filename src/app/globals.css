@@ -250,6 +250,24 @@
     }
   }
 
+  /* Brief amber pulse used by InlineComments rail to point at the
+     source paragraph when the user clicks a comment. */
+  @keyframes inlineCommentFlash {
+    0% {
+      background-color: rgba(251, 191, 36, 0);
+    }
+    20% {
+      background-color: rgba(251, 191, 36, 0.35);
+    }
+    100% {
+      background-color: rgba(251, 191, 36, 0);
+    }
+  }
+  .inline-comment-flash {
+    animation: inlineCommentFlash 1.4s ease-out;
+    border-radius: 6px;
+  }
+
   /* Token utility classes (so bg-card / text-ink etc. work as Tailwind tokens via config) */
   .scrollbar-thin {
     scrollbar-width: thin;

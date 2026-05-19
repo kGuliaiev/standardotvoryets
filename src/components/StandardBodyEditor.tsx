@@ -6,6 +6,7 @@ import { trpc } from '@/lib/trpc/client';
 import { Avatar } from '@/components/ui/Avatar';
 import { Modal } from '@/components/ui/Modal';
 import { RichTextEditor } from '@/components/ui/RichTextEditor';
+import { InlineComments } from '@/components/InlineComments';
 import { splitHtmlBlocks, htmlToPlainText, normalizeBodyHtml } from '@/lib/standardBody';
 import {
   Pencil,
@@ -140,6 +141,9 @@ export function StandardBodyEditor({ target, bodyText, bodyUpdatedAt, bodyUpdate
   const [draft, setDraft] = useState<DraftSuggestion | null>(null);
   const [bulkOpen, setBulkOpen] = useState(false);
   const [bulkText, setBulkText] = useState(normalizedBody);
+  // Reference into the body container — `InlineComments` uses it to
+  // scope selection capture and to scroll-to-paragraph from the rail.
+  const articleRef = useRef<HTMLElement>(null);
   // Holds HTML returned by /api/import-body while the user confirms a
   // destructive replace (only used when a body already exists).
   const [pendingImport, setPendingImport] = useState<{ html: string; filename: string } | null>(
@@ -357,7 +361,10 @@ export function StandardBodyEditor({ target, bodyText, bodyUpdatedAt, bodyUpdate
         {/* Body blocks (HTML, rendered via prose classes).
             space-y-1 ≈ Word's normal paragraph rhythm; hover actions
             float on top of the text instead of expanding the layout. */}
-        <article className="bg-card rounded-xl border border-hairline p-5 sm:p-8 space-y-1">
+        <article
+          ref={articleRef}
+          className="bg-card rounded-xl border border-hairline p-5 sm:p-8 space-y-1"
+        >
           {paragraphs.map((html, idx) => {
             const pending = pendingBySection.get(idx) ?? [];
             return (
@@ -392,44 +399,47 @@ export function StandardBodyEditor({ target, bodyText, bodyUpdatedAt, bodyUpdate
         </article>
       </div>
 
-      {/* Right rail: recent decisions */}
-      <aside className="bg-card rounded-xl border border-hairline overflow-hidden lg:sticky lg:top-4">
-        <div className="px-4 py-3 border-b border-hairline">
-          <h3 className="text-xs font-bold uppercase tracking-wide text-ink">Останні рішення</h3>
-        </div>
-        {resolvedRecent.length === 0 ? (
-          <p className="px-4 py-6 text-xs text-light text-center">
-            Прийнятих або відхилених правок ще немає
-          </p>
-        ) : (
-          <ul className="divide-y divide-hairline">
-            {resolvedRecent.map((s) => (
-              <li key={s.id} className="px-4 py-2.5">
-                <div className="flex items-center gap-1.5 mb-1">
-                  <span
-                    className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${
-                      s.status === 'ACCEPTED'
-                        ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300'
-                        : 'bg-red-50 text-red-700 dark:bg-red-900/30 dark:text-red-300'
-                    }`}
-                  >
-                    {s.status === 'ACCEPTED' ? 'ПРИЙНЯТО' : 'ВІДХИЛЕНО'}
-                  </span>
-                  <span className="text-[10px] text-light">параграф {s.paragraphIndex + 1}</span>
-                </div>
-                {/* Show plaintext preview in the rail to keep it compact */}
-                <p className="text-[11px] text-mid line-clamp-2">
-                  {htmlToPlainText(s.proposedText) || '—'}
-                </p>
-                <p className="text-[10px] text-light mt-1">
-                  {s.author.name}
-                  {s.resolvedBy && ` → ${s.resolvedBy.name}`}
-                </p>
-              </li>
-            ))}
-          </ul>
-        )}
-      </aside>
+      {/* Right rail: inline comments panel + recent suggestion decisions */}
+      <div className="space-y-3">
+        <InlineComments target={targetInput} canComment={canSuggest} articleRef={articleRef} />
+        <aside className="bg-card rounded-xl border border-hairline overflow-hidden lg:sticky lg:top-4">
+          <div className="px-4 py-3 border-b border-hairline">
+            <h3 className="text-xs font-bold uppercase tracking-wide text-ink">Останні рішення</h3>
+          </div>
+          {resolvedRecent.length === 0 ? (
+            <p className="px-4 py-6 text-xs text-light text-center">
+              Прийнятих або відхилених правок ще немає
+            </p>
+          ) : (
+            <ul className="divide-y divide-hairline">
+              {resolvedRecent.map((s) => (
+                <li key={s.id} className="px-4 py-2.5">
+                  <div className="flex items-center gap-1.5 mb-1">
+                    <span
+                      className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${
+                        s.status === 'ACCEPTED'
+                          ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300'
+                          : 'bg-red-50 text-red-700 dark:bg-red-900/30 dark:text-red-300'
+                      }`}
+                    >
+                      {s.status === 'ACCEPTED' ? 'ПРИЙНЯТО' : 'ВІДХИЛЕНО'}
+                    </span>
+                    <span className="text-[10px] text-light">параграф {s.paragraphIndex + 1}</span>
+                  </div>
+                  {/* Show plaintext preview in the rail to keep it compact */}
+                  <p className="text-[11px] text-mid line-clamp-2">
+                    {htmlToPlainText(s.proposedText) || '—'}
+                  </p>
+                  <p className="text-[10px] text-light mt-1">
+                    {s.author.name}
+                    {s.resolvedBy && ` → ${s.resolvedBy.name}`}
+                  </p>
+                </li>
+              ))}
+            </ul>
+          )}
+        </aside>
+      </div>
 
       {/* Suggest modal */}
       <SuggestionDraftModal
@@ -513,9 +523,11 @@ function ParagraphBlock({
         <span className="text-[10px] text-light font-mono tabular-nums w-5 shrink-0 pt-1 select-none">
           {idx + 1}
         </span>
-        <div className="flex-1 min-w-0">
+        <div className="flex-1 min-w-0" data-paragraph-idx={idx}>
           {/* HTML body block — sanitized by TipTap's schema on write, so safe
-              to dangerouslySetInnerHTML on read. */}
+              to dangerouslySetInnerHTML on read. `data-paragraph-idx` on
+              the wrapper lets InlineComments map a text selection back
+              to a block index. */}
           <div
             className={`${READONLY_PROSE_CLASSES} break-words`}
             dangerouslySetInnerHTML={{ __html: html }}

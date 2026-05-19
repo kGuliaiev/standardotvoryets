@@ -15,7 +15,9 @@ export type AuditEntity =
   | 'Invite'
   | 'Notification'
   | 'SystemSettings'
-  | 'StandardSuggestion';
+  | 'StandardSuggestion'
+  | 'InlineComment'
+  | 'InlineCommentReply';
 
 /**
  * Compute a shallow diff between two snapshots. Returns null if no differences.

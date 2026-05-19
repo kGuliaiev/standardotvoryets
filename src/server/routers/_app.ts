@@ -13,6 +13,7 @@ import { commentRouter } from './comment';
 import { searchRouter } from './search';
 import { adminRouter } from './admin';
 import { suggestionRouter } from './suggestion';
+import { inlineCommentRouter } from './inlineComment';
 
 /**
  * This is the primary router for the server.
@@ -33,6 +34,7 @@ export const appRouter = createTRPCRouter({
   search: searchRouter,
   admin: adminRouter,
   suggestion: suggestionRouter,
+  inlineComment: inlineCommentRouter,
 });
 
 export type AppRouter = typeof appRouter;
