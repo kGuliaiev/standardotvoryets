@@ -327,31 +327,55 @@ export const suggestionRouter = createTRPCRouter({
         throw new TRPCError({ code: 'BAD_REQUEST', message: 'Правку вже опрацьовано' });
       }
 
-      // Re-read current paragraphs and verify drift
+      // Re-read current paragraphs. Strict index match is fragile — the
+      // user is mid-conversation accepting suggestions while others may
+      // have already touched the body, so we re-anchor by content:
+      //   1. Try the stored paragraphIndex; if its text still matches,
+      //      use that.
+      //   2. Otherwise scan all paragraphs for one whose plain text
+      //      equals the suggestion's originalText snapshot — use that
+      //      index.
+      //   3. If still not found, fall back gracefully:
+      //      - DELETE  → the block is already gone; mark resolved.
+      //      - REPLACE / INSERT_AFTER → append the proposed text at the
+      //        end so the leader's intent (adding/replacing content)
+      //        isn't lost just because numbering shifted.
+      const stripTags = (s: string) =>
+        s
+          .replace(/<[^>]+>/g, ' ')
+          .replace(/&nbsp;/g, ' ')
+          .replace(/&amp;/g, '&')
+          .replace(/&lt;/g, '<')
+          .replace(/&gt;/g, '>')
+          .replace(/\s+/g, ' ')
+          .trim();
+
       const paras = splitParagraphs(currentBody);
-      const target = paras[sug.paragraphIndex];
-      if (target === undefined) {
-        throw new TRPCError({
-          code: 'CONFLICT',
-          message: `Параграф №${sug.paragraphIndex + 1} більше не існує — текст документа змінився. Перегляньте правку.`,
-        });
-      }
-      if (target.trim() !== sug.originalText.trim()) {
-        throw new TRPCError({
-          code: 'CONFLICT',
-          message:
-            'Текст параграфа змінився з моменту створення правки. Перегляньте її та створіть нову, якщо потрібно.',
-        });
+      const originalPlain = stripTags(sug.originalText);
+      let appliedIndex = sug.paragraphIndex;
+      const direct = paras[appliedIndex];
+      if (direct === undefined || stripTags(direct) !== originalPlain) {
+        const found = paras.findIndex((p) => stripTags(p) === originalPlain);
+        appliedIndex = found;
       }
 
       // Apply the operation
       const nextParas = [...paras];
-      if (sug.operation === 'REPLACE') {
-        nextParas[sug.paragraphIndex] = sug.proposedText;
+      if (appliedIndex < 0) {
+        // Original block isn't in the document any more.
+        if (sug.operation === 'DELETE') {
+          // Already deleted by an earlier action — nothing to do.
+        } else {
+          // For REPLACE / INSERT_AFTER, drop the proposed content at
+          // the end so the leader's edit isn't silently lost.
+          nextParas.push(sug.proposedText);
+        }
+      } else if (sug.operation === 'REPLACE') {
+        nextParas[appliedIndex] = sug.proposedText;
       } else if (sug.operation === 'DELETE') {
-        nextParas.splice(sug.paragraphIndex, 1);
+        nextParas.splice(appliedIndex, 1);
       } else if (sug.operation === 'INSERT_AFTER') {
-        nextParas.splice(sug.paragraphIndex + 1, 0, sug.proposedText);
+        nextParas.splice(appliedIndex + 1, 0, sug.proposedText);
       }
       const nextBody = joinParagraphs(nextParas.filter((p) => p.trim().length > 0));
 
