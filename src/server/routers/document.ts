@@ -339,6 +339,83 @@ export const documentRouter = createTRPCRouter({
       return updated;
     }),
 
+  // ── updateMeta ────────────────────────────────────────────────────────
+  // Lets the leader / secretary tweak document card fields after
+  // upload — type, version, note, isCurrent, allowEdits. The file
+  // itself (s3Key, sizeBytes, filename) stays untouched; re-uploading
+  // a new file is a separate flow.
+  updateMeta: protectedProcedure
+    .input(
+      z.object({
+        documentId: z.string().cuid(),
+        type: z
+          .enum([
+            'DRAFT_STANDARD',
+            'TECH_SPEC',
+            'FEEDBACK',
+            'MEETING_MINUTES',
+            'AGENDA',
+            'ATTACHMENT',
+            'FINAL',
+          ])
+          .optional(),
+        version: z.string().min(1).max(50).optional(),
+        note: z.string().max(2000).nullable().optional(),
+        isCurrent: z.boolean().optional(),
+        allowEdits: z.boolean().optional(),
+      }),
+    )
+    .mutation(async ({ ctx, input }) => {
+      const doc = await ctx.db.document.findUniqueOrThrow({
+        where: { id: input.documentId },
+        include: { standard: { select: { workingGroupId: true } } },
+      });
+      // Same permission as upload — secretary, leader, deputy, admin.
+      if (!can(userCtx(ctx.session), 'document:upload', doc.standard.workingGroupId)) {
+        throw new TRPCError({ code: 'FORBIDDEN' });
+      }
+      // If marking as current, unset any other current within the same standard.
+      if (input.isCurrent === true && !doc.isCurrent) {
+        await ctx.db.document.updateMany({
+          where: { standardId: doc.standardId, isCurrent: true, id: { not: doc.id } },
+          data: { isCurrent: false },
+        });
+      }
+      const before = {
+        type: doc.type,
+        version: doc.version,
+        note: doc.note,
+        isCurrent: doc.isCurrent,
+        allowEdits: doc.allowEdits,
+      };
+      const updated = await ctx.db.document.update({
+        where: { id: input.documentId },
+        data: {
+          ...(input.type !== undefined ? { type: input.type } : {}),
+          ...(input.version !== undefined ? { version: input.version } : {}),
+          ...(input.note !== undefined ? { note: input.note } : {}),
+          ...(input.isCurrent !== undefined ? { isCurrent: input.isCurrent } : {}),
+          ...(input.allowEdits !== undefined ? { allowEdits: input.allowEdits } : {}),
+        },
+      });
+      await logActivity(ctx.db, {
+        userId: ctx.session.user.id,
+        action: 'UPDATE',
+        entity: 'Document',
+        entityId: input.documentId,
+        before,
+        after: {
+          type: updated.type,
+          version: updated.version,
+          note: updated.note,
+          isCurrent: updated.isCurrent,
+          allowEdits: updated.allowEdits,
+        },
+        note: `Оновлено картку документа: ${updated.filename}`,
+      });
+      return updated;
+    }),
+
   // ── delete ────────────────────────────────────────────────────────────
   delete: protectedProcedure
     .input(z.object({ documentId: z.string().cuid() }))

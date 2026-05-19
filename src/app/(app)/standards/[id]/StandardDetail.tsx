@@ -12,6 +12,7 @@ import { Modal } from '@/components/ui/Modal';
 import { ActivityFeed } from '@/components/ActivityFeed';
 import { TaskFormModal } from '@/components/TaskFormModal';
 import { DocumentUploadModal } from '@/components/DocumentUploadModal';
+import { DocumentEditMetaModal } from '@/components/DocumentEditMetaModal';
 import { CommentsThread } from '@/components/CommentsThread';
 import { StandardBodyEditor } from '@/components/StandardBodyEditor';
 import { StandardProgress, hasOverdueStage } from '@/components/standards/StandardProgress';
@@ -168,6 +169,10 @@ export function StandardDetail({ id }: { id: string }) {
   // ID of the editable document whose collaborative editor is currently
   // shown as a fullscreen modal (null = no editor open).
   const [editDocId, setEditDocId] = useState<string | null>(null);
+  // Separate state for the doc-meta edit modal (filename, type,
+  // version, isCurrent, allowEdits) — the body editor stays as
+  // `editDocId`.
+  const [editMetaDocId, setEditMetaDocId] = useState<string | null>(null);
 
   const updateMutation = trpc.standard.update.useMutation({
     onSuccess: () => {
@@ -597,6 +602,16 @@ export function StandardDetail({ id }: { id: string }) {
                               Актуальний
                             </span>
                           )}
+                          {canUpload && (
+                            <button
+                              onClick={() => setEditMetaDocId(doc.id)}
+                              className="text-xs px-2.5 py-1 rounded border border-hairline text-mid hover:text-ink hover:bg-pill transition-colors inline-flex items-center gap-1 flex-shrink-0"
+                              title="Редагувати картку (тип, версія, прапорці)"
+                            >
+                              <Pencil className="w-3 h-3" />
+                              Картка
+                            </button>
+                          )}
                           {doc.allowEdits && (
                             <button
                               onClick={() => setEditDocId(doc.id)}
@@ -604,7 +619,7 @@ export function StandardDetail({ id }: { id: string }) {
                               title="Відкрити документ у колаборативному редакторі"
                             >
                               <Pencil className="w-3 h-3" />
-                              Редагувати
+                              Текст
                             </button>
                           )}
                           <DownloadButton documentId={doc.id} />
@@ -1089,6 +1104,26 @@ export function StandardDetail({ id }: { id: string }) {
         standardId={id}
         onSaved={() => void refetch()}
         defaultAllowEdits={uploadAllowEditsDefault}
+      />
+
+      <DocumentEditMetaModal
+        open={!!editMetaDocId}
+        onClose={() => setEditMetaDocId(null)}
+        doc={(() => {
+          const d = standard.documents.find((x) => x.id === editMetaDocId);
+          return d
+            ? {
+                id: d.id,
+                filename: d.filename,
+                type: d.type,
+                version: d.version,
+                note: d.note,
+                isCurrent: d.isCurrent,
+                allowEdits: d.allowEdits,
+              }
+            : null;
+        })()}
+        onSaved={() => void refetch()}
       />
 
       {/* Per-document collaborative editor. Reuses StandardBodyEditor
