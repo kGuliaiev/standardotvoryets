@@ -9,7 +9,7 @@ import { Avatar } from '@/components/ui/Avatar';
 import { Modal } from '@/components/ui/Modal';
 import { ConfirmModal } from '@/components/ui/ConfirmModal';
 import { ActivityFeed } from '@/components/ActivityFeed';
-import { formatDate } from '@/lib/utils';
+import { formatDateTime } from '@/lib/utils';
 import { can } from '@/lib/rbac';
 import { useEscape } from '@/lib/useEscape';
 import { rankWeight, extractSurname } from '@/lib/ranks';
@@ -271,7 +271,7 @@ export function MeetingDetail({ id }: Props) {
                   </div>
                   <div>
                     <p className="text-xs text-light mb-1">Дата та час</p>
-                    <p className="font-medium text-ink">{formatDate(meeting.startAt)}</p>
+                    <p className="font-medium text-ink">{formatDateTime(meeting.startAt)}</p>
                   </div>
                   <div>
                     <p className="text-xs text-light mb-1">Тривалість</p>
