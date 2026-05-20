@@ -9,11 +9,20 @@ import { Avatar } from '@/components/ui/Avatar';
 import { Modal } from '@/components/ui/Modal';
 import { ConfirmModal } from '@/components/ui/ConfirmModal';
 import { ActivityFeed } from '@/components/ActivityFeed';
-import { formatDateTime } from '@/lib/utils';
 import { can } from '@/lib/rbac';
 import { useEscape } from '@/lib/useEscape';
 import { rankWeight, extractSurname } from '@/lib/ranks';
 import type { GlobalRole, WorkingGroupRole } from '@prisma/client';
+
+// Short UA weekday, indexed by Date.getDay() (0 = Sunday).
+const DOW_SHORT_UA = ['Нд', 'Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб'];
+
+/** "13:00, Чт, 21.05.2026" — time, short weekday, date. */
+function formatMeetingWhen(date: Date | string): string {
+  const d = typeof date === 'string' ? new Date(date) : date;
+  const p = (n: number) => String(n).padStart(2, '0');
+  return `${p(d.getHours())}:${p(d.getMinutes())}, ${DOW_SHORT_UA[d.getDay()]}, ${p(d.getDate())}.${p(d.getMonth() + 1)}.${d.getFullYear()}`;
+}
 
 // Sort priority within the WG roster: lower number = higher up
 const WG_ROLE_ORDER: Record<string, number> = {
@@ -271,7 +280,7 @@ export function MeetingDetail({ id }: Props) {
                   </div>
                   <div>
                     <p className="text-xs text-light mb-1">Дата та час</p>
-                    <p className="font-medium text-ink">{formatDateTime(meeting.startAt)}</p>
+                    <p className="font-medium text-ink">{formatMeetingWhen(meeting.startAt)}</p>
                   </div>
                   <div>
                     <p className="text-xs text-light mb-1">Тривалість</p>
