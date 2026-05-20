@@ -46,8 +46,11 @@ export function DiscussionsFeed() {
     // stay visible during this session.
     const t = setTimeout(() => {
       setLastVisit(new Date().toISOString());
-      // refresh sidebar badge
-      void utils.dashboard.navCounts.invalidate();
+      // Refresh the sidebar "Обговорення" badge — it's driven by
+      // comment.unreadCountForUser (since=lastVisit), not navCounts. The
+      // lastVisit bump now also broadcasts to the sidebar's hook instance,
+      // so its query re-runs with the new `since` and the badge clears.
+      void utils.comment.unreadCountForUser.invalidate();
     }, 4000);
     return () => clearTimeout(t);
   }, [comments, setLastVisit, utils]);
