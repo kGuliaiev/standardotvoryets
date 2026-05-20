@@ -196,6 +196,22 @@ export function DiscussionsFeed() {
                               {timeAgo(new Date(c.createdAt))}
                             </span>
                           </div>
+                          {c.parent && (
+                            <div className="mt-1.5 border-l-2 border-hairline pl-2.5 text-[11px] text-light">
+                              <span className="inline-flex items-center gap-1 flex-wrap">
+                                <Reply className="w-3 h-3 shrink-0" />
+                                <span>у відповідь</span>
+                                <span className="font-semibold text-mid">
+                                  {c.parent.author.name}
+                                </span>
+                                <span>·</span>
+                                <span>{timeAgo(new Date(c.parent.createdAt))}</span>
+                              </span>
+                              <p className="mt-0.5 line-clamp-2 italic break-words">
+                                {c.parent.body}
+                              </p>
+                            </div>
+                          )}
                           <p className="text-sm text-ink mt-1 leading-relaxed whitespace-pre-wrap break-words">
                             {renderMentions(c.body)}
                           </p>

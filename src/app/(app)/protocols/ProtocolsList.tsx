@@ -1,10 +1,11 @@
 'use client';
 
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useSession } from 'next-auth/react';
 import { trpc } from '@/lib/trpc/client';
-import { Eye, Pencil, FileText, AlertCircle } from 'lucide-react';
+import { Eye, Pencil, FileText, AlertCircle, Trash2, Loader2 } from 'lucide-react';
+import { Modal } from '@/components/ui/Modal';
 import { Avatar } from '@/components/ui/Avatar';
 import { useSort, sortedRows } from '@/lib/useSort';
 import { useLocalStorageState } from '@/lib/useLocalStorageState';
@@ -85,6 +86,18 @@ export function ProtocolsList() {
     [session],
   );
   const isAdmin = session?.user.globalRole === 'ADMIN';
+
+  const utils = trpc.useUtils();
+  const [pendingDelete, setPendingDelete] = useState<{ id: string; label: string } | null>(null);
+  const [confirmText, setConfirmText] = useState('');
+  const deleteMutation = trpc.meeting.deleteProtocol.useMutation({
+    onSuccess: () => {
+      void utils.meeting.protocolsForUser.invalidate();
+      void utils.dashboard.navCounts.invalidate();
+      setPendingDelete(null);
+      setConfirmText('');
+    },
+  });
 
   const filtered = (meetings ?? []).filter((m) => {
     if (filters.wgIds.length > 0 && !filters.wgIds.includes(m.workingGroup.id)) return false;
@@ -223,6 +236,9 @@ export function ProtocolsList() {
                   const canEdit =
                     isAdmin ||
                     (userCtx ? can(userCtx, 'meeting:uploadMinutes', m.workingGroup.id) : false);
+                  const canDelete =
+                    isAdmin ||
+                    (userCtx ? can(userCtx, 'meeting:deleteProtocol', m.workingGroup.id) : false);
                   const year = new Date(m.startAt).getFullYear();
                   const wgNum = /(\d+)/.exec(m.workingGroup.code)?.[1] ?? '';
                   const protoLabel = m.protocolNumber
@@ -334,6 +350,22 @@ export function ProtocolsList() {
                             <FileText className="w-3.5 h-3.5" />
                             <span className="text-[10px] font-bold">PDF</span>
                           </a>
+                          {canDelete && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setConfirmText('');
+                                setPendingDelete({
+                                  id: m.id,
+                                  label: m.protocolNumber ? protoLabel : m.title,
+                                });
+                              }}
+                              title="Видалити протокол"
+                              className="p-1.5 rounded text-mid hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          )}
                         </div>
                       </td>
                     </tr>
@@ -344,6 +376,62 @@ export function ProtocolsList() {
           </div>
         )}
       </div>
+
+      <Modal
+        open={!!pendingDelete}
+        onClose={() => {
+          setPendingDelete(null);
+          setConfirmText('');
+        }}
+        title="Видалити протокол?"
+        size="sm"
+      >
+        {pendingDelete && (
+          <div className="space-y-4">
+            <p className="text-sm text-mid">
+              Протокол <span className="font-semibold text-ink">{pendingDelete.label}</span> та все
+              засідання (порядок денний, явка) буде видалено{' '}
+              <span className="font-semibold text-red-600">остаточно</span>. Дію не можна скасувати.
+            </p>
+            <div>
+              <label className="block text-xs text-mid mb-1">
+                Для підтвердження введіть <span className="font-mono font-bold">ВИДАЛИТИ</span>
+              </label>
+              <input
+                autoFocus
+                value={confirmText}
+                onChange={(e) => setConfirmText(e.target.value)}
+                placeholder="ВИДАЛИТИ"
+                className="w-full rounded-lg border border-hairline bg-card px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-red-500/40"
+              />
+            </div>
+            <div className="flex gap-3 justify-end pt-2 border-t border-hairline">
+              <button
+                type="button"
+                onClick={() => {
+                  setPendingDelete(null);
+                  setConfirmText('');
+                }}
+                disabled={deleteMutation.isPending}
+                className="btn-secondary"
+              >
+                Скасувати
+              </button>
+              <button
+                type="button"
+                onClick={() => deleteMutation.mutate({ id: pendingDelete.id })}
+                disabled={
+                  confirmText.trim().toUpperCase() !== 'ВИДАЛИТИ' || deleteMutation.isPending
+                }
+                className="inline-flex items-center gap-2 rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white hover:bg-red-700 disabled:opacity-50 transition-colors"
+              >
+                {deleteMutation.isPending && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+                Видалити
+              </button>
+            </div>
+          </div>
+        )}
+      </Modal>
     </div>
   );
 }

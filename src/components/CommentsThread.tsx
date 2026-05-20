@@ -7,6 +7,7 @@ import { useSession } from 'next-auth/react';
 import { Avatar } from '@/components/ui/Avatar';
 import { Pencil, Trash2, Reply, Loader2, X, Check } from 'lucide-react';
 import { formatDateTime } from '@/lib/utils';
+import { ConfirmModal } from '@/components/ui/ConfirmModal';
 import {
   MentionTextarea,
   renderMentions,
@@ -55,6 +56,7 @@ export function CommentsThread({ standardId }: { standardId: string }) {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editDraft, setEditDraft] = useState('');
   const [error, setError] = useState<string | null>(null);
+  const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
 
   /** Click "Відповісти" → set replyingTo, scroll the comment into
    *  view, and let the reply textarea autoFocus once mounted. */
@@ -252,9 +254,7 @@ export function CommentsThread({ standardId }: { standardId: string }) {
                   setEditDraft('');
                 }}
                 onSaveEdit={(id) => updateMutation.mutate({ id, body: editDraft })}
-                onDelete={(id) => {
-                  if (confirm('Видалити коментар?')) deleteMutation.mutate({ id });
-                }}
+                onDelete={(id) => setPendingDeleteId(id)}
                 pending={createMutation.isPending || updateMutation.isPending}
                 canDeleteReply={(r) =>
                   r.authorId === session?.user.id || session?.user.globalRole === 'ADMIN'
@@ -264,6 +264,19 @@ export function CommentsThread({ standardId }: { standardId: string }) {
           </ul>
         )}
       </div>
+
+      <ConfirmModal
+        open={!!pendingDeleteId}
+        title="Видалити коментар?"
+        message="Коментар буде видалено остаточно. Відповіді на нього також зникнуть."
+        destructive
+        confirmLabel="Видалити"
+        onConfirm={() => {
+          if (pendingDeleteId) deleteMutation.mutate({ id: pendingDeleteId });
+          setPendingDeleteId(null);
+        }}
+        onClose={() => setPendingDeleteId(null)}
+      />
     </div>
   );
 }

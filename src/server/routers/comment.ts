@@ -180,6 +180,15 @@ export const commentRouter = createTRPCRouter({
         where: seesAll ? {} : { standard: { workingGroupId: { in: memberGroupIds } } },
         include: {
           author: { select: { id: true, name: true, avatarUrl: true, rank: true } },
+          // The comment this one replies to (if any) — shown as a quoted
+          // context line in the feed.
+          parent: {
+            select: {
+              body: true,
+              createdAt: true,
+              author: { select: { name: true } },
+            },
+          },
           standard: {
             select: {
               id: true,

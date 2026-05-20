@@ -605,4 +605,35 @@ export const meetingRouter = createTRPCRouter({
       orderBy: [{ startAt: 'desc' }],
     });
   }),
+
+  // ── deleteProtocol: delete the meeting/protocol entirely ──────────────
+  // Destructive — guarded by the meeting:deleteProtocol permission (admins
+  // always). Agenda items + attendances cascade via schema relations.
+  deleteProtocol: protectedProcedure
+    .input(z.object({ id: z.string().cuid() }))
+    .mutation(async ({ ctx, input }) => {
+      const meeting = await ctx.db.meeting.findUnique({ where: { id: input.id } });
+      if (!meeting) throw new TRPCError({ code: 'NOT_FOUND' });
+      const isAdmin = ctx.session.user.globalRole === 'ADMIN';
+      if (
+        !isAdmin &&
+        !can(userCtx(ctx.session), 'meeting:deleteProtocol', meeting.workingGroupId)
+      ) {
+        throw new TRPCError({ code: 'FORBIDDEN' });
+      }
+      await logActivity(ctx.db, {
+        userId: ctx.session.user.id,
+        action: 'DELETE',
+        entity: 'Meeting',
+        entityId: meeting.id,
+        before: {
+          title: meeting.title,
+          protocolNumber: meeting.protocolNumber,
+          status: meeting.status,
+        },
+        after: {},
+      });
+      await ctx.db.meeting.delete({ where: { id: input.id } });
+      return { ok: true };
+    }),
 });
