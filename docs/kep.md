@@ -43,13 +43,33 @@
 
 ## 3. Общий модуль проверки
 
-`src/server/kep.ts`:
+### Механика «под капотом» (вариант А)
 
-- `verifySignature(container, expectedData)` → `{ valid, rnokpp?, keyId, fullName, certInfo }` —
-  обёртка над публичным сервисом ІІТ/ЦЗО. Проверяет: валидность подписи, цепочку/срок сертификата,
-  и что подписаны именно ожидаемые данные (`expectedData`).
-- `identityKeys({ rnokpp, keyId })` → `{ rnokppHash?, keyId }` — нормализация в хранимые ключи.
-- Анти-replay: для входа `expectedData` = серверный одноразовый nonce.
+**Клиент (euSign / EUSignCP):**
+
+- `Initialize()` → `SetCharset('UTF-16LE')` → `ReadPrivateKeySilently(deviceType, deviceName, pass)`.
+- Подпись: `SignInternal("true", expectedData)` — **internal-подпись, встраивает подписанные данные**
+  (наш nonce / хеш документа) в контейнер (base64). Так сервер восстанавливает И данные, И подписанта.
+- Данные подписанта (для отображения/диагностики): `GetPrivateKeyOwnerInfo()` →
+  `GetSubjCN()`, `GetSubjDRFOCode()` (РНОКПП), `GetSubjEDRPOUCode()` (ЄДРПОУ), `GetSerial()`.
+
+**Сервер (`src/server/kep.ts`):**
+
+- `verifySignature({ containerBase64, expectedData })` — POST контейнера в **сервис ІІТ**
+  (`KEP_VERIFY_URL`). Сервис (на базе библиотеки ІІТ, `VerifyDataInternal`) проверяет подпись +
+  статус сертификата через ЦЗО и возвращает встроенные данные + подписанта. Функция:
+  1. сверяет, что подписанные данные == `expectedData` (анти-replay);
+  2. возвращает `VerifiedSigner { rnokpp, keyId(serial), fullName, issuerCN, notAfter }`.
+- `identityKeys(signer)` → `{ rnokppHash?, keyId }` — нормализация в хранимые ключи.
+- Анти-replay: для входа/привязки `expectedData` = серверный одноразовый nonce.
+
+**Контракт сервиса ІІТ (ожидаемый JSON; парсер подстраивается под фактический):**
+
+- Запрос: `POST KEP_VERIFY_URL` `{ "container": "<base64 internal sign>", "expectedData": "<nonce>" }`.
+- Ответ: `{ "valid": true, "signedData": "<nonce>" | "dataMatches": true,
+"signer": { "rnokpp", "edrpou", "serial", "fullName", "issuerCN", "notAfter" } }`.
+- Маппинг полей подписанта = методы библиотеки: `serial`←`GetSerial`, `rnokpp`←`GetSubjDRFOCode`,
+  `edrpou`←`GetSubjEDRPOUCode`, `fullName`←`GetSubjCN`.
 
 ---
 
@@ -218,11 +238,10 @@
 
 1. **Способ серверной проверки — ВЫБРАНО: вариант А (серверный сервис ІІТ).**
    Чистого публичного REST-сервиса проверки ІІТ/ЦЗО нет (`czo.gov.ua/verify` — портал для людей).
-   Поэтому на сервере разворачивается **HTTP-сервис подписи ІІТ**, `verifySignature()` шлёт ему
-   контейнер на `KEP_VERIFY_URL` → полноценная проверка (подпись + статус сертификата через ЦЗО).
-   **Нужно от инфраструктуры:** развернуть сервис ІІТ + дать его **API-контракт** (формат запроса/
-   ответа) — по нему допишем тело `verifySignature()` (сейчас оно за стабильным интерфейсом
-   `VerifiedSigner`, всё остальное уже готово).
+   `verifySignature()` **уже реализован** как HTTP-вызов сервиса ІІТ по контракту из §3 (проверка
+   подписи + сверка данных + извлечение РНОКПП/серійника). **Нужно от инфраструктуры:**
+   развернуть сервис подписи ІІТ и прописать `KEP_VERIFY_URL`. Если фактический формат ответа
+   сервиса отличается от §3 — пришли пример, подправлю только парсер (вся логика уже готова).
 2. **Право запрашивать подписи** — новое действие `document:requestSign` в матрице прав для всех
    ролей; конкретное распределение настраивается в `/admin/permissions`.
 3. **Блокировка документа** — блокируется **сразу при установке галочки «Потребує підпису»**

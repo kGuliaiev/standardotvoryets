@@ -92,28 +92,85 @@ export function identityKeys(signer: VerifiedSigner): {
 // ── Signature verification ───────────────────────────────────────────────────
 
 /**
- * Verify a КЕП signature container server-side and assert it signs exactly
- * `expectedData` (the nonce for login/bind, or the document hash for
- * signing). Returns the verified signer identity.
- *
- * TODO(phase-1): wire the concrete ІІТ/ЦЗО verification request once the
- * public endpoint contract is confirmed. It must:
- *   1) send `containerBase64` (+ `expectedData`) to `env.KEP_VERIFY_URL`;
- *   2) assert the signature is cryptographically valid AND covers exactly
- *      `expectedData`;
- *   3) validate the certificate chain / validity period;
- *   4) extract РНОКПП, certificate serial, ПІБ, issuer CN, notAfter.
- * Everything else in the app stays endpoint-agnostic behind this function.
+ * Expected JSON response from the IIT signature service (variant A). The
+ * service wraps the IIT EU Sign library, which after VerifyDataInternal
+ * exposes the embedded signed data and the signer's certificate fields
+ * (GetSubjDRFOCode → РНОКПП, GetSerial → serial, GetSubjCN → ПІБ, …).
+ * Adjust the parser if your deployed service uses different field names.
  */
-export function verifySignature(_params: {
+interface KepVerifyResponse {
+  /** Overall verdict: signature valid + certificate trusted/in-date. */
+  valid?: boolean;
+  /** The data the signature actually covers (the client signs the nonce). */
+  signedData?: string;
+  /** Optional: service already compared signedData to our expectedData. */
+  dataMatches?: boolean;
+  signer?: {
+    rnokpp?: string | null; // GetSubjDRFOCode
+    edrpou?: string | null; // GetSubjEDRPOUCode
+    serial?: string | null; // GetSerial (certificate serial number)
+    fullName?: string | null; // GetSubjCN
+    issuerCN?: string | null; // GetIssuerCN
+    notAfter?: string | null; // GetCertEndTime
+  };
+}
+
+/**
+ * Verify a КЕП internal-signature container server-side via the IIT
+ * signature service and assert it signs exactly `expectedData` (the nonce
+ * for login/bind, or the document hash for signing). Returns the verified
+ * signer identity. Throws a user-facing (Ukrainian) error on any failure.
+ *
+ * The client must produce the container with an INTERNAL signature
+ * (euSign.SignInternal("true", expectedData)) so the signed data is
+ * embedded and the service can recover both the data and the signer.
+ */
+export async function verifySignature(params: {
   containerBase64: string;
   expectedData: string;
 }): Promise<VerifiedSigner> {
-  if (!env.KEP_VERIFY_URL) {
-    return Promise.reject(new Error('KEP_VERIFY_URL не налаштовано'));
+  if (!env.KEP_VERIFY_URL) throw new Error('KEP_VERIFY_URL не налаштовано');
+
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 10_000);
+  let res: Response;
+  try {
+    res = await fetch(env.KEP_VERIFY_URL, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        container: params.containerBase64,
+        expectedData: params.expectedData,
+      }),
+      signal: controller.signal,
+    });
+  } catch {
+    throw new Error('Сервіс перевірки підпису недоступний');
+  } finally {
+    clearTimeout(timer);
   }
-  // Placeholder until the ІІТ/ЦЗО endpoint contract is confirmed.
-  return Promise.reject(
-    new Error('Перевірку підпису ще не підключено (Етап 1: підтвердження endpoint ІІТ/ЦЗО)'),
-  );
+
+  if (!res.ok) {
+    throw new Error(`Сервіс перевірки підпису повернув помилку (${res.status})`);
+  }
+  const body = (await res.json().catch(() => null)) as KepVerifyResponse | null;
+  if (!body || body.valid === false) throw new Error('Підпис недійсний');
+
+  // The signed data MUST be exactly our challenge/document hash — this is
+  // what stops a replay of some other signed payload.
+  const dataMatches =
+    body.dataMatches === true ||
+    (typeof body.signedData === 'string' && body.signedData === params.expectedData);
+  if (!dataMatches) throw new Error('Підпис не відповідає запиту');
+
+  const serial = (body.signer?.serial ?? '').trim();
+  if (!serial) throw new Error('У підписі відсутній серійний номер сертифіката');
+
+  return {
+    rnokpp: body.signer?.rnokpp ? String(body.signer.rnokpp).trim() : null,
+    keyId: serial,
+    fullName: body.signer?.fullName ?? null,
+    issuerCN: body.signer?.issuerCN ?? null,
+    notAfter: body.signer?.notAfter ?? null,
+  };
 }
