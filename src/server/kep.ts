@@ -32,9 +32,33 @@ export interface VerifiedSigner {
   notAfter: string | null;
 }
 
-/** True only when both КЕП env vars are configured. */
+/**
+ * Embedded verifier seam (variant A1): the IIT euSign library (euscp.js +
+ * WASM) running in our Node server. Registered once the library files +
+ * CA config (CAs.json, CACertificates.p7b, TSP/OCSP/CMP) are present —
+ * see server bootstrap. When registered it's used instead of the HTTP
+ * service (A2). This is the natural fit, since IIT ships a library, not
+ * a REST service.
+ */
+export interface EmbeddedVerifier {
+  verifyInternal(containerBase64: string): Promise<{
+    signedData: string;
+    rnokpp: string | null;
+    serial: string;
+    fullName: string | null;
+    issuerCN: string | null;
+    notAfter: string | null;
+  }>;
+}
+let embeddedVerifier: EmbeddedVerifier | null = null;
+export function registerEmbeddedVerifier(v: EmbeddedVerifier | null): void {
+  embeddedVerifier = v;
+}
+
+/** True when КЕП can actually run: pepper set AND a verifier available
+ *  (embedded library A1, or the HTTP service A2). */
 export function isKepConfigured(): boolean {
-  return Boolean(env.KEP_VERIFY_URL && env.KEP_RNOKPP_PEPPER);
+  return Boolean(env.KEP_RNOKPP_PEPPER && (embeddedVerifier ?? env.KEP_VERIFY_URL));
 }
 
 // ── Challenge (nonce) lifecycle ────────────────────────────────────────────
@@ -129,7 +153,23 @@ export async function verifySignature(params: {
   containerBase64: string;
   expectedData: string;
 }): Promise<VerifiedSigner> {
-  if (!env.KEP_VERIFY_URL) throw new Error('KEP_VERIFY_URL не налаштовано');
+  // A1 — embedded IIT library (preferred): verify in-process.
+  if (embeddedVerifier) {
+    const r = await embeddedVerifier.verifyInternal(params.containerBase64);
+    if (r.signedData !== params.expectedData) throw new Error('Підпис не відповідає запиту');
+    const serial = r.serial.trim();
+    if (!serial) throw new Error('У підписі відсутній серійний номер сертифіката');
+    return {
+      rnokpp: r.rnokpp ? r.rnokpp.trim() : null,
+      keyId: serial,
+      fullName: r.fullName ?? null,
+      issuerCN: r.issuerCN ?? null,
+      notAfter: r.notAfter ?? null,
+    };
+  }
+
+  // A2 — external IIT signature service over HTTP.
+  if (!env.KEP_VERIFY_URL) throw new Error('Перевірку КЕП не налаштовано');
 
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 10_000);
