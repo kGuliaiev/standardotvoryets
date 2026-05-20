@@ -3,6 +3,7 @@
 import { useEffect, useMemo } from 'react';
 import Link from 'next/link';
 import { trpc } from '@/lib/trpc/client';
+import { useSession } from 'next-auth/react';
 import { Avatar } from '@/components/ui/Avatar';
 import { RankBadge } from '@/components/ui/RankBadge';
 import { useLocalStorageState } from '@/lib/useLocalStorageState';
@@ -25,6 +26,8 @@ function timeAgo(d: Date): string {
 
 export function DiscussionsFeed() {
   const utils = trpc.useUtils();
+  const { data: session } = useSession();
+  const myId = session?.user.id;
   const { data: comments, isLoading } = trpc.comment.feedForUser.useQuery(
     { limit: 80 },
     { refetchOnMount: 'always', staleTime: 0 },
@@ -37,8 +40,10 @@ export function DiscussionsFeed() {
 
   const newCount = useMemo(() => {
     if (!comments || !lastVisitDate) return 0;
-    return comments.filter((c) => new Date(c.createdAt) > lastVisitDate).length;
-  }, [comments, lastVisitDate]);
+    // The user's own comments never count as "new".
+    return comments.filter((c) => c.author.id !== myId && new Date(c.createdAt) > lastVisitDate)
+      .length;
+  }, [comments, lastVisitDate, myId]);
 
   useEffect(() => {
     if (!comments) return;
@@ -117,7 +122,8 @@ export function DiscussionsFeed() {
         <div className="space-y-4">
           {grouped.map((g) => {
             const groupHasNew =
-              !!lastVisitDate && g.items.some((c) => new Date(c.createdAt) > lastVisitDate);
+              !!lastVisitDate &&
+              g.items.some((c) => c.author.id !== myId && new Date(c.createdAt) > lastVisitDate);
             return (
               <div
                 key={g.standard.id}
@@ -161,7 +167,10 @@ export function DiscussionsFeed() {
                 </div>
                 <ul className="divide-y divide-hairline">
                   {g.items.map((c) => {
-                    const isNew = !!lastVisitDate && new Date(c.createdAt) > lastVisitDate;
+                    const isNew =
+                      !!lastVisitDate &&
+                      c.author.id !== myId &&
+                      new Date(c.createdAt) > lastVisitDate;
                     return (
                       <li
                         key={c.id}
