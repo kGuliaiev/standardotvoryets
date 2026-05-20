@@ -37,7 +37,7 @@ export function LoginGate() {
     setStatus('checking');
     setInfo(null);
     try {
-      const res = await fetch('/api/health', { cache: 'no-store' });
+      const res = await fetch('/api/db-status', { cache: 'no-store' });
       if (res.ok) {
         setStatus('up');
         return;
