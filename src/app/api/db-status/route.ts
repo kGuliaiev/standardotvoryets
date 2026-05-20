@@ -41,12 +41,14 @@ function commit(): string {
 export async function GET() {
   const startedAt = Date.now();
   try {
-    // Race the query against a 4s timeout so a hung connection doesn't
-    // make the probe itself hang (and thus the login page).
+    // Race the query against an 8s timeout so a hung connection doesn't
+    // make the probe itself hang (and thus the login page). 8s (not 4s)
+    // gives a slow-recovering Postgres room to answer the first query
+    // after an outage without being falsely reported down.
     await Promise.race([
       db.$queryRaw`SELECT 1`,
       new Promise((_, reject) =>
-        setTimeout(() => reject(new Error('Перевірка з’єднання перевищила 4000 мс')), 4000),
+        setTimeout(() => reject(new Error('Перевірка з’єднання перевищила 8000 мс')), 8000),
       ),
     ]);
     return NextResponse.json({
