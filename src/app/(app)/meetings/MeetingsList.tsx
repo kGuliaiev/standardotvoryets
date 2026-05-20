@@ -3,6 +3,7 @@
 import { useMemo, useState } from 'react';
 import { trpc } from '@/lib/trpc/client';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { useSession } from 'next-auth/react';
 import { ChevronLeft, ChevronRight, Plus } from 'lucide-react';
 import { can } from '@/lib/rbac';
@@ -102,8 +103,23 @@ function keyForDate(d: Date) {
   return `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
 }
 
+/** Local "YYYY-MM-DDTHH:mm" value for a datetime-local input / ?start= param. */
+function toLocalDTValue(d: Date) {
+  const p = (n: number) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`;
+}
+
+// Week-grid bounds: 08:00–18:00 in 30-minute slots.
+const WV_START_HOUR = 8;
+const WV_END_HOUR = 18;
+const WV_SLOT_MIN = 30;
+const WV_SLOT_PX = 28;
+const WV_TOTAL_SLOTS = ((WV_END_HOUR - WV_START_HOUR) * 60) / WV_SLOT_MIN;
+const WV_GRID_HEIGHT = WV_TOTAL_SLOTS * WV_SLOT_PX;
+
 export function MeetingsList() {
   const { data: session } = useSession();
+  const router = useRouter();
   const now = new Date();
   const [month, setMonth] = useState(now.getMonth());
   const [year, setYear] = useState(now.getFullYear());
@@ -136,6 +152,10 @@ export function MeetingsList() {
     !!userCtx &&
     (userCtx.globalRole === 'ADMIN' ||
       (groups ?? []).some((g) => can(userCtx, 'meeting:create', g.id)));
+
+  // Open the create form prefilled with a date/time (calendar click → create).
+  const goCreate = (date: Date) =>
+    router.push(`/meetings/new?start=${toLocalDTValue(date)}&duration=60`);
 
   // Group meetings by date key
   const byDay = useMemo(() => {
@@ -305,7 +325,14 @@ export function MeetingsList() {
                   return (
                     <button
                       key={k}
-                      onClick={() => setSelectedDayKey(k)}
+                      onClick={() => {
+                        setSelectedDayKey(k);
+                        // Click an empty day → create a meeting on it (10:00 default).
+                        if (canCreateAny) {
+                          goCreate(new Date(d.getFullYear(), d.getMonth(), d.getDate(), 10, 0));
+                        }
+                      }}
+                      title={canCreateAny ? 'Створити засідання на цей день' : undefined}
                       className={`min-h-[88px] border-t border-l border-hairline -ml-px -mt-px text-left p-1.5 align-top flex flex-col gap-1 transition-colors ${
                         isCurrentMonth ? 'bg-card' : 'bg-page'
                       } ${isSelected ? 'ring-2 ring-brand-soft ring-inset' : ''} hover:bg-brand-soft/30`}
@@ -361,6 +388,8 @@ export function MeetingsList() {
               onSelectDay={(k) => setSelectedDayKey(k)}
               selectedKey={selectedDayKey}
               todayKey={todayKey}
+              canCreate={canCreateAny}
+              onCreateAt={goCreate}
             />
           )}
 
@@ -467,6 +496,14 @@ export function MeetingsList() {
                 <tbody className="divide-y divide-hairline">
                   {rgSummary.map((r) => {
                     const total = r.planned + r.done;
+                    // Green when every meeting is conducted, red while some
+                    // remain; neutral if there are no active meetings.
+                    const doneCls =
+                      total === 0
+                        ? 'text-light'
+                        : r.done === total
+                          ? 'text-emerald-600 dark:text-emerald-400'
+                          : 'text-red-600 dark:text-red-400';
                     return (
                       <tr key={r.id}>
                         <td className="px-4 py-2.5">
@@ -481,10 +518,7 @@ export function MeetingsList() {
                           </span>
                         </td>
                         <td className="px-2 py-2.5 text-center font-bold text-ink">{total}</td>
-                        <td
-                          className="px-4 py-2.5 text-center font-bold"
-                          style={{ color: r.color }}
-                        >
+                        <td className={`px-4 py-2.5 text-center font-bold ${doneCls}`}>
                           {r.done} / {total}
                         </td>
                       </tr>
@@ -590,14 +624,18 @@ function WeekView({
   onSelectDay,
   selectedKey,
   todayKey,
+  canCreate,
+  onCreateAt,
 }: {
   currentDate: Date;
   meetings: MeetingItem[];
   onSelectDay: (k: string) => void;
   selectedKey: string;
   todayKey: string;
+  canCreate: boolean;
+  onCreateAt: (date: Date) => void;
 }) {
-  // Build 7 days starting Mon of current week
+  // 7 days starting Mon of the current week.
   const dow = (currentDate.getDay() + 6) % 7;
   const monday = new Date(
     currentDate.getFullYear(),
@@ -610,76 +648,146 @@ function WeekView({
   );
   const byDay = new Map<string, MeetingItem[]>();
   meetings.forEach((m) => {
-    const d = new Date(m.startAt);
-    const k = keyForDate(d);
+    const k = keyForDate(new Date(m.startAt));
     const arr = byDay.get(k) ?? [];
     arr.push(m);
     byDay.set(k, arr);
   });
 
+  const hourLabels = Array.from(
+    { length: WV_END_HOUR - WV_START_HOUR + 1 },
+    (_, i) => WV_START_HOUR + i,
+  );
+  const gridCols = { gridTemplateColumns: `52px repeat(7, minmax(0, 1fr))` };
+  const pxPerHour = WV_SLOT_PX * (60 / WV_SLOT_MIN);
+
   return (
-    <div className="grid grid-cols-1 sm:grid-cols-7">
-      {days.map((d, i) => {
-        const k = keyForDate(d);
-        const list = byDay.get(k) ?? [];
-        const isToday = k === todayKey;
-        const isSelected = k === selectedKey;
-        // Days without meetings collapse to a thin row on mobile so the
-        // view doesn't become a wall of 7 empty 260px columns when stacked.
-        const hasMeetings = list.length > 0;
-        return (
-          <button
-            key={k}
-            onClick={() => onSelectDay(k)}
-            className={`border-t border-l border-hairline -ml-px -mt-px text-left p-2 align-top flex flex-col gap-1 transition-colors sm:min-h-[260px] ${
-              hasMeetings ? 'min-h-[88px]' : 'min-h-[44px]'
-            } ${isSelected ? 'bg-brand-soft/30' : 'bg-card'} hover:bg-brand-soft/40`}
-          >
-            <div className="flex items-center justify-between">
-              <span
-                className={`text-[10px] font-bold uppercase tracking-wider ${
-                  i >= 5 ? 'text-red-500/70' : 'text-light'
+    <div className="overflow-x-auto scrollbar-thin">
+      <div className="min-w-[760px]">
+        {/* Day headers */}
+        <div className="grid border-b border-hairline" style={gridCols}>
+          <div />
+          {days.map((d, i) => {
+            const k = keyForDate(d);
+            const isToday = k === todayKey;
+            const isSelected = k === selectedKey;
+            return (
+              <button
+                key={k}
+                onClick={() => onSelectDay(k)}
+                className={`border-l border-hairline px-2 py-2 text-center transition-colors ${
+                  isSelected ? 'bg-brand-soft/40' : 'hover:bg-pill/40'
                 }`}
               >
-                {DOW_UA[i]}
-              </span>
-              <span
-                className={`text-[13px] font-bold ${
-                  isToday
-                    ? 'bg-brand text-white rounded-full w-6 h-6 inline-flex items-center justify-center'
-                    : 'text-ink'
-                }`}
+                <div
+                  className={`text-[10px] font-bold uppercase tracking-wider ${
+                    i >= 5 ? 'text-red-500/70' : 'text-light'
+                  }`}
+                >
+                  {DOW_UA[i]}
+                </div>
+                <div
+                  className={`text-[14px] font-bold mt-0.5 inline-flex items-center justify-center ${
+                    isToday ? 'bg-brand text-white rounded-full w-6 h-6' : 'text-ink'
+                  }`}
+                >
+                  {d.getDate()}
+                </div>
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Time grid: 08:00–18:00 in 30-min slots */}
+        <div className="grid" style={gridCols}>
+          {/* Hour gutter */}
+          <div className="relative" style={{ height: WV_GRID_HEIGHT }}>
+            {hourLabels.map((h, idx) => (
+              <div
+                key={h}
+                className="absolute right-1.5 text-[10px] text-light -translate-y-1/2"
+                style={{ top: idx * pxPerHour }}
               >
-                {d.getDate()}
-              </span>
-            </div>
-            <div className="space-y-1 mt-1">
-              {list.map((m) => {
-                const start = new Date(m.startAt);
-                return (
-                  <Link
-                    key={m.id}
-                    href={`/meetings/${m.id}`}
-                    onClick={(e) => e.stopPropagation()}
-                    className="block text-[11px] rounded px-1.5 py-1 leading-tight"
-                    style={{
-                      backgroundColor: m.workingGroup.color + '22',
-                      color: m.workingGroup.color,
-                      fontWeight: 600,
-                    }}
-                  >
-                    <div className="font-mono text-[10px]">
-                      {String(start.getHours()).padStart(2, '0')}:
-                      {String(start.getMinutes()).padStart(2, '0')}
-                    </div>
-                    <div className="truncate">{m.title}</div>
-                  </Link>
-                );
-              })}
-            </div>
-          </button>
-        );
-      })}
+                {String(h).padStart(2, '0')}:00
+              </div>
+            ))}
+          </div>
+
+          {/* Day columns */}
+          {days.map((d) => {
+            const list = byDay.get(keyForDate(d)) ?? [];
+            return (
+              <div
+                key={keyForDate(d)}
+                className="relative border-l border-hairline"
+                style={{ height: WV_GRID_HEIGHT }}
+              >
+                {/* 30-min slots — click an empty one to create a meeting there */}
+                {Array.from({ length: WV_TOTAL_SLOTS }).map((_, s) => {
+                  const minutes = s * WV_SLOT_MIN;
+                  const h = WV_START_HOUR + Math.floor(minutes / 60);
+                  const m = minutes % 60;
+                  return (
+                    <button
+                      key={s}
+                      disabled={!canCreate}
+                      onClick={() =>
+                        onCreateAt(new Date(d.getFullYear(), d.getMonth(), d.getDate(), h, m))
+                      }
+                      title={
+                        canCreate
+                          ? `Створити засідання · ${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`
+                          : undefined
+                      }
+                      className={`absolute left-0 right-0 ${
+                        m === 0
+                          ? 'border-b border-hairline'
+                          : 'border-b border-dashed border-hairline/50'
+                      } ${canCreate ? 'hover:bg-brand-soft/40' : 'cursor-default'}`}
+                      style={{ top: s * WV_SLOT_PX, height: WV_SLOT_PX }}
+                    />
+                  );
+                })}
+
+                {/* Meeting blocks, positioned by time */}
+                {list.map((m) => {
+                  const start = new Date(m.startAt);
+                  const startMin = (start.getHours() - WV_START_HOUR) * 60 + start.getMinutes();
+                  const rawTop = (startMin / WV_SLOT_MIN) * WV_SLOT_PX;
+                  const top = Math.min(Math.max(0, rawTop), WV_GRID_HEIGHT - WV_SLOT_PX);
+                  const rawH = (m.durationMins / WV_SLOT_MIN) * WV_SLOT_PX - 2;
+                  const height = Math.max(WV_SLOT_PX - 4, Math.min(rawH, WV_GRID_HEIGHT - top - 2));
+                  const completed = m.status === 'COMPLETED';
+                  return (
+                    <Link
+                      key={m.id}
+                      href={`/meetings/${m.id}`}
+                      onClick={(e) => e.stopPropagation()}
+                      title={`${m.title} · ${FORMAT_LABELS[m.format] ?? m.format}`}
+                      className="absolute left-0.5 right-0.5 z-10 rounded-md px-1.5 py-0.5 overflow-hidden"
+                      style={{
+                        top,
+                        height,
+                        backgroundColor: m.workingGroup.color + (completed ? '33' : '22'),
+                        color: m.workingGroup.color,
+                        borderLeft: `3px solid ${m.workingGroup.color}`,
+                      }}
+                    >
+                      <div className="font-mono text-[9px] leading-none">
+                        {String(start.getHours()).padStart(2, '0')}:
+                        {String(start.getMinutes()).padStart(2, '0')}
+                      </div>
+                      <div className="truncate text-[10px] font-semibold leading-tight mt-0.5">
+                        {m.workingGroup.code} · {m.title}
+                      </div>
+                    </Link>
+                  );
+                })}
+              </div>
+            );
+          })}
+        </div>
+      </div>
     </div>
   );
 }

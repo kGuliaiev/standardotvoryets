@@ -25,7 +25,16 @@ const schema = z.object({
 
 type FormData = z.infer<typeof schema>;
 
-export function MeetingForm({ preselectedWgId }: { preselectedWgId?: string }) {
+export function MeetingForm({
+  preselectedWgId,
+  preselectedStart,
+  preselectedDurationMins,
+}: {
+  preselectedWgId?: string;
+  /** datetime-local value "YYYY-MM-DDTHH:mm" to prefill (from calendar clicks). */
+  preselectedStart?: string;
+  preselectedDurationMins?: number;
+}) {
   const router = useRouter();
   const { data: session } = useSession();
   const [submitError, setSubmitError] = useState<string | null>(null);
@@ -60,8 +69,8 @@ export function MeetingForm({ preselectedWgId }: { preselectedWgId?: string }) {
       title: '',
       format: 'OFFLINE',
       location: '',
-      startAt: '',
-      durationMins: 60,
+      startAt: preselectedStart ?? '',
+      durationMins: preselectedDurationMins ?? 60,
       agendaText: '',
       chairmanId: '',
     },
