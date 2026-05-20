@@ -54,6 +54,19 @@ const BADGE_CLS: Record<BadgeTone, string> = {
   gray: 'bg-pill text-mid',
 };
 
+// Maps a nav item's href to its menu-visibility key in the role matrix
+// (admin/permissions → "Меню"). Items without an entry are never gated.
+const MENU_KEY: Record<string, string> = {
+  '/dashboard': 'menu:dashboard',
+  '/working-groups': 'menu:working-groups',
+  '/standards': 'menu:standards',
+  '/meetings': 'menu:meetings',
+  '/protocols': 'menu:protocols',
+  '/tasks': 'menu:tasks',
+  '/discussions': 'menu:discussions',
+  '/reports': 'menu:reports',
+};
+
 export function Sidebar({ session, forceExpanded = false }: SidebarProps) {
   const pathname = usePathname();
   const memberships = session.user.memberships ?? [];
@@ -66,6 +79,15 @@ export function Sidebar({ session, forceExpanded = false }: SidebarProps) {
   const { data: counts } = trpc.dashboard.navCounts.useQuery(undefined, {
     refetchInterval: 60_000,
   });
+  // Per-role menu visibility, resolved server-side (DB overrides apply).
+  // Until it loads we show everything, so the gate only ever hides.
+  const { data: menuVis } = trpc.permission.menuForMe.useQuery(undefined, {
+    staleTime: 60_000,
+  });
+  const isHidden = (href: string) => {
+    const key = MENU_KEY[href];
+    return !!key && menuVis?.[key] === false;
+  };
   // Unread discussions = comments newer than the timestamp written when the
   // user last opened /discussions. Falls back to "no badge" if never visited.
   const [discussionsLastVisit] = useLocalStorageState<string | null>(
@@ -228,66 +250,70 @@ export function Sidebar({ session, forceExpanded = false }: SidebarProps) {
           collapsed ? 'px-2' : 'px-3',
         )}
       >
-        {sections.map((section) => (
-          <div key={section.label}>
-            {!collapsed && (
-              <div className="px-2 mb-1.5 text-[10px] font-bold uppercase tracking-[0.8px] text-light">
-                {section.label}
-              </div>
-            )}
-            {collapsed && <div className="mb-2 mx-2 h-px bg-hairline first:hidden" aria-hidden />}
-            <div className="space-y-0.5">
-              {section.items.map((item) => {
-                const Icon = item.icon;
-                const isActive = pathname === item.href || pathname.startsWith(item.href + '/');
-                const showBadge = typeof item.badge === 'number' && item.badge > 0;
-                return (
-                  <Link
-                    key={item.href}
-                    href={item.href}
-                    title={collapsed ? item.label : undefined}
-                    className={cn(
-                      'group flex items-center rounded-[10px] text-sm transition-colors relative',
-                      collapsed ? 'justify-center px-0 py-2.5' : 'gap-2.5 px-2 py-2',
-                      isActive
-                        ? 'bg-brand-soft text-brand font-semibold'
-                        : 'text-ink hover:bg-pill',
-                    )}
-                  >
-                    <Icon
-                      size={collapsed ? 18 : 16}
+        {sections.map((section) => {
+          const items = section.items.filter((it) => !isHidden(it.href));
+          if (items.length === 0) return null;
+          return (
+            <div key={section.label}>
+              {!collapsed && (
+                <div className="px-2 mb-1.5 text-[10px] font-bold uppercase tracking-[0.8px] text-light">
+                  {section.label}
+                </div>
+              )}
+              {collapsed && <div className="mb-2 mx-2 h-px bg-hairline first:hidden" aria-hidden />}
+              <div className="space-y-0.5">
+                {items.map((item) => {
+                  const Icon = item.icon;
+                  const isActive = pathname === item.href || pathname.startsWith(item.href + '/');
+                  const showBadge = typeof item.badge === 'number' && item.badge > 0;
+                  return (
+                    <Link
+                      key={item.href}
+                      href={item.href}
+                      title={collapsed ? item.label : undefined}
                       className={cn(
-                        'shrink-0',
-                        isActive ? 'text-brand' : 'text-mid group-hover:text-ink',
+                        'group flex items-center rounded-[10px] text-sm transition-colors relative',
+                        collapsed ? 'justify-center px-0 py-2.5' : 'gap-2.5 px-2 py-2',
+                        isActive
+                          ? 'bg-brand-soft text-brand font-semibold'
+                          : 'text-ink hover:bg-pill',
                       )}
-                    />
-                    {!collapsed && <span className="flex-1 truncate">{item.label}</span>}
-                    {showBadge &&
-                      (collapsed ? (
-                        <span
-                          className={cn(
-                            'absolute top-1 right-1 min-w-[14px] h-[14px] px-1 rounded-full text-[9px] font-bold inline-flex items-center justify-center',
-                            BADGE_CLS[item.badgeTone ?? 'gray'],
-                          )}
-                        >
-                          {item.badge}
-                        </span>
-                      ) : (
-                        <span
-                          className={cn(
-                            'min-w-[20px] h-[18px] px-1.5 rounded-full text-[10px] font-bold inline-flex items-center justify-center',
-                            BADGE_CLS[item.badgeTone ?? 'gray'],
-                          )}
-                        >
-                          {item.badge}
-                        </span>
-                      ))}
-                  </Link>
-                );
-              })}
+                    >
+                      <Icon
+                        size={collapsed ? 18 : 16}
+                        className={cn(
+                          'shrink-0',
+                          isActive ? 'text-brand' : 'text-mid group-hover:text-ink',
+                        )}
+                      />
+                      {!collapsed && <span className="flex-1 truncate">{item.label}</span>}
+                      {showBadge &&
+                        (collapsed ? (
+                          <span
+                            className={cn(
+                              'absolute top-1 right-1 min-w-[14px] h-[14px] px-1 rounded-full text-[9px] font-bold inline-flex items-center justify-center',
+                              BADGE_CLS[item.badgeTone ?? 'gray'],
+                            )}
+                          >
+                            {item.badge}
+                          </span>
+                        ) : (
+                          <span
+                            className={cn(
+                              'min-w-[20px] h-[18px] px-1.5 rounded-full text-[10px] font-bold inline-flex items-center justify-center',
+                              BADGE_CLS[item.badgeTone ?? 'gray'],
+                            )}
+                          >
+                            {item.badge}
+                          </span>
+                        ))}
+                    </Link>
+                  );
+                })}
+              </div>
             </div>
-          </div>
-        ))}
+          );
+        })}
 
         {/* User's WGs */}
         {memberships.length > 0 && (

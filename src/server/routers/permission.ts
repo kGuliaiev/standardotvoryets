@@ -1,10 +1,16 @@
 import { z } from 'zod';
 import { TRPCError } from '@trpc/server';
-import { WorkingGroupRole } from '@prisma/client';
 import { createTRPCRouter, protectedProcedure } from '@/server/trpc';
 import { logActivity } from '@/server/audit';
-import { ALL_ACTIONS, ALL_WG_ROLES, ACTION_LABELS, defaultAllowed } from '@/lib/rbac';
-import { refresh } from '@/lib/permissionsCache';
+import {
+  ALL_ACTIONS,
+  ALL_MATRIX_ROLES,
+  MENU_ACTIONS,
+  ACTION_LABELS,
+  defaultAllowed,
+  menuVisibleForRoles,
+} from '@/lib/rbac';
+import { refresh, ensureLoaded } from '@/lib/permissionsCache';
 
 /**
  * Admin-facing router for the per-(role, action) permission matrix.
@@ -20,7 +26,7 @@ import { refresh } from '@/lib/permissionsCache';
  * or a periodic poll.
  */
 
-const wgRoleEnum = z.nativeEnum(WorkingGroupRole);
+const matrixRoleEnum = z.enum(ALL_MATRIX_ROLES as readonly [string, ...string[]]);
 
 export const permissionRouter = createTRPCRouter({
   // Returns the full role × action matrix plus the metadata the UI
@@ -36,7 +42,7 @@ export const permissionRouter = createTRPCRouter({
 
     const rows = ALL_ACTIONS.map((action) => {
       const meta = ACTION_LABELS[action] ?? { feature: 'Інше', label: action };
-      const cells = ALL_WG_ROLES.map((role) => {
+      const cells = ALL_MATRIX_ROLES.map((role) => {
         const key = `${role}:${action}`;
         const override = overrideMap.get(key);
         const fallback = defaultAllowed(role, action);
@@ -50,7 +56,21 @@ export const permissionRouter = createTRPCRouter({
       return { action, feature: meta.feature, label: meta.label, cells };
     });
 
-    return { roles: ALL_WG_ROLES, rows };
+    return { roles: ALL_MATRIX_ROLES, rows };
+  }),
+
+  // Which sidebar modules the current user may see, computed
+  // server-side so DB overrides (which the client can't read) apply.
+  // Returns a map of menu key → visible.
+  menuForMe: protectedProcedure.query(async ({ ctx }) => {
+    await ensureLoaded();
+    const { globalRole, memberships } = ctx.session.user;
+    if (globalRole === 'ADMIN') {
+      return Object.fromEntries(MENU_ACTIONS.map((a) => [a, true]));
+    }
+    const roles = new Set<string>(memberships.map((m) => m.role));
+    if (globalRole === 'DIRECTOR') roles.add('DIRECTOR');
+    return menuVisibleForRoles(Array.from(roles));
   }),
 
   // Upsert a single (role, action, allowed) cell. If the requested
@@ -59,7 +79,7 @@ export const permissionRouter = createTRPCRouter({
   update: protectedProcedure
     .input(
       z.object({
-        role: wgRoleEnum,
+        role: matrixRoleEnum,
         action: z.enum(ALL_ACTIONS as readonly [string, ...string[]]),
         allowed: z.boolean(),
       }),

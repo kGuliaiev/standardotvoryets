@@ -199,10 +199,12 @@ model User {
 /// gets every permission (short-circuit in `can()` — not stored
 /// here).
 model RolePermission {
-  role      WorkingGroupRole
+  // String (not the WorkingGroupRole enum) so the matrix can also hold
+  // the global "DIRECTOR" pseudo-role column alongside the WG roles.
+  role      String
   action    String
   allowed   Boolean
-  updatedAt DateTime         @updatedAt
+  updatedAt DateTime @updatedAt
 
   @@id([role, action])
   @@map("role_permissions")

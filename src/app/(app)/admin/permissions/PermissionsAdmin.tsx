@@ -6,7 +6,6 @@ import { useRouter } from 'next/navigation';
 import { trpc } from '@/lib/trpc/client';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { Loader2, RotateCcw, ShieldCheck, Check, Minus } from 'lucide-react';
-import type { WorkingGroupRole } from '@prisma/client';
 import type { inferRouterOutputs } from '@trpc/server';
 import type { AppRouter } from '@/server/routers/_app';
 
@@ -25,12 +24,13 @@ type PermissionRow = PermissionList['rows'][number];
  * `overridden` indicator updates too.
  */
 
-const ROLE_LABELS: Record<WorkingGroupRole, string> = {
+const ROLE_LABELS: Record<string, string> = {
   LEADER: 'Керівник',
   DEPUTY: 'Заступник',
   SECRETARY: 'Секретар',
   MEMBER: 'Учасник',
   GUEST: 'Гість',
+  DIRECTOR: 'Керівництво центру',
 };
 
 export function PermissionsAdmin() {

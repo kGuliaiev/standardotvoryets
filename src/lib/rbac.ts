@@ -38,20 +38,44 @@ export function canAccessGroup(user: UserContext, workingGroupId: string): boole
   return user.memberships.some((m) => m.workingGroupId === workingGroupId);
 }
 
-export function can(user: UserContext, action: string, workingGroupId: string): boolean {
-  if (user.globalRole === 'ADMIN') return true;
-  const role = getUserRoleInGroup(user, workingGroupId);
-  if (!role) return false;
-  // DIRECTOR has full read access but follows normal role-based write permissions
-  if (user.globalRole === 'DIRECTOR' && READ_ACTIONS.includes(action)) return true;
-  // DB override wins over the hardcoded default — lets admins flip a
-  // toggle in the UI without a redeploy. On the client `overrideLookup`
-  // is null so we just fall through to the hardcoded matrix; the
-  // server has the authoritative check anyway.
+/** Effective allow for a (role, action): DB override wins over the
+ *  hardcoded default. On the client `overrideLookup` is null so we just
+ *  use the hardcoded matrix; the server has the authoritative check. */
+function effectiveAllowed(role: string, action: string): boolean {
   const override = overrideLookup?.(role, action);
   if (override !== undefined) return override;
   return PERMISSIONS[action]?.includes(role) ?? false;
 }
+
+export function can(user: UserContext, action: string, workingGroupId: string): boolean {
+  if (user.globalRole === 'ADMIN') return true;
+  const role = getUserRoleInGroup(user, workingGroupId);
+  if (!role) return false;
+  // Center director (DIRECTOR) keeps full read everywhere they're a
+  // member, plus any extra powers the admin grants via the
+  // "Керівництво центру" column; otherwise they fall back to the rights
+  // of their actual WG role.
+  if (user.globalRole === 'DIRECTOR') {
+    if (READ_ACTIONS.includes(action)) return true;
+    if (effectiveAllowed('DIRECTOR', action)) return true;
+  }
+  return effectiveAllowed(role, action);
+}
+
+/** Menu modules gated by the role matrix. Toggling one off hides that
+ *  item from the sidebar for the affected role(s). Kept as a separate
+ *  list so the sidebar and the "menuForMe" query share one source.
+ *  Declared before ALL_ACTIONS because ALL_ACTIONS spreads it. */
+export const MENU_ACTIONS = [
+  'menu:dashboard',
+  'menu:working-groups',
+  'menu:standards',
+  'menu:meetings',
+  'menu:protocols',
+  'menu:tasks',
+  'menu:discussions',
+  'menu:reports',
+] as const;
 
 /** Stable list of all (role, action) pairs the admin UI exposes as
  *  toggles. Order here drives the UI's row order. */
@@ -72,6 +96,7 @@ export const ALL_ACTIONS: readonly string[] = [
   'task:editAny',
   'wg:invite',
   'wg:removeMember',
+  ...MENU_ACTIONS,
 ];
 
 /** Friendly Ukrainian labels for the admin permissions UI. Keep in
@@ -94,6 +119,14 @@ export const ACTION_LABELS: Record<string, { feature: string; label: string }> =
   'task:editAny': { feature: 'Доручення', label: 'Редагувати чужі' },
   'wg:invite': { feature: 'Робоча група', label: 'Запросити учасника' },
   'wg:removeMember': { feature: 'Робоча група', label: 'Видалити учасника' },
+  'menu:dashboard': { feature: 'Меню', label: 'Дашборд' },
+  'menu:working-groups': { feature: 'Меню', label: 'Робочі групи' },
+  'menu:standards': { feature: 'Меню', label: 'Стандарти' },
+  'menu:meetings': { feature: 'Меню', label: 'Засідання' },
+  'menu:protocols': { feature: 'Меню', label: 'Протоколи' },
+  'menu:tasks': { feature: 'Меню', label: 'Завдання' },
+  'menu:discussions': { feature: 'Меню', label: 'Обговорення' },
+  'menu:reports': { feature: 'Меню', label: 'Звіт' },
 };
 
 /** All assignable WG roles in the order the admin UI should show
@@ -106,10 +139,29 @@ export const ALL_WG_ROLES: readonly WorkingGroupRole[] = [
   'MEMBER',
 ];
 
+/** Columns the admin permissions matrix shows: the WG roles plus the
+ *  global center-director ("Керівництво центру") pseudo-role. Order
+ *  here pins the column order. */
+export const ALL_MATRIX_ROLES: readonly string[] = [...ALL_WG_ROLES, 'DIRECTOR'];
+
 /** Hardcoded default — used by the admin UI to show the "fallback"
- *  state when no override exists. */
-export function defaultAllowed(role: WorkingGroupRole, action: string): boolean {
+ *  state when no override exists. Accepts a plain string so it works
+ *  for the DIRECTOR column too. */
+export function defaultAllowed(role: string, action: string): boolean {
   return PERMISSIONS[action]?.includes(role) ?? false;
+}
+
+/** Which menu modules a set of roles may see, applying DB overrides.
+ *  An item is visible if allowed for at least one of the roles; an
+ *  empty role set (e.g. a user with no memberships) sees everything so
+ *  the gate only ever *narrows* an explicitly-restricted menu.
+ *  Server-only in effect: relies on the registered override lookup. */
+export function menuVisibleForRoles(roles: readonly string[]): Record<string, boolean> {
+  const out: Record<string, boolean> = {};
+  for (const action of MENU_ACTIONS) {
+    out[action] = roles.length === 0 ? true : roles.some((r) => effectiveAllowed(r, action));
+  }
+  return out;
 }
 
 const READ_ACTIONS = [
@@ -126,8 +178,11 @@ const LEADERS = ['LEADER', 'DEPUTY'] as const;
 const STAFF = ['LEADER', 'DEPUTY', 'SECRETARY'] as const;
 const VOTERS = ['LEADER', 'DEPUTY', 'MEMBER'] as const;
 const ALL_MEMBERS = ['LEADER', 'DEPUTY', 'SECRETARY', 'MEMBER'] as const;
+// Menu items default to visible for every role, including the center
+// director — the gate only hides what an admin explicitly turns off.
+const ALL_ROLES_INCL_DIRECTOR = ['LEADER', 'DEPUTY', 'SECRETARY', 'MEMBER', 'DIRECTOR'] as const;
 
-export const PERMISSIONS: Record<string, readonly WorkingGroupRole[]> = {
+export const PERMISSIONS: Record<string, readonly string[]> = {
   'standard:create': LEADERS,
   'standard:changeStatus': LEADERS,
   'standard:editMeta': STAFF,
@@ -147,4 +202,12 @@ export const PERMISSIONS: Record<string, readonly WorkingGroupRole[]> = {
   'task:editAny': STAFF,
   'wg:invite': LEADERS,
   'wg:removeMember': ['LEADER'],
+  'menu:dashboard': ALL_ROLES_INCL_DIRECTOR,
+  'menu:working-groups': ALL_ROLES_INCL_DIRECTOR,
+  'menu:standards': ALL_ROLES_INCL_DIRECTOR,
+  'menu:meetings': ALL_ROLES_INCL_DIRECTOR,
+  'menu:protocols': ALL_ROLES_INCL_DIRECTOR,
+  'menu:tasks': ALL_ROLES_INCL_DIRECTOR,
+  'menu:discussions': ALL_ROLES_INCL_DIRECTOR,
+  'menu:reports': ALL_ROLES_INCL_DIRECTOR,
 };
