@@ -26,18 +26,15 @@ export interface TypeCategory {
   Icon: LucideIcon;
 }
 
+// Order matches the per-standard journal chips (Документи · Завдання ·
+// Коментарі · Голосування · Етапи · Звіти); "Засідання" is journal-less so
+// it trails at the end here (the journal omits it entirely).
 export const CATEGORIES: TypeCategory[] = [
   {
-    key: 'meetings',
-    label: 'Засідання',
-    types: ['MEETING_INVITE', 'MEETING_REMINDER', 'ATTENDANCE_DECLINED', 'PROTOCOL_PUBLISHED'],
-    Icon: Calendar,
-  },
-  {
-    key: 'stages',
-    label: 'Етапи',
-    types: ['STAGE_DUE_SOON', 'STAGE_OVERDUE', 'STAGE_COMPLETED', 'STANDARD_STATUS_CHANGED'],
-    Icon: Target,
+    key: 'docs',
+    label: 'Документи',
+    types: ['DOCUMENT_UPLOADED'],
+    Icon: FileText,
   },
   {
     key: 'tasks',
@@ -45,20 +42,26 @@ export const CATEGORIES: TypeCategory[] = [
     types: ['TASK_ASSIGNED', 'TASK_OVERDUE'],
     Icon: CheckSquare,
   },
-  { key: 'voting', label: 'Голосування', types: ['VOTE_OPENED', 'VOTE_CLOSED'], Icon: VoteIcon },
   {
     key: 'comments',
     label: 'Коментарі',
     types: ['MENTION', 'COMMENT_ADDED', 'SUGGESTION_NEW', 'SUGGESTION_RESOLVED'],
     Icon: MessageSquare,
   },
+  { key: 'voting', label: 'Голосування', types: ['VOTE_OPENED', 'VOTE_CLOSED'], Icon: VoteIcon },
   {
-    key: 'docs',
-    label: 'Документи',
-    types: ['DOCUMENT_UPLOADED'],
-    Icon: FileText,
+    key: 'stages',
+    label: 'Етапи',
+    types: ['STAGE_DUE_SOON', 'STAGE_OVERDUE', 'STAGE_COMPLETED', 'STANDARD_STATUS_CHANGED'],
+    Icon: Target,
   },
   { key: 'digest', label: 'Звіти', types: ['WEEKLY_DIGEST'], Icon: CalendarDays },
+  {
+    key: 'meetings',
+    label: 'Засідання',
+    types: ['MEETING_INVITE', 'MEETING_REMINDER', 'ATTENDANCE_DECLINED', 'PROTOCOL_PUBLISHED'],
+    Icon: Calendar,
+  },
 ];
 
 export const TYPE_META: Partial<Record<NotificationType, { Icon: LucideIcon; tone: string }>> = {
