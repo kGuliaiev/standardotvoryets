@@ -99,10 +99,10 @@ export function StandardDetail({ id }: { id: string }) {
   const searchParams = useSearchParams();
   // Honor ?tab=<id> from incoming links (notifications deep-link here).
   const queryTab = searchParams.get('tab');
-  // Default to Документи now that the body tab is hidden; an explicit
-  // `?tab=body` URL still gets redirected to `documents` to avoid
-  // breaking old notification deep-links.
-  const requested = queryTab && VALID_TABS.has(queryTab as Tab) ? (queryTab as Tab) : 'documents';
+  // Default to Журнал when no tab is requested; an explicit `?tab=body`
+  // URL still gets redirected to `documents` to avoid breaking old
+  // notification deep-links.
+  const requested = queryTab && VALID_TABS.has(queryTab as Tab) ? (queryTab as Tab) : 'journal';
   const initialTab: Tab = requested === 'body' ? 'documents' : requested;
   const [activeTab, setActiveTab] = useState<Tab>(initialTab);
   const [stepperOpen, setStepperOpen] = useLocalStorageState<boolean>(

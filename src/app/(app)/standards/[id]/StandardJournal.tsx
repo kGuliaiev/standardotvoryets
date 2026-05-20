@@ -23,6 +23,24 @@ import {
  * that page this is a read-only cross-user view, so there's no
  * read/unread state — clicking an item just navigates to its target.
  */
+
+// The journal shows a subset of the global notification categories, in a
+// fixed order. "Засідання" is omitted because meetings belong to the
+// working group, not the standard, so they never reach this feed. Each
+// chip carries a hint (tooltip) describing which events fall under it.
+const JOURNAL_CATEGORY_ORDER = ['docs', 'tasks', 'comments', 'voting', 'stages', 'digest'];
+const JOURNAL_CATEGORIES = JOURNAL_CATEGORY_ORDER.map((key) =>
+  CATEGORIES.find((c) => c.key === key),
+).filter((c): c is (typeof CATEGORIES)[number] => Boolean(c));
+
+const CATEGORY_HINTS: Record<string, string> = {
+  docs: 'Завантаження та оновлення документів стандарту',
+  tasks: 'Призначення доручень і прострочення термінів',
+  comments: 'Коментарі, згадки та пропозиції правок до тексту',
+  voting: 'Відкриття та закриття голосувань',
+  stages: 'Дедлайни етапів та зміна статусу стандарту',
+  digest: 'Щотижневий дайджест',
+};
 export function StandardJournal({ standardId }: { standardId: string }) {
   const router = useRouter();
   const [activeCats, setActiveCats] = useLocalStorageState<string[]>(
@@ -68,13 +86,14 @@ export function StandardJournal({ standardId }: { standardId: string }) {
           unread state is meaningless in a cross-user feed). */}
       <div className="card p-3">
         <div className="flex items-center gap-2 flex-wrap">
-          {CATEGORIES.map((cat) => {
+          {JOURNAL_CATEGORIES.map((cat) => {
             const Icon = cat.Icon;
             const active = activeCats.includes(cat.key);
             return (
               <button
                 key={cat.key}
                 onClick={() => toggleCat(cat.key)}
+                title={CATEGORY_HINTS[cat.key]}
                 className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
                   active ? 'bg-brand-soft text-brand' : 'text-mid hover:bg-pill'
                 }`}
