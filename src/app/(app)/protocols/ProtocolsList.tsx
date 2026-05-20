@@ -90,7 +90,7 @@ export function ProtocolsList() {
   const utils = trpc.useUtils();
   const [pendingDelete, setPendingDelete] = useState<{ id: string; label: string } | null>(null);
   const [confirmText, setConfirmText] = useState('');
-  const deleteMutation = trpc.meeting.deleteProtocol.useMutation({
+  const deleteMutation = trpc.meeting.clearProtocol.useMutation({
     onSuccess: () => {
       void utils.meeting.protocolsForUser.invalidate();
       void utils.dashboard.navCounts.invalidate();
@@ -389,9 +389,10 @@ export function ProtocolsList() {
         {pendingDelete && (
           <div className="space-y-4">
             <p className="text-sm text-mid">
-              Протокол <span className="font-semibold text-ink">{pendingDelete.label}</span> та все
-              засідання (порядок денний, явка) буде видалено{' '}
-              <span className="font-semibold text-red-600">остаточно</span>. Дію не можна скасувати.
+              Протокол <span className="font-semibold text-ink">{pendingDelete.label}</span> буде
+              видалено: номер, порядок денний і текст протоколу.{' '}
+              <span className="font-semibold text-ink">Саме засідання залишиться</span> у списку
+              засідань. Дію не можна скасувати.
             </p>
             <div>
               <label className="block text-xs text-mid mb-1">

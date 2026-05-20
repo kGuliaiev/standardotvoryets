@@ -606,10 +606,13 @@ export const meetingRouter = createTRPCRouter({
     });
   }),
 
-  // ── deleteProtocol: delete the meeting/protocol entirely ──────────────
-  // Destructive — guarded by the meeting:deleteProtocol permission (admins
-  // always). Agenda items + attendances cascade via schema relations.
-  deleteProtocol: protectedProcedure
+  // ── clearProtocol: wipe the meeting's protocol (number, agenda, minutes)
+  //    while KEEPING the meeting itself ──────────────────────────────────
+  // A meeting is not necessarily a protocol — it can exist without one — so
+  // this only removes protocol content (after which the meeting drops off
+  // the /protocols list but stays in /meetings). Guarded by the
+  // meeting:deleteProtocol permission (admins always).
+  clearProtocol: protectedProcedure
     .input(z.object({ id: z.string().cuid() }))
     .mutation(async ({ ctx, input }) => {
       const meeting = await ctx.db.meeting.findUnique({ where: { id: input.id } });
@@ -621,19 +624,22 @@ export const meetingRouter = createTRPCRouter({
       ) {
         throw new TRPCError({ code: 'FORBIDDEN' });
       }
+      // Agenda items are protocol content — remove them; the meeting,
+      // attendance and scheduling stay intact.
+      await ctx.db.agendaItem.deleteMany({ where: { meetingId: input.id } });
+      const updated = await ctx.db.meeting.update({
+        where: { id: input.id },
+        data: { protocolNumber: null, minutesText: null },
+      });
       await logActivity(ctx.db, {
         userId: ctx.session.user.id,
-        action: 'DELETE',
+        action: 'UPDATE',
         entity: 'Meeting',
         entityId: meeting.id,
-        before: {
-          title: meeting.title,
-          protocolNumber: meeting.protocolNumber,
-          status: meeting.status,
-        },
-        after: {},
+        before: { protocolNumber: meeting.protocolNumber, minutesText: meeting.minutesText },
+        after: { protocolNumber: null, minutesText: null },
+        note: 'Протокол очищено (засідання збережено)',
       });
-      await ctx.db.meeting.delete({ where: { id: input.id } });
-      return { ok: true };
+      return updated;
     }),
 });
