@@ -30,10 +30,14 @@ export const config = {
     /*
      * Match all paths except:
      * - api/auth (NextAuth routes)
-     * - api/health (health check)
+     * - api/health (liveness probe), api/db-status (DB probe used by
+     *   the login page — MUST be reachable unauthenticated, otherwise
+     *   it 307-redirects to /login and the login gate can't detect a
+     *   DB outage)
+     * - api/version, api/cron
      * - _next/static, _next/image, favicon.ico
      * - login, invite pages (public auth pages)
      */
-    '/((?!api/auth|api/health|api/version|api/cron|_next/static|_next/image|favicon.ico|login|invite).*)',
+    '/((?!api/auth|api/health|api/db-status|api/version|api/cron|_next/static|_next/image|favicon.ico|login|invite).*)',
   ],
 };
