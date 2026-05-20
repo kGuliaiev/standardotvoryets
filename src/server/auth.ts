@@ -3,6 +3,7 @@ import CredentialsProvider from 'next-auth/providers/credentials';
 import { PrismaAdapter } from '@auth/prisma-adapter';
 import bcrypt from 'bcryptjs';
 import { db } from '@/server/db';
+import { consumeChallenge, verifySignature, identityKeys } from '@/server/kep';
 
 // ─── Type augmentations ───────────────────────────────────────────────────────
 
@@ -68,6 +69,43 @@ export const authOptions: NextAuthOptions = {
           image: user.avatarUrl,
           globalRole: user.globalRole,
         };
+      },
+    }),
+    // КЕП login: the client signs a server nonce; we verify server-side
+    // and resolve the user by the bound identity (РНОКПП hash, else key id).
+    CredentialsProvider({
+      id: 'kep',
+      name: 'КЕП',
+      credentials: {
+        nonce: { label: 'nonce', type: 'text' },
+        container: { label: 'container', type: 'text' },
+      },
+      async authorize(credentials) {
+        if (!credentials?.nonce || !credentials?.container) return null;
+        try {
+          await consumeChallenge(credentials.nonce, 'login');
+          const signer = await verifySignature({
+            containerBase64: credentials.container,
+            expectedData: credentials.nonce,
+          });
+          const { rnokppHash, keyId } = identityKeys(signer);
+          const user = await db.user.findFirst({
+            where: {
+              OR: [...(rnokppHash ? [{ kepRnokppHash: rnokppHash }] : []), { kepKeyId: keyId }],
+            },
+          });
+          if (!user) return null;
+          if (!user.isActive) return null;
+          return {
+            id: user.id,
+            email: user.email,
+            name: user.name,
+            image: user.avatarUrl,
+            globalRole: user.globalRole,
+          };
+        } catch {
+          return null;
+        }
       },
     }),
   ],

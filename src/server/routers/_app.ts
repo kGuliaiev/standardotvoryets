@@ -15,6 +15,7 @@ import { adminRouter } from './admin';
 import { suggestionRouter } from './suggestion';
 import { inlineCommentRouter } from './inlineComment';
 import { permissionRouter } from './permission';
+import { kepRouter } from './kep';
 
 /**
  * This is the primary router for the server.
@@ -37,6 +38,7 @@ export const appRouter = createTRPCRouter({
   suggestion: suggestionRouter,
   inlineComment: inlineCommentRouter,
   permission: permissionRouter,
+  kep: kepRouter,
 });
 
 export type AppRouter = typeof appRouter;
