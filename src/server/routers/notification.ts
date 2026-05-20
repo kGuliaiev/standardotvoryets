@@ -93,19 +93,68 @@ export const notificationRouter = createTRPCRouter({
         take: 2000,
       });
 
-      // Collapse the per-recipient fan-out: the same logical event shares
-      // (type, title, body, link) and is created within the same minute.
-      const seen = new Set<string>();
-      const deduped: typeof rows = [];
+      // Collapse the per-recipient fan-out (same type/title/body/link within
+      // the same minute = one event) and flag whether *this* user still has
+      // an unread copy of it, so the journal can highlight what's new for them.
+      const me = ctx.session.user.id;
+      const groups = new Map<
+        string,
+        {
+          id: string;
+          type: NotificationType;
+          title: string;
+          body: string;
+          link: string | null;
+          createdAt: Date;
+          unread: boolean;
+        }
+      >();
       for (const n of rows) {
         const minute = Math.floor(new Date(n.createdAt).getTime() / 60_000);
         const key = `${n.type}|${n.title}|${n.body}|${n.link ?? ''}|${minute}`;
-        if (seen.has(key)) continue;
-        seen.add(key);
-        deduped.push(n);
-        if (deduped.length >= input.limit) break;
+        const mineUnread = n.userId === me && !n.read;
+        const existing = groups.get(key);
+        if (!existing) {
+          groups.set(key, {
+            id: n.id,
+            type: n.type,
+            title: n.title,
+            body: n.body,
+            link: n.link,
+            createdAt: n.createdAt,
+            unread: mineUnread,
+          });
+        } else if (mineUnread) {
+          existing.unread = true;
+        }
       }
-      return deduped;
+      return Array.from(groups.values()).slice(0, input.limit);
+    }),
+
+  // ── markStandardRead ──────────────────────────────────────────────────
+  // Marks the CURRENT user's unread notifications for this standard (and
+  // its tasks) as read — i.e. only what the journal shows here, not the
+  // whole notification inbox.
+  markStandardRead: protectedProcedure
+    .input(z.object({ standardId: z.string().cuid() }))
+    .mutation(async ({ ctx, input }) => {
+      const tasks = await ctx.db.task.findMany({
+        where: { standardId: input.standardId },
+        select: { id: true },
+      });
+      const taskLinks = tasks.map((t) => `/tasks/${t.id}`);
+      const res = await ctx.db.notification.updateMany({
+        where: {
+          userId: ctx.session.user.id,
+          read: false,
+          OR: [
+            { link: { startsWith: `/standards/${input.standardId}` } },
+            ...(taskLinks.length > 0 ? [{ link: { in: taskLinks } }] : []),
+          ],
+        },
+        data: { read: true },
+      });
+      return { ok: true, count: res.count };
     }),
 
   // ── unreadCount ───────────────────────────────────────────────────────

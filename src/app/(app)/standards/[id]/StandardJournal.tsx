@@ -3,7 +3,7 @@
 import { useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { trpc } from '@/lib/trpc/client';
-import { Inbox } from 'lucide-react';
+import { Inbox, CheckCheck } from 'lucide-react';
 import { useLocalStorageState } from '@/lib/useLocalStorageState';
 import {
   CATEGORIES,
@@ -83,6 +83,16 @@ export function StandardJournal({ standardId }: { standardId: string }) {
     limit: 300,
   });
 
+  const utils = trpc.useUtils();
+  const markAll = trpc.notification.markStandardRead.useMutation({
+    onSuccess: () => {
+      void utils.notification.listForStandard.invalidate({ standardId });
+      void utils.notification.unreadCount.invalidate();
+      void utils.notification.list.invalidate();
+    },
+  });
+  const unreadCount = (items ?? []).filter((n) => n.unread).length;
+
   const groups = useMemo(() => {
     const filtered =
       activeCats.length === 0
@@ -106,10 +116,22 @@ export function StandardJournal({ standardId }: { standardId: string }) {
 
   return (
     <div className="space-y-4">
-      {/* Filter chips — mirror /notifications (category filters only;
-          unread state is meaningless in a cross-user feed). */}
+      {/* Filter chips — mirror /notifications. The "Переглянути всі"
+          button marks only THIS standard's notifications read for the
+          current user (not the whole inbox). */}
       <div className="card p-3">
         <div className="flex items-center gap-2 flex-wrap">
+          {unreadCount > 0 && (
+            <button
+              onClick={() => markAll.mutate({ standardId })}
+              disabled={markAll.isPending}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-blue-700 text-white hover:bg-blue-800 transition-colors disabled:opacity-50"
+              title="Позначити переглянутими всі сповіщення цього стандарту"
+            >
+              <CheckCheck className="w-3.5 h-3.5" />
+              Переглянути всі ({unreadCount})
+            </button>
+          )}
           {JOURNAL_CATEGORIES.map((cat) => {
             const Icon = cat.Icon;
             const active = activeCats.includes(cat.key);
@@ -161,20 +183,36 @@ export function StandardJournal({ standardId }: { standardId: string }) {
                 const Icon = meta.Icon;
                 const isToday = groupLabel(n.createdAt) === 'Сьогодні';
                 return (
-                  <li key={n.id} className="group transition-colors">
+                  <li
+                    key={n.id}
+                    className={`group transition-colors ${
+                      n.unread ? 'bg-brand-soft/30 hover:bg-brand-soft/50' : ''
+                    }`}
+                  >
                     <button
                       onClick={() => n.link && router.push(n.link)}
                       disabled={!n.link}
                       className="w-full flex items-start gap-3 px-5 py-3.5 text-left hover:bg-pill/40 disabled:cursor-default"
                     >
-                      <span
-                        className={`shrink-0 mt-0.5 w-8 h-8 rounded-full inline-flex items-center justify-center bg-pill ${meta.tone}`}
-                      >
-                        <Icon size={15} />
+                      <span className="relative shrink-0 mt-0.5">
+                        <span
+                          className={`w-8 h-8 rounded-full inline-flex items-center justify-center bg-pill ${meta.tone}`}
+                        >
+                          <Icon size={15} />
+                        </span>
+                        {n.unread && (
+                          <span className="absolute -top-0.5 -right-0.5 w-2.5 h-2.5 rounded-full bg-brand ring-2 ring-card" />
+                        )}
                       </span>
                       <div className="flex-1 min-w-0">
                         <div className="flex items-baseline justify-between gap-3">
-                          <p className="truncate text-ink font-semibold">{n.title}</p>
+                          <p
+                            className={`truncate ${
+                              n.unread ? 'text-ink font-semibold' : 'text-mid font-medium'
+                            }`}
+                          >
+                            {n.title}
+                          </p>
                           <span
                             className="text-[11px] text-light shrink-0"
                             title={fullDateTime(n.createdAt)}
