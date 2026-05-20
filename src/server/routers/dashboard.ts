@@ -98,38 +98,69 @@ export const dashboardRouter = createTRPCRouter({
     const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
     const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 1);
 
-    const [standardsActive, meetingsUpcoming, tasksOpenForMe, unreadNotifications, minutesPending] =
-      await Promise.all([
-        ctx.db.standard.count({
-          where: {
-            ...wgFilter,
-            status: { in: ['DRAFT', 'IN_REVIEW', 'VOTING'] },
-          },
-        }),
-        ctx.db.meeting.count({
-          where: {
-            ...wgFilter,
-            startAt: { gte: startOfMonth, lt: endOfMonth },
-            status: { in: ['PLANNED', 'IN_PROGRESS'] },
-          },
-        }),
-        ctx.db.task.count({
-          where: {
-            assigneeId: userId,
-            status: { in: ['OPEN', 'IN_PROGRESS'] },
-          },
-        }),
-        ctx.db.notification.count({
-          where: { userId, read: false },
-        }),
-        ctx.db.meeting.count({
-          where: {
-            ...wgFilter,
-            status: 'COMPLETED',
-            minutesText: null,
-          },
-        }),
-      ]);
+    const [
+      standardsActive,
+      meetingsUpcoming,
+      tasksOpenForMe,
+      unreadNotifications,
+      minutesPending,
+      workingGroupsTotal,
+      standardsTotal,
+      protocolsTotal,
+      meetingsUnfinished,
+    ] = await Promise.all([
+      ctx.db.standard.count({
+        where: {
+          ...wgFilter,
+          status: { in: ['DRAFT', 'IN_REVIEW', 'VOTING'] },
+        },
+      }),
+      ctx.db.meeting.count({
+        where: {
+          ...wgFilter,
+          startAt: { gte: startOfMonth, lt: endOfMonth },
+          status: { in: ['PLANNED', 'IN_PROGRESS'] },
+        },
+      }),
+      ctx.db.task.count({
+        where: {
+          assigneeId: userId,
+          status: { in: ['OPEN', 'IN_PROGRESS'] },
+        },
+      }),
+      ctx.db.notification.count({
+        where: { userId, read: false },
+      }),
+      ctx.db.meeting.count({
+        where: {
+          ...wgFilter,
+          status: 'COMPLETED',
+          minutesText: null,
+        },
+      }),
+      // ── Blue "element count" badges: how many items are in each list ──
+      ctx.db.workingGroup.count({
+        where: { ...(seesAll ? {} : { id: { in: memberGroupIds } }), isArchived: false },
+      }),
+      ctx.db.standard.count({
+        where: { ...wgFilter, status: { not: 'ARCHIVED' } },
+      }),
+      // Protocols = meetings with any protocol activity (same as protocolsForUser).
+      ctx.db.meeting.count({
+        where: {
+          ...wgFilter,
+          OR: [
+            { protocolNumber: { not: null } },
+            { minutesText: { not: null } },
+            { agendaItems: { some: {} } },
+          ],
+        },
+      }),
+      // ── Red badge: meetings not yet finished ──
+      ctx.db.meeting.count({
+        where: { ...wgFilter, status: { in: ['PLANNED', 'IN_PROGRESS'] } },
+      }),
+    ]);
 
     return {
       standardsActive,
@@ -137,6 +168,10 @@ export const dashboardRouter = createTRPCRouter({
       tasksOpenForMe,
       unreadNotifications,
       minutesPending,
+      workingGroupsTotal,
+      standardsTotal,
+      protocolsTotal,
+      meetingsUnfinished,
     };
   }),
 

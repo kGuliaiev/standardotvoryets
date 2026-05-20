@@ -33,7 +33,7 @@ interface SidebarProps {
   forceExpanded?: boolean;
 }
 
-type BadgeTone = 'brand' | 'rose' | 'amber' | 'gray';
+type BadgeTone = 'brand' | 'rose' | 'amber' | 'blue' | 'gray';
 interface NavItem {
   href: string;
   label: string;
@@ -51,6 +51,9 @@ const BADGE_CLS: Record<BadgeTone, string> = {
   brand: 'bg-[#ECFDF5] text-[#065F46]',
   rose: 'bg-red-500 text-white',
   amber: 'bg-sky-50 text-sky-700 dark:bg-sky-900/30 dark:text-sky-300',
+  // Blue "element count" badge (same look as the protocols badge had):
+  // Робочі групи / Стандарти / Протоколи — number of items in the list.
+  blue: 'bg-sky-50 text-sky-700 dark:bg-sky-900/30 dark:text-sky-300',
   gray: 'bg-pill text-mid',
 };
 
@@ -104,13 +107,19 @@ export function Sidebar({ session, forceExpanded = false }: SidebarProps) {
       label: 'ГОЛОВНЕ',
       items: [
         { href: '/dashboard', label: 'Дашборд', icon: LayoutDashboard },
-        { href: '/working-groups', label: 'Робочі групи', icon: FolderKanban },
+        {
+          href: '/working-groups',
+          label: 'Робочі групи',
+          icon: FolderKanban,
+          badge: counts?.workingGroupsTotal ?? null,
+          badgeTone: 'blue',
+        },
         {
           href: '/standards',
           label: 'Стандарти',
           icon: BookOpen,
-          badge: counts?.standardsActive ?? null,
-          badgeTone: 'brand',
+          badge: counts?.standardsTotal ?? null,
+          badgeTone: 'blue',
         },
       ],
     },
@@ -121,15 +130,15 @@ export function Sidebar({ session, forceExpanded = false }: SidebarProps) {
           href: '/meetings',
           label: 'Засідання',
           icon: Calendar,
-          badge: counts?.meetingsUpcoming ?? null,
-          badgeTone: counts?.meetingsUpcoming ? 'rose' : 'gray',
+          badge: counts?.meetingsUnfinished ?? null,
+          badgeTone: 'rose',
         },
         {
           href: '/protocols',
           label: 'Протоколи',
           icon: FileText,
-          badge: counts?.minutesPending ?? null,
-          badgeTone: counts?.minutesPending ? 'amber' : 'gray',
+          badge: counts?.protocolsTotal ?? null,
+          badgeTone: 'blue',
         },
       ],
     },
@@ -141,14 +150,14 @@ export function Sidebar({ session, forceExpanded = false }: SidebarProps) {
           label: 'Завдання',
           icon: CheckSquare,
           badge: counts?.tasksOpenForMe ?? null,
-          badgeTone: counts?.tasksOpenForMe ? 'rose' : 'gray',
+          badgeTone: 'rose',
         },
         {
           href: '/discussions',
           label: 'Обговорення',
           icon: MessageSquare,
           badge: discussionsUnread?.count ?? null,
-          badgeTone: discussionsUnread?.count ? 'rose' : 'gray',
+          badgeTone: 'rose',
         },
         { href: '/reports', label: 'Звіт', icon: BarChart3 },
       ],
