@@ -7,6 +7,7 @@ import { useRouter } from 'next/navigation';
 import { useSession } from 'next-auth/react';
 import { ChevronLeft, ChevronRight, Plus } from 'lucide-react';
 import { can } from '@/lib/rbac';
+import { useLocalStorageState } from '@/lib/useLocalStorageState';
 import type { GlobalRole, WorkingGroupRole } from '@prisma/client';
 
 const MONTHS_UA_NOM = [
@@ -123,7 +124,11 @@ export function MeetingsList() {
   const now = new Date();
   const [month, setMonth] = useState(now.getMonth());
   const [year, setYear] = useState(now.getFullYear());
-  const [view, setView] = useState<'month' | 'week' | 'list'>('month');
+  // Remember the chosen view per user (persists across navigation + reopen).
+  const [view, setView] = useLocalStorageState<'month' | 'week' | 'list'>(
+    'meetings.view.v1',
+    'month',
+  );
   const [wgFilter, setWgFilter] = useState('');
   const [selectedDayKey, setSelectedDayKey] = useState<string>(keyForDate(now));
 
