@@ -5,7 +5,6 @@ import { useRouter } from 'next/navigation';
 import { trpc } from '@/lib/trpc/client';
 import { Inbox } from 'lucide-react';
 import { useLocalStorageState } from '@/lib/useLocalStorageState';
-import type { NotificationType } from '@prisma/client';
 import {
   CATEGORIES,
   TYPE_META,
@@ -34,13 +33,41 @@ const JOURNAL_CATEGORIES = JOURNAL_CATEGORY_ORDER.map((key) =>
 ).filter((c): c is (typeof CATEGORIES)[number] => Boolean(c));
 
 const CATEGORY_HINTS: Record<string, string> = {
-  docs: 'Завантаження та оновлення документів стандарту',
+  docs: 'Документи: завантаження, правки до тексту та коментарі до документів',
   tasks: 'Призначення доручень і прострочення термінів',
-  comments: 'Коментарі, згадки та пропозиції правок до тексту',
+  comments: 'Обговорення стандарту — коментарі та згадки',
   voting: 'Відкриття та закриття голосувань',
   stages: 'Дедлайни етапів та зміна статусу стандарту',
   digest: 'Щотижневий дайджест',
 };
+
+// Map a notification to a journal category. Comments/mentions are split
+// by where they happened — the link's tab tells us: tab=documents/body
+// is a comment/edit on the document text → "Документи"; tab=comments is
+// the standard's discussion thread → "Коментарі". Suggestions (правки)
+// always belong with the document.
+const STAGE_TYPES = new Set([
+  'STAGE_DUE_SOON',
+  'STAGE_OVERDUE',
+  'STAGE_COMPLETED',
+  'STANDARD_STATUS_CHANGED',
+]);
+function journalCategory(n: { type: string; link: string | null }): string {
+  const { type } = n;
+  if (type === 'DOCUMENT_UPLOADED' || type === 'SUGGESTION_NEW' || type === 'SUGGESTION_RESOLVED') {
+    return 'docs';
+  }
+  if (type === 'COMMENT_ADDED' || type === 'MENTION') {
+    const link = n.link ?? '';
+    return link.includes('tab=documents') || link.includes('tab=body') ? 'docs' : 'comments';
+  }
+  if (type === 'TASK_ASSIGNED' || type === 'TASK_OVERDUE') return 'tasks';
+  if (type === 'VOTE_OPENED' || type === 'VOTE_CLOSED') return 'voting';
+  if (STAGE_TYPES.has(type)) return 'stages';
+  if (type === 'WEEKLY_DIGEST') return 'digest';
+  return 'comments';
+}
+
 export function StandardJournal({ standardId }: { standardId: string }) {
   const router = useRouter();
   const [activeCats, setActiveCats] = useLocalStorageState<string[]>(
@@ -48,24 +75,21 @@ export function StandardJournal({ standardId }: { standardId: string }) {
     [],
   );
 
-  const typeFilter: NotificationType[] = useMemo(() => {
-    if (activeCats.length === 0) return [];
-    const set = new Set<NotificationType>();
-    for (const cat of CATEGORIES) {
-      if (activeCats.includes(cat.key)) cat.types.forEach((t) => set.add(t));
-    }
-    return Array.from(set);
-  }, [activeCats]);
-
+  // Fetch everything for the standard and classify/filter client-side,
+  // because the docs↔comments split depends on the link (tab=…), not the
+  // coarse notification type, so a server-side type filter can't express it.
   const { data: items, isLoading } = trpc.notification.listForStandard.useQuery({
     standardId,
-    types: typeFilter.length > 0 ? typeFilter : undefined,
     limit: 300,
   });
 
   const groups = useMemo(() => {
-    const map = new Map<string, NonNullable<typeof items>>();
-    (items ?? []).forEach((n) => {
+    const filtered =
+      activeCats.length === 0
+        ? (items ?? [])
+        : (items ?? []).filter((n) => activeCats.includes(journalCategory(n)));
+    const map = new Map<string, typeof filtered>();
+    filtered.forEach((n) => {
       const k = groupLabel(n.createdAt);
       const arr = (map.get(k) ?? []).concat();
       arr.push(n);
@@ -74,7 +98,7 @@ export function StandardJournal({ standardId }: { standardId: string }) {
     return GROUP_ORDER.map((label) => ({ label, items: map.get(label) ?? [] })).filter(
       (g) => g.items.length > 0,
     );
-  }, [items]);
+  }, [items, activeCats]);
 
   function toggleCat(key: string) {
     setActiveCats((prev) => (prev.includes(key) ? prev.filter((k) => k !== key) : [...prev, key]));
