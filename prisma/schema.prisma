@@ -1,5 +1,13 @@
 generator client {
   provider = "prisma-client-js"
+  // Bake the engine for the Railway runtime (Debian bookworm / OpenSSL
+  // 3.0) into the image at build time. Without this Prisma only ships
+  // the build host's "native" engine; if the startup `prisma db push`
+  // (which regenerates) fails — e.g. DB unreachable during a Postgres
+  // outage — the container is left with no usable query engine and
+  // every query throws "could not locate the Query Engine for runtime
+  // debian-openssl-3.0.x".
+  binaryTargets = ["native", "debian-openssl-3.0.x"]
 }
 
 datasource db {
