@@ -155,6 +155,12 @@ model User {
   // Per-user notification toggles (overrides system defaults if set)
   notifyEmail  Boolean       @default(true)
   notifyInApp  Boolean       @default(true)
+  // ── КЕП (qualified e-signature) binding ──────────────────────────────
+  // Identity bound to the user's key. Primary = HMAC of РНОКПП; keyId
+  // (certificate serial) is the fallback when the cert carries no РНОКПП.
+  kepRnokppHash String?      @unique
+  kepKeyId      String?      @unique
+  kepBoundAt    DateTime?
   createdAt    DateTime      @default(now())
   updatedAt    DateTime      @updatedAt
 
@@ -208,6 +214,22 @@ model RolePermission {
 
   @@id([role, action])
   @@map("role_permissions")
+}
+
+/// One-time challenge (nonce) for КЕП flows. The client signs `nonce`,
+/// the server verifies the signature is over exactly this value. Single
+/// use + short TTL guards against replay.
+model KepChallenge {
+  id        String    @id @default(cuid())
+  nonce     String    @unique
+  purpose   String // 'login' | 'bind'
+  userId    String? // set for 'bind' — must match the session user
+  createdAt DateTime  @default(now())
+  expiresAt DateTime
+  usedAt    DateTime?
+
+  @@index([expiresAt])
+  @@map("kep_challenges")
 }
 
 model ActivityLog {

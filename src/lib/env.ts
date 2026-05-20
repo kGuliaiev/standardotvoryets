@@ -24,6 +24,12 @@ const envSchema = z.object({
 
   // ── Cron — shared secret guards /api/cron/* against public traffic ───────
   CRON_SECRET: z.string().optional(),
+
+  // ── КЕП (qualified e-signature) — optional; КЕП login/signing is
+  //    disabled unless BOTH are set. KEP_VERIFY_URL = ІІТ/ЦЗО signature
+  //    verification service; KEP_RNOKPP_PEPPER = secret for hashing РНОКПП. ──
+  KEP_VERIFY_URL: z.string().url().optional(),
+  KEP_RNOKPP_PEPPER: z.string().optional(),
 });
 
 export type Env = z.infer<typeof envSchema>;
