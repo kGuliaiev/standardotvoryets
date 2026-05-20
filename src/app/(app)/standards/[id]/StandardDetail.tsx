@@ -15,6 +15,7 @@ import { TaskFormModal } from '@/components/TaskFormModal';
 import { DocumentUploadModal } from '@/components/DocumentUploadModal';
 import { DocumentEditMetaModal } from '@/components/DocumentEditMetaModal';
 import { CommentsThread } from '@/components/CommentsThread';
+import { StandardJournal } from './StandardJournal';
 import { StandardBodyEditor } from '@/components/StandardBodyEditor';
 import { StandardProgress, hasOverdueStage } from '@/components/standards/StandardProgress';
 import { RankBadge } from '@/components/ui/RankBadge';
@@ -24,13 +25,22 @@ import { useLocalStorageState } from '@/lib/useLocalStorageState';
 import { can } from '@/lib/rbac';
 import type { GlobalRole, WorkingGroupRole } from '@prisma/client';
 
-type Tab = 'body' | 'documents' | 'comments' | 'tasks' | 'members' | 'voting' | 'history';
+type Tab =
+  | 'journal'
+  | 'body'
+  | 'documents'
+  | 'comments'
+  | 'tasks'
+  | 'members'
+  | 'voting'
+  | 'history';
 
 // "Текст документа" was deprecated in favour of editing individual
 // uploaded documents (Документи → Редагувати). The body tab is kept in
 // the type only because old deep-link notifications may still point at
 // `?tab=body` — we silently redirect those to `documents` below.
 const TABS: { id: Tab; label: string }[] = [
+  { id: 'journal', label: 'Журнал' },
   { id: 'documents', label: 'Документи' },
   { id: 'comments', label: 'Обговорення' },
   { id: 'tasks', label: 'Завдання' },
@@ -74,6 +84,7 @@ const STATUS_LABELS: Record<StandardStatus, string> = {
 };
 
 const VALID_TABS = new Set<Tab>([
+  'journal',
   'body',
   'documents',
   'comments',
@@ -516,6 +527,8 @@ export function StandardDetail({ id }: { id: string }) {
       {activeTab !== 'body' && (
         <div className="space-y-4">
           <div className="space-y-4">
+            {activeTab === 'journal' && <StandardJournal standardId={id} />}
+
             {activeTab === 'documents' && (
               <div className="bg-card rounded-xl border border-hairline">
                 <div className="px-5 py-4 border-b border-hairline flex items-center justify-between gap-3 flex-wrap">

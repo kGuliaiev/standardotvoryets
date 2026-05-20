@@ -3,117 +3,19 @@
 import { useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { trpc } from '@/lib/trpc/client';
-import {
-  Bell,
-  Check,
-  CheckCheck,
-  Calendar,
-  CheckSquare,
-  Vote as VoteIcon,
-  Target,
-  FileText,
-  MessageSquare,
-  CalendarDays,
-  AtSign,
-  ClipboardList,
-  Inbox,
-} from 'lucide-react';
-import type { LucideIcon } from 'lucide-react';
+import { Check, CheckCheck, Inbox } from 'lucide-react';
 import { useLocalStorageState } from '@/lib/useLocalStorageState';
 import type { NotificationType } from '@prisma/client';
 import { PageHeader } from '@/components/ui/PageHeader';
-
-interface TypeCategory {
-  key: string;
-  label: string;
-  types: NotificationType[];
-  Icon: LucideIcon;
-}
-
-const CATEGORIES: TypeCategory[] = [
-  {
-    key: 'meetings',
-    label: 'Засідання',
-    types: ['MEETING_INVITE', 'MEETING_REMINDER', 'ATTENDANCE_DECLINED', 'PROTOCOL_PUBLISHED'],
-    Icon: Calendar,
-  },
-  {
-    key: 'stages',
-    label: 'Етапи',
-    types: ['STAGE_DUE_SOON', 'STAGE_OVERDUE', 'STAGE_COMPLETED', 'STANDARD_STATUS_CHANGED'],
-    Icon: Target,
-  },
-  {
-    key: 'tasks',
-    label: 'Завдання',
-    types: ['TASK_ASSIGNED', 'TASK_OVERDUE'],
-    Icon: CheckSquare,
-  },
-  { key: 'voting', label: 'Голосування', types: ['VOTE_OPENED', 'VOTE_CLOSED'], Icon: VoteIcon },
-  {
-    key: 'comments',
-    label: 'Коментарі',
-    types: ['MENTION', 'COMMENT_ADDED'],
-    Icon: MessageSquare,
-  },
-  {
-    key: 'docs',
-    label: 'Документи',
-    types: ['DOCUMENT_UPLOADED'],
-    Icon: FileText,
-  },
-  { key: 'digest', label: 'Звіти', types: ['WEEKLY_DIGEST'], Icon: CalendarDays },
-];
-
-const TYPE_META: Partial<Record<NotificationType, { Icon: LucideIcon; tone: string }>> = {
-  MEETING_INVITE: { Icon: Calendar, tone: 'text-blue-600 dark:text-blue-400' },
-  MEETING_REMINDER: { Icon: Calendar, tone: 'text-blue-600 dark:text-blue-400' },
-  ATTENDANCE_DECLINED: { Icon: Calendar, tone: 'text-amber-600 dark:text-amber-400' },
-  PROTOCOL_PUBLISHED: { Icon: ClipboardList, tone: 'text-emerald-600 dark:text-emerald-400' },
-  STAGE_DUE_SOON: { Icon: Target, tone: 'text-amber-600 dark:text-amber-400' },
-  STAGE_OVERDUE: { Icon: Target, tone: 'text-red-600 dark:text-red-400' },
-  STAGE_COMPLETED: { Icon: Target, tone: 'text-emerald-600 dark:text-emerald-400' },
-  STANDARD_STATUS_CHANGED: { Icon: FileText, tone: 'text-mid' },
-  TASK_ASSIGNED: { Icon: CheckSquare, tone: 'text-blue-600 dark:text-blue-400' },
-  TASK_OVERDUE: { Icon: CheckSquare, tone: 'text-red-600 dark:text-red-400' },
-  VOTE_OPENED: { Icon: VoteIcon, tone: 'text-amber-600 dark:text-amber-400' },
-  VOTE_CLOSED: { Icon: VoteIcon, tone: 'text-mid' },
-  COMMENT_ADDED: { Icon: MessageSquare, tone: 'text-mid' },
-  MENTION: { Icon: AtSign, tone: 'text-blue-600 dark:text-blue-400' },
-  DOCUMENT_UPLOADED: { Icon: FileText, tone: 'text-mid' },
-  WEEKLY_DIGEST: { Icon: CalendarDays, tone: 'text-brand' },
-};
-
-function startOfDay(d: Date) {
-  return new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
-}
-
-function groupLabel(createdAt: Date | string): string {
-  const t = startOfDay(new Date(createdAt));
-  const today = startOfDay(new Date());
-  const yesterday = today - 86_400_000;
-  if (t === today) return 'Сьогодні';
-  if (t === yesterday) return 'Вчора';
-  const sevenAgo = today - 7 * 86_400_000;
-  if (t >= sevenAgo) return 'Цього тижня';
-  const thirtyAgo = today - 30 * 86_400_000;
-  if (t >= thirtyAgo) return 'Цього місяця';
-  return 'Раніше';
-}
-
-function timeOfDay(d: Date | string): string {
-  return new Date(d).toLocaleTimeString('uk-UA', { hour: '2-digit', minute: '2-digit' });
-}
-
-function fullDateTime(d: Date | string): string {
-  return new Date(d).toLocaleString('uk-UA', {
-    day: '2-digit',
-    month: '2-digit',
-    year: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-  });
-}
+import {
+  CATEGORIES,
+  TYPE_META,
+  FALLBACK_TYPE_META,
+  groupLabel,
+  timeOfDay,
+  fullDateTime,
+  GROUP_ORDER,
+} from '@/lib/notifications-ui';
 
 export function NotificationsList() {
   const router = useRouter();
@@ -168,10 +70,9 @@ export function NotificationsList() {
       map.set(k, arr);
     });
     // Maintain a logical order
-    const order = ['Сьогодні', 'Вчора', 'Цього тижня', 'Цього місяця', 'Раніше'];
-    return order
-      .map((label) => ({ label, items: map.get(label) ?? [] }))
-      .filter((g) => g.items.length > 0);
+    return GROUP_ORDER.map((label) => ({ label, items: map.get(label) ?? [] })).filter(
+      (g) => g.items.length > 0,
+    );
   }, [notifications]);
 
   function toggleCat(key: string) {
@@ -272,7 +173,7 @@ export function NotificationsList() {
                 {g.label}
               </li>,
               ...g.items.map((n) => {
-                const meta = TYPE_META[n.type] ?? { Icon: Bell, tone: 'text-mid' };
+                const meta = TYPE_META[n.type] ?? FALLBACK_TYPE_META;
                 const Icon = meta.Icon;
                 const isToday = groupLabel(n.createdAt) === 'Сьогодні';
                 return (
