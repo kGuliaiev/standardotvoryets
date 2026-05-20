@@ -198,11 +198,10 @@ export const commentRouter = createTRPCRouter({
   unreadCountForUser: protectedProcedure
     .input(z.object({ since: z.date().nullable().optional() }).optional())
     .query(async ({ ctx, input }) => {
-      const since = input?.since ?? null;
-      if (!since) {
-        // No reference point — treat all as unread, but cap the answer.
-        return { count: 0 };
-      }
+      // Before the first /discussions visit there's no reference point, so
+      // fall back to a recent window (last 30 days). Returning 0 here meant
+      // the sidebar badge never lit up for anyone who hadn't opened the page.
+      const since = input?.since ?? new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
       const memberGroupIds = ctx.session.user.memberships?.map((m) => m.workingGroupId) ?? [];
       const seesAll = seesAllWorkingGroups(ctx.session.user);
       const count = await ctx.db.comment.count({

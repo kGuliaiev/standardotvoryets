@@ -97,9 +97,12 @@ export function Sidebar({ session, forceExpanded = false }: SidebarProps) {
     'discussions.lastVisit.v1',
     null,
   );
+  // Always enabled: when the user hasn't opened /discussions yet
+  // (discussionsLastVisit === null) the server falls back to a recent
+  // window, so the badge still lights up for new comments.
   const { data: discussionsUnread } = trpc.comment.unreadCountForUser.useQuery(
     { since: discussionsLastVisit ? new Date(discussionsLastVisit) : null },
-    { refetchInterval: 60_000, enabled: !!discussionsLastVisit },
+    { refetchInterval: 60_000 },
   );
 
   const sections: NavSection[] = [
