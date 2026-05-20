@@ -76,8 +76,16 @@ COPY --from=build /app/tsconfig.json ./
 
 EXPOSE 3000
 
-# Start command: apply schema, then start the server.
+# Start command: best-effort schema sync + seed, then ALWAYS start the
+# web server.
+#
+# The `; exec pnpm start` (semicolon, not &&) is deliberate: if the DB
+# is unreachable at boot (e.g. a Railway Postgres incident), `prisma db
+# push` fails fast with P1001 — we log a warning and start Next.js
+# anyway so the app serves the login page with a "service unavailable"
+# panel instead of crash-looping into a 502.
+#
 # `prisma db push --accept-data-loss` is idempotent and additive when
 # schema only grows; switch to `prisma migrate deploy` once you adopt
 # migrations.
-CMD ["sh", "-c", "pnpm prisma db push --accept-data-loss && pnpm prisma:seed && pnpm start"]
+CMD ["sh", "-c", "pnpm prisma db push --accept-data-loss && pnpm prisma:seed || echo '[start] DB sync/seed skipped — DB unreachable? Starting web server anyway.'; exec pnpm start"]

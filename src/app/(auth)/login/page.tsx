@@ -1,5 +1,5 @@
 import type { Metadata } from 'next';
-import { LoginForm } from '@/components/auth/LoginForm';
+import { LoginGate } from '@/components/auth/LoginGate';
 
 export const metadata: Metadata = {
   title: 'Вхід',
@@ -35,7 +35,7 @@ export default function LoginPage() {
       {/* Card */}
       <div className="bg-slate-800/80 backdrop-blur-md border border-slate-700/60 rounded-2xl shadow-2xl p-5 sm:p-8">
         <h1 className="text-xl font-semibold text-white mb-6">Вхід до системи</h1>
-        <LoginForm />
+        <LoginGate />
       </div>
 
       <p className="text-center text-slate-500 text-xs mt-6">
