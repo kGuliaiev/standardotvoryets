@@ -84,17 +84,27 @@ export const authOptions: NextAuthOptions = {
         session.user.id = token.id;
         session.user.globalRole = token.globalRole;
 
-        // Load memberships for RBAC
-        const memberships = await db.workingGroupMember.findMany({
-          where: { userId: token.id },
-          select: {
-            workingGroupId: true,
-            role: true,
-            workingGroup: { select: { code: true, color: true } },
-          },
-        });
-
-        session.user.memberships = memberships;
+        // Load memberships for RBAC. Wrapped in try/catch so a DB
+        // outage doesn't throw a JWT_SESSION_ERROR (which floods the
+        // logs with a full Prisma stack on every page load and breaks
+        // the session). During an outage we degrade gracefully:
+        // return the session with empty memberships; the next refresh
+        // re-populates them once the DB is back.
+        try {
+          const memberships = await db.workingGroupMember.findMany({
+            where: { userId: token.id },
+            select: {
+              workingGroupId: true,
+              role: true,
+              workingGroup: { select: { code: true, color: true } },
+            },
+          });
+          session.user.memberships = memberships;
+        } catch (e) {
+          const msg = e instanceof Error ? e.message.split('\n')[0] : String(e);
+          console.warn('[auth.session] memberships load failed (DB down?):', msg);
+          session.user.memberships = [];
+        }
       }
       return session;
     },
