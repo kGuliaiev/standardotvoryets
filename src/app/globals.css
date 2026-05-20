@@ -13,6 +13,7 @@
   --c-hairline: #e5eaf2;
   --c-pill: #edf0f7;
   --c-pill-strong: #e5eaf2;
+  --c-input: #f1f5fb; /* form field bg — light blue-gray */
   --c-ink: #1a2540;
   --c-mid: #4b5880;
   --c-light: #8a96b0;
@@ -39,6 +40,7 @@
   --c-hairline: #2a3a5c; /* subtle blue borders */
   --c-pill: #1b2c4a;
   --c-pill-strong: #243759;
+  --c-input: #1b2c4a; /* form field bg — clean blue (not the UA brown) */
   --c-ink: #e6ecf7; /* bright body text */
   --c-mid: #a3b1cd;
   --c-light: #6a7794;
@@ -84,6 +86,21 @@
     background: var(--c-page);
     color: var(--c-ink);
     font-size: 14px;
+  }
+
+  /* All form fields share one blue-toned surface — overrides the muddy
+     browser default (color-scheme: dark) on raw inputs. Components that
+     set an explicit bg utility (bg-card, bg-page, …) still win. */
+  input:not([type='checkbox']):not([type='radio']):not([type='range']),
+  select,
+  textarea {
+    background-color: var(--c-input);
+    color: var(--c-ink);
+    border-color: var(--c-hairline);
+  }
+  input::placeholder,
+  textarea::placeholder {
+    color: var(--c-light);
   }
 }
 
@@ -157,7 +174,7 @@
   .select,
   .textarea {
     @apply w-full px-3 py-2 text-sm rounded-[10px] border-[1.5px];
-    background: var(--c-card);
+    background: var(--c-input);
     color: var(--c-ink);
     border-color: var(--c-hairline);
   }

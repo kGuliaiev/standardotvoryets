@@ -4,7 +4,7 @@ import { type Session } from 'next-auth';
 import Image from 'next/image';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { signOut } from 'next-auth/react';
+import { fullLogout } from '@/lib/logout';
 import {
   LayoutDashboard,
   BookOpen,
@@ -386,7 +386,7 @@ export function Sidebar({ session, forceExpanded = false }: SidebarProps) {
           )}
         </Link>
         <button
-          onClick={() => signOut({ callbackUrl: '/login' })}
+          onClick={() => void fullLogout()}
           title={collapsed ? 'Вийти' : undefined}
           className={cn(
             'flex items-center w-full text-mid hover:text-ink text-xs transition-colors rounded-[10px] hover:bg-pill',

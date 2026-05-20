@@ -1,8 +1,9 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { useSession, signOut } from 'next-auth/react';
+import { useSession } from 'next-auth/react';
 import { trpc } from '@/lib/trpc/client';
+import { fullLogout } from '@/lib/logout';
 import { Avatar } from '@/components/ui/Avatar';
 import { Save, Mail, Phone, User as UserIcon, Bell, LogOut } from 'lucide-react';
 import { PageHeader } from '@/components/ui/PageHeader';
@@ -117,7 +118,7 @@ export function ProfileForm() {
         title="Профіль"
         actions={
           <button
-            onClick={() => signOut({ callbackUrl: '/login' })}
+            onClick={() => void fullLogout()}
             className="inline-flex items-center gap-1.5 rounded-lg border border-hairline px-3 py-1.5 text-xs text-mid hover:bg-pill transition-colors"
           >
             <LogOut size={13} /> Вийти

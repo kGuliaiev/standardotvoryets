@@ -151,25 +151,40 @@ export function MeetingForm({
         onSubmit={handleSubmit(onSubmit)}
         className="bg-card rounded-[14px] border border-hairline p-6 space-y-5"
       >
-        {/* WG select */}
-        <div>
-          <label className="block text-[11px] font-semibold uppercase tracking-wide text-mid mb-1.5">
-            Робоча група *
-          </label>
-          <select
-            {...register('workingGroupId')}
-            className="w-full px-3 py-2 text-sm border-[1.5px] border-hairline rounded-[10px] focus:outline-none focus:border-brand"
-          >
-            <option value="">— оберіть групу —</option>
-            {allowedGroups.map((g) => (
-              <option key={g.id} value={g.id}>
-                {g.code} · {g.name}
-              </option>
-            ))}
-          </select>
-          {errors.workingGroupId && (
-            <p className="text-xs text-red-600 mt-1">{errors.workingGroupId.message}</p>
-          )}
+        {/* WG + Format */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div>
+            <label className="block text-[11px] font-semibold uppercase tracking-wide text-mid mb-1.5">
+              Робоча група *
+            </label>
+            <select
+              {...register('workingGroupId')}
+              className="w-full px-3 py-2 text-sm border-[1.5px] border-hairline rounded-[10px] focus:outline-none focus:border-brand"
+            >
+              <option value="">— оберіть групу —</option>
+              {allowedGroups.map((g) => (
+                <option key={g.id} value={g.id}>
+                  {g.code} · {g.name}
+                </option>
+              ))}
+            </select>
+            {errors.workingGroupId && (
+              <p className="text-xs text-red-600 mt-1">{errors.workingGroupId.message}</p>
+            )}
+          </div>
+          <div>
+            <label className="block text-[11px] font-semibold uppercase tracking-wide text-mid mb-1.5">
+              Формат
+            </label>
+            <select
+              {...register('format')}
+              className="w-full px-3 py-2 text-sm border-[1.5px] border-hairline rounded-[10px] focus:outline-none focus:border-brand"
+            >
+              <option value="ONLINE">Онлайн</option>
+              <option value="OFFLINE">Офлайн</option>
+              <option value="HYBRID">Гібрид</option>
+            </select>
+          </div>
         </div>
 
         {/* Title */}
@@ -215,20 +230,34 @@ export function MeetingForm({
           </div>
         </div>
 
-        {/* Format + Location */}
+        {/* Chairman + Location */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>
             <label className="block text-[11px] font-semibold uppercase tracking-wide text-mid mb-1.5">
-              Формат
+              Головуючий
             </label>
             <select
-              {...register('format')}
-              className="w-full px-3 py-2 text-sm border-[1.5px] border-hairline rounded-[10px] focus:outline-none focus:border-brand"
+              {...register('chairmanId')}
+              disabled={!watchedWgId}
+              className="w-full px-3 py-2 text-sm border-[1.5px] border-hairline rounded-[10px] focus:outline-none focus:border-brand disabled:opacity-50"
             >
-              <option value="ONLINE">Онлайн</option>
-              <option value="OFFLINE">Офлайн</option>
-              <option value="HYBRID">Гібрид</option>
+              <option value="">
+                {wgLeader
+                  ? `— керівник РГ за замовчуванням (${wgLeader.user.name}) —`
+                  : '— керівник РГ за замовчуванням —'}
+              </option>
+              {wgMembers.map((m) => (
+                <option key={m.userId} value={m.userId}>
+                  {m.user.name}
+                  {m.role === 'LEADER' ? ' · Керівник' : ''}
+                  {m.role === 'DEPUTY' ? ' · Заступник' : ''}
+                  {m.role === 'SECRETARY' ? ' · Секретар' : ''}
+                </option>
+              ))}
             </select>
+            <p className="text-[11px] text-light mt-1">
+              За замовчуванням — керівник РГ. Можна обрати іншого, якщо засідання вів хтось інший.
+            </p>
           </div>
           <div>
             <label className="block text-[11px] font-semibold uppercase tracking-wide text-mid mb-1.5">
@@ -241,35 +270,6 @@ export function MeetingForm({
               className="w-full px-3 py-2 text-sm border-[1.5px] border-hairline rounded-[10px] focus:outline-none focus:border-brand"
             />
           </div>
-        </div>
-
-        {/* Chairman */}
-        <div>
-          <label className="block text-[11px] font-semibold uppercase tracking-wide text-mid mb-1.5">
-            Головуючий
-          </label>
-          <select
-            {...register('chairmanId')}
-            disabled={!watchedWgId}
-            className="w-full px-3 py-2 text-sm border-[1.5px] border-hairline rounded-[10px] focus:outline-none focus:border-brand disabled:opacity-50"
-          >
-            <option value="">
-              {wgLeader
-                ? `— керівник РГ за замовчуванням (${wgLeader.user.name}) —`
-                : '— керівник РГ за замовчуванням —'}
-            </option>
-            {wgMembers.map((m) => (
-              <option key={m.userId} value={m.userId}>
-                {m.user.name}
-                {m.role === 'LEADER' ? ' · Керівник' : ''}
-                {m.role === 'DEPUTY' ? ' · Заступник' : ''}
-                {m.role === 'SECRETARY' ? ' · Секретар' : ''}
-              </option>
-            ))}
-          </select>
-          <p className="text-[11px] text-light mt-1">
-            За замовчуванням — керівник РГ. Можна обрати іншого, якщо засідання вів хтось інший.
-          </p>
         </div>
 
         {/* Agenda */}

@@ -651,20 +651,21 @@ export function MeetingDetail({ id }: Props) {
           </div>
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="field-label">Формат</label>
+              <label className="field-label">Головуючий</label>
               <select
                 className="select"
-                value={editForm.format}
-                onChange={(e) =>
-                  setEditForm((f) => ({
-                    ...f,
-                    format: e.target.value as 'ONLINE' | 'OFFLINE' | 'HYBRID',
-                  }))
-                }
+                value={editForm.chairmanId}
+                onChange={(e) => setEditForm((f) => ({ ...f, chairmanId: e.target.value }))}
               >
-                <option value="ONLINE">Онлайн</option>
-                <option value="OFFLINE">Офлайн</option>
-                <option value="HYBRID">Гібрид</option>
+                <option value="">— керівник РГ за замовчуванням —</option>
+                {meeting.workingGroup.members.map((m) => (
+                  <option key={m.userId} value={m.userId}>
+                    {m.user.name}
+                    {m.role === 'LEADER' ? ' · Керівник' : ''}
+                    {m.role === 'DEPUTY' ? ' · Заступник' : ''}
+                    {m.role === 'SECRETARY' ? ' · Секретар' : ''}
+                  </option>
+                ))}
               </select>
             </div>
             <div>
@@ -677,21 +678,20 @@ export function MeetingDetail({ id }: Props) {
             </div>
           </div>
           <div>
-            <label className="field-label">Головуючий</label>
+            <label className="field-label">Формат</label>
             <select
               className="select"
-              value={editForm.chairmanId}
-              onChange={(e) => setEditForm((f) => ({ ...f, chairmanId: e.target.value }))}
+              value={editForm.format}
+              onChange={(e) =>
+                setEditForm((f) => ({
+                  ...f,
+                  format: e.target.value as 'ONLINE' | 'OFFLINE' | 'HYBRID',
+                }))
+              }
             >
-              <option value="">— керівник РГ за замовчуванням —</option>
-              {meeting.workingGroup.members.map((m) => (
-                <option key={m.userId} value={m.userId}>
-                  {m.user.name}
-                  {m.role === 'LEADER' ? ' · Керівник' : ''}
-                  {m.role === 'DEPUTY' ? ' · Заступник' : ''}
-                  {m.role === 'SECRETARY' ? ' · Секретар' : ''}
-                </option>
-              ))}
+              <option value="ONLINE">Онлайн</option>
+              <option value="OFFLINE">Офлайн</option>
+              <option value="HYBRID">Гібрид</option>
             </select>
           </div>
           <div>
