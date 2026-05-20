@@ -5,6 +5,7 @@ import { usePathname } from 'next/navigation';
 import { type Session } from 'next-auth';
 import { Sidebar } from './Sidebar';
 import { Topbar } from './Topbar';
+import { DbStatusBanner } from './DbStatusBanner';
 import { CommandPalette } from '@/components/CommandPalette';
 
 interface ShellProps {
@@ -56,6 +57,9 @@ export function Shell({ children, session }: ShellProps) {
       {/* Main content */}
       <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
         <Topbar session={session} onOpenMobileMenu={() => setMobileMenuOpen(true)} />
+        {/* Global DB-outage strip — explains empty/loading states when
+            the database is unreachable and auto-recovers. */}
+        <DbStatusBanner />
         <main className="flex-1 overflow-y-auto p-4 md:p-6 scrollbar-thin">{children}</main>
       </div>
 
