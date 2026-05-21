@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { trpc } from '@/lib/trpc/client';
 import Link from 'next/link';
 import { useSession } from 'next-auth/react';
-import { Pencil } from 'lucide-react';
+import { Pencil, FileText, Download } from 'lucide-react';
 import { Avatar } from '@/components/ui/Avatar';
 import { Modal } from '@/components/ui/Modal';
 import { ConfirmModal } from '@/components/ui/ConfirmModal';
@@ -51,10 +51,12 @@ const STATUS_LABELS: Record<string, { label: string; cls: string }> = {
   CANCELLED: { label: 'Скасовано', cls: 'bg-pill text-mid' },
 };
 
+// Display: present vs absent. An unset/undefined status counts as «Відсутній»
+// (just shown muted to distinguish from an explicit declination).
 const ATTENDANCE_LABELS: Record<string, { label: string; cls: string }> = {
-  PENDING: { label: 'Очікується', cls: 'text-light' },
-  CONFIRMED: { label: 'Підтверджено', cls: 'text-green-600' },
-  DECLINED: { label: 'Відмовлено', cls: 'text-red-500' },
+  PENDING: { label: 'Відсутній', cls: 'text-light' },
+  CONFIRMED: { label: 'Присутній', cls: 'text-emerald-600' },
+  DECLINED: { label: 'Відсутній', cls: 'text-red-500' },
 };
 
 const WG_ROLE_LABELS_UA: Record<string, string> = {
@@ -350,30 +352,30 @@ export function MeetingDetail({ id }: Props) {
                 <div className="flex items-center justify-between mb-3 gap-2 flex-wrap">
                   <h3 className="text-sm font-semibold text-ink">Протокол</h3>
                   {started && (
-                    <div className="inline-flex items-center gap-3">
-                      <Link
-                        href={`/meetings/${id}/protocol`}
-                        className="text-xs font-bold text-brand hover:underline inline-flex items-center gap-1"
-                      >
-                        📝 Редактор протоколу
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <Link href={`/meetings/${id}/protocol`} className="btn-secondary">
+                        <Pencil className="w-3.5 h-3.5" />
+                        Редактор протоколу
                       </Link>
                       <a
                         href={`/api/meetings/${id}/protocol.docx`}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="text-xs text-mid hover:text-brand inline-flex items-center gap-1"
+                        className="btn-secondary"
                         title="Завантажити Word"
                       >
-                        📄 Word
+                        <FileText className="w-3.5 h-3.5" />
+                        Word
                       </a>
                       <a
                         href={`/api/meetings/${id}/protocol`}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="text-xs text-mid hover:text-brand inline-flex items-center gap-1"
+                        className="btn-secondary"
                         title="Завантажити PDF"
                       >
-                        📄 PDF
+                        <Download className="w-3.5 h-3.5" />
+                        PDF
                       </a>
                     </div>
                   )}
@@ -529,15 +531,16 @@ export function MeetingDetail({ id }: Props) {
                 <div className="px-5 py-3.5 border-b border-hairline flex items-center justify-between">
                   <h3 className="text-sm font-semibold text-ink">Учасники ({roster.length})</h3>
                   <span className="text-[11px] text-light">
-                    Підтверджено:{' '}
-                    <span className="font-bold text-emerald-600">{confirmedCount}</span>
+                    Присутні: <span className="font-bold text-emerald-600">{confirmedCount}</span>
                   </span>
                 </div>
                 <div className="divide-y divide-hairline">
                   {roster.map((r) => {
-                    const att = r.status
-                      ? (ATTENDANCE_LABELS[r.status] ?? { label: r.status, cls: '' })
-                      : null;
+                    // Unset status → treat as «Відсутній» (PENDING label).
+                    const att = ATTENDANCE_LABELS[r.status ?? 'PENDING'] ?? {
+                      label: 'Відсутній',
+                      cls: 'text-light',
+                    };
                     return (
                       <div key={r.user.id} className="px-5 py-2.5">
                         <div className="flex items-center justify-between gap-3">
@@ -551,10 +554,8 @@ export function MeetingDetail({ id }: Props) {
                             </div>
                           </div>
                           {!canManageAttendance && (
-                            <span
-                              className={`text-xs whitespace-nowrap ${att?.cls ?? 'text-light'}`}
-                            >
-                              {att?.label ?? '—'}
+                            <span className={`text-xs whitespace-nowrap ${att.cls}`}>
+                              {att.label}
                             </span>
                           )}
                         </div>

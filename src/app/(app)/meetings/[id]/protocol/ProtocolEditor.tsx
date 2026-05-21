@@ -6,6 +6,7 @@ import { trpc } from '@/lib/trpc/client';
 import { useSession } from 'next-auth/react';
 import { Download, FileText, Sparkles, ChevronDown, Loader2 } from 'lucide-react';
 import { Avatar } from '@/components/ui/Avatar';
+import { ConfirmModal } from '@/components/ui/ConfirmModal';
 import { can } from '@/lib/rbac';
 import type { GlobalRole, WorkingGroupRole } from '@prisma/client';
 import { ProtocolTabs } from './ProtocolTabs';
@@ -97,6 +98,7 @@ export function ProtocolEditor({ meetingId }: { meetingId: string }) {
   const [aiPanelKey, setAiPanelKey] = useState(0);
   const [pendingDraft, setPendingDraft] = useState<AiProtocolDraft | null>(null);
   const [aiNote, setAiNote] = useState<string | null>(null);
+  const [pendingDelete, setPendingDelete] = useState<AgendaDraft | null>(null);
 
   useEffect(() => {
     if (!meeting) return;
@@ -204,10 +206,10 @@ export function ProtocolEditor({ meetingId }: { meetingId: string }) {
     const it = items[idx];
     if (!it) return;
     if (it.id) {
-      if (confirm('Видалити пункт?')) {
-        deleteItemMutation.mutate({ id: it.id });
-      }
+      // Saved item — confirm via the shared modal before the destructive delete.
+      setPendingDelete(it);
     } else {
+      // Unsaved draft row — just drop it from state, no confirmation needed.
       setItems((prev) => prev.filter((_, i) => i !== idx));
     }
   }
@@ -549,6 +551,26 @@ export function ProtocolEditor({ meetingId }: { meetingId: string }) {
           </div>
         </div>
       )}
+
+      <ConfirmModal
+        open={pendingDelete !== null}
+        title="Видалити пункт протоколу?"
+        message={
+          pendingDelete?.title
+            ? `«${pendingDelete.title}» буде видалено остаточно.`
+            : 'Пункт буде видалено остаточно.'
+        }
+        confirmLabel="Видалити"
+        destructive
+        isPending={deleteItemMutation.isPending}
+        error={deleteItemMutation.error?.message ?? null}
+        onConfirm={() => {
+          const id = pendingDelete?.id;
+          if (!id) return;
+          deleteItemMutation.mutate({ id }, { onSuccess: () => setPendingDelete(null) });
+        }}
+        onClose={() => setPendingDelete(null)}
+      />
 
       {/* Two-column layout: protocol main + narrow attendance rail.
           Stacks vertically on <lg so the attendance card sits below
