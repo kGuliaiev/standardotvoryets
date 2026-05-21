@@ -317,24 +317,15 @@ export function ProtocolEditor({ meetingId }: { meetingId: string }) {
         <span className="text-ink">Протокол</span>
       </nav>
 
-      {/* Header card */}
-      <div className="card p-6">
-        <div className="flex items-start justify-between gap-4 flex-wrap">
-          <div className="min-w-0 flex-1">
-            <h1 className="text-[19px] font-extrabold text-navy">{titleStr}</h1>
-            <p className="text-sm text-mid mt-1">
-              {meeting.workingGroup.code} «{meeting.workingGroup.name}»
-            </p>
-            <p className="text-xs text-light mt-1 font-mono">
-              {new Date(meeting.startAt).toLocaleDateString('uk-UA', {
-                day: '2-digit',
-                month: 'long',
-                year: 'numeric',
-              })}{' '}
-              · м. Київ
-            </p>
-          </div>
-          <div className="flex gap-2 flex-wrap items-center">
+      {/* Header card — compact two-row layout */}
+      <div className="card px-5 py-3.5">
+        {/* Row 1: number (left) · WG name (center) · download buttons (right) */}
+        <div className="grid grid-cols-[auto_1fr_auto] items-center gap-3">
+          <h1 className="text-[17px] font-extrabold text-navy whitespace-nowrap">{titleStr}</h1>
+          <p className="text-sm text-mid text-center truncate min-w-0">
+            {meeting.workingGroup.code} «{meeting.workingGroup.name}»
+          </p>
+          <div className="flex gap-2 items-center justify-self-end">
             {canEdit && !protoNum && (
               <button
                 onClick={() => assignProtoMutation.mutate({ meetingId })}
@@ -365,37 +356,41 @@ export function ProtocolEditor({ meetingId }: { meetingId: string }) {
           </div>
         </div>
 
-        {/* Chairman selector */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-5 pt-4 border-t border-hairline">
-          <div>
-            <label className="field-label">Головуючий</label>
-            <select
-              className="select"
-              value={chairmanId}
-              onChange={(e) => {
-                const next = e.target.value;
-                setChairmanId(next);
-                if (canEdit) {
-                  updateMeetingMutation.mutate({
-                    id: meetingId,
-                    chairmanId: next === '' ? null : next,
-                  });
-                }
-              }}
-              disabled={!canEdit}
-            >
-              <option value="">(керівник РГ за замовчуванням)</option>
-              {members.map((m) => (
-                <option key={m.userId} value={m.userId}>
-                  {rankPrefix(m.user.rank)}
-                  {m.user.name}
-                  {m.role === 'LEADER' ? ' · Керівник' : ''}
-                  {m.role === 'DEPUTY' ? ' · Заступник' : ''}
-                  {m.role === 'SECRETARY' ? ' · Секретар' : ''}
-                </option>
-              ))}
-            </select>
-          </div>
+        {/* Row 2: chairman select (left) · date (right) */}
+        <div className="flex items-center justify-between gap-3 mt-2.5">
+          <select
+            className="select flex-1 max-w-md"
+            value={chairmanId}
+            onChange={(e) => {
+              const next = e.target.value;
+              setChairmanId(next);
+              if (canEdit) {
+                updateMeetingMutation.mutate({
+                  id: meetingId,
+                  chairmanId: next === '' ? null : next,
+                });
+              }
+            }}
+            disabled={!canEdit}
+          >
+            <option value="">(керівник РГ за замовчуванням)</option>
+            {members.map((m) => (
+              <option key={m.userId} value={m.userId}>
+                {rankPrefix(m.user.rank)}
+                {m.user.name}
+                {m.role === 'LEADER' ? ' · Керівник' : ''}
+                {m.role === 'DEPUTY' ? ' · Заступник' : ''}
+                {m.role === 'SECRETARY' ? ' · Секретар' : ''}
+              </option>
+            ))}
+          </select>
+          <span className="text-xs text-mid whitespace-nowrap shrink-0">
+            {new Date(meeting.startAt).toLocaleDateString('uk-UA', {
+              day: '2-digit',
+              month: 'long',
+              year: 'numeric',
+            })}
+          </span>
         </div>
       </div>
 

@@ -28,6 +28,7 @@ const EXEMPT = new Set<string>([
   // Notification CRUD is per-user UX state, not domain-relevant for audit
   'notification.markRead',
   'notification.markAllRead',
+  'notification.markStandardRead',
   'notification.delete',
   'notification.deleteAll',
   // Document upload-URL plumbing — actual creation is `confirmUpload`
@@ -37,6 +38,10 @@ const EXEMPT = new Set<string>([
   // Suggestion reactions are per-user UX state (LIKE/DISLIKE), not a
   // domain event — the underlying create/accept/reject are audited.
   'suggestion.react',
+  // ШІ-генерація чернетки протоколу: не персистить нічого (повертає draft
+  // для ручного перегляду). Аудит відбувається при збереженні пунктів
+  // через upsertAgendaItem.
+  'meeting.generateProtocolDraft',
 ]);
 
 interface Finding {
