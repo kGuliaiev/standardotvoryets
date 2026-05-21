@@ -352,6 +352,21 @@ export function ProtocolEditor({ meetingId }: { meetingId: string }) {
     ? `ПРОТОКОЛ № ${protoNum}/${wgNum}/${year}`
     : 'ПРОТОКОЛ № (не присвоєно)';
 
+  // For the assembled "Текст протоколу" view (mirrors the Word/PDF export):
+  // chairman = explicit chairman else the WG leader; present = confirmed
+  // attendees minus the chairman & secretary (listed separately above).
+  const secretaryUser = members.find((m) => m.role === 'SECRETARY')?.user ?? null;
+  const leaderUser = members.find((m) => m.role === 'LEADER')?.user ?? null;
+  const chairmanForView = meeting.chairman ?? leaderUser;
+  const presentNames = meeting.attendances
+    .filter(
+      (a) =>
+        a.status === 'CONFIRMED' &&
+        a.user.id !== chairmanForView?.id &&
+        a.user.id !== secretaryUser?.id,
+    )
+    .map((a) => a.user.name);
+
   // Short Ukrainian role labels for the slim attendance sidebar
   const ROLE_SHORT: Record<string, string> = {
     LEADER: 'Керівник',
@@ -531,11 +546,13 @@ export function ProtocolEditor({ meetingId }: { meetingId: string }) {
         <ProtocolTabs
           items={items}
           members={members}
-          chairman={meeting.chairman}
-          secretary={meeting.workingGroup.members.find((m) => m.role === 'SECRETARY')?.user ?? null}
+          chairman={chairmanForView}
+          secretary={secretaryUser}
           meetingTitle={meeting.title}
           meetingStartAt={meeting.startAt}
           wgCode={meeting.workingGroup.code}
+          wgName={meeting.workingGroup.name}
+          presentNames={presentNames}
           protocolNumber={meeting.protocolNumber ?? null}
           canEdit={canEdit}
           savingAll={savingAll}

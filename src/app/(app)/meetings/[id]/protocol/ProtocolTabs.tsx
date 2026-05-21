@@ -164,6 +164,8 @@ interface Props {
   meetingTitle: string;
   meetingStartAt: Date | string;
   wgCode: string;
+  wgName: string;
+  presentNames: string[];
   protocolNumber: number | null;
   canEdit: boolean;
   savingAll: boolean;
@@ -573,6 +575,8 @@ function OverviewBlock({
   secretary,
   meetingStartAt,
   wgCode,
+  wgName,
+  presentNames,
   protocolNumber,
 }: OverviewProps) {
   const date = new Date(meetingStartAt);
@@ -595,7 +599,10 @@ function OverviewBlock({
       <div className="max-w-3xl mx-auto font-serif text-ink leading-relaxed">
         <h3 className="text-center text-base font-bold mb-2">{title}</h3>
         <p className="text-center text-sm">Засідання робочої групи із стандартизації</p>
-        <p className="text-center text-sm font-bold mb-4">{wgCode}</p>
+        <p className="text-center text-sm font-bold mb-4">
+          {wgCode}
+          {wgName ? ` «${wgName}»` : ''}
+        </p>
         <p className="flex justify-between text-sm mb-5">
           <span>{formatDateUA(date)}</span>
           <span>м. Київ</span>
@@ -612,12 +619,18 @@ function OverviewBlock({
           </p>
         )}
         {secretary && (
-          <p className="text-sm mb-4">
+          <p className="text-sm mb-1">
             <span className="text-mid">Секретар — </span>
             <span className="font-bold">
               {rankPrefix(secretary.rank)}
               {secretary.name}
             </span>
+          </p>
+        )}
+        {presentNames.length > 0 && (
+          <p className="text-sm mb-4">
+            <span className="text-mid">Присутні: </span>
+            {presentNames.join(', ')}
           </p>
         )}
 
@@ -633,7 +646,7 @@ function OverviewBlock({
                   </p>
                   {(it.speakerId || it.speakerName) && (
                     <p className="text-xs italic text-mid pl-5">
-                      Доповідач: {personDisplay(it.speakerId, it.speakerName)}
+                      Доповідач: {personDisplay(it.speakerId, it.speakerName)}.
                     </p>
                   )}
                 </li>
@@ -642,56 +655,53 @@ function OverviewBlock({
           </>
         )}
 
-        {heardItems.length > 0 && (
-          <div className="mt-5">
-            <p className="text-sm font-bold mb-2">СЛУХАЛИ / ВИСТУПИЛИ:</p>
-            {heardItems.map((it, idx) => (
-              <div key={it.id ?? `oh-${idx}`} className="mb-3 text-sm">
-                <p className="text-xs uppercase text-mid mb-1">
-                  {idx + 1}. {it.title || '(без назви)'}
+        {heardItems.map((it, idx) => (
+          <div key={it.id ?? `oh-${idx}`} className="mt-5 text-sm">
+            {it.heardText && (
+              <>
+                <p className="font-bold mb-1">СЛУХАЛИ:</p>
+                <p className="whitespace-pre-line text-justify">
                   {(it.speakerId || it.speakerName) && (
-                    <span className="italic"> · {personDisplay(it.speakerId, it.speakerName)}</span>
+                    <span className="underline">
+                      {personDisplay(it.speakerId, it.speakerName)}{' '}
+                    </span>
                   )}
+                  {it.heardText}
                 </p>
-                {it.heardText && (
-                  <>
-                    <p className="font-bold mt-1 mb-0.5">СЛУХАЛИ:</p>
-                    <p className="whitespace-pre-line">{it.heardText}</p>
-                  </>
-                )}
-                {it.discussionText && (
-                  <>
-                    <p className="font-bold mt-1 mb-0.5">ВИСТУПИЛИ:</p>
-                    <p className="whitespace-pre-line">{it.discussionText}</p>
-                  </>
-                )}
-              </div>
-            ))}
+              </>
+            )}
+            {it.discussionText && (
+              <>
+                <p className="font-bold mt-2 mb-1">ВИСТУПИЛИ:</p>
+                <p className="whitespace-pre-line text-justify">{it.discussionText}</p>
+              </>
+            )}
           </div>
-        )}
+        ))}
 
         {decisionItems.length > 0 && (
           <div className="mt-5">
             <p className="text-sm font-bold mb-2">ВИРІШИЛИ:</p>
-            {decisionItems.map((it, idx) => (
-              <div key={it.id ?? `od-${idx}`} className="mb-3 text-sm">
-                <p>
-                  <span className="font-bold">{idx + 1}. </span>
-                  {it.title && <span className="font-semibold">{it.title}. </span>}
-                  <span className="whitespace-pre-line">{it.decisionText}</span>
-                </p>
-                {it.deadline && (
-                  <p className="italic text-xs mt-1 pl-5">
-                    Термін: до {formatDeadline(it.deadline)}.
+            <ol className="space-y-2 text-sm">
+              {decisionItems.map((it, idx) => (
+                <li key={it.id ?? `od-${idx}`}>
+                  <p className="text-justify">
+                    <span className="font-bold">{idx + 1}. </span>
+                    <span className="whitespace-pre-line">{it.decisionText || it.title}</span>
                   </p>
-                )}
-                {(it.responsibleId || it.responsibleName) && (
-                  <p className="italic text-xs pl-5">
-                    Відповідальний: {personDisplay(it.responsibleId, it.responsibleName)}.
-                  </p>
-                )}
-              </div>
-            ))}
+                  {it.deadline && (
+                    <p className="italic text-xs mt-1 pl-5">
+                      Термін: до {formatDeadline(it.deadline)}.
+                    </p>
+                  )}
+                  {(it.responsibleId || it.responsibleName) && (
+                    <p className="italic text-xs pl-5">
+                      Відповідальний: {personDisplay(it.responsibleId, it.responsibleName)}.
+                    </p>
+                  )}
+                </li>
+              ))}
+            </ol>
           </div>
         )}
 
