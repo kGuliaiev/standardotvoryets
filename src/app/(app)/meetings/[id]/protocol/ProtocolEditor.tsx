@@ -629,7 +629,13 @@ export function ProtocolEditor({ meetingId }: { meetingId: string }) {
                     {canEdit ? (
                       <select
                         aria-label="Присутність"
-                        className="text-[10px] border border-hairline rounded px-1 py-0.5 bg-page text-ink focus:outline-none focus:border-brand"
+                        className={`text-[10px] font-bold border rounded px-1 py-0.5 focus:outline-none ${
+                          a.status === 'CONFIRMED'
+                            ? 'bg-emerald-50 border-emerald-300 text-emerald-700 dark:bg-emerald-900/30 dark:border-emerald-700 dark:text-emerald-300'
+                            : a.status === 'DECLINED'
+                              ? 'bg-red-50 border-red-300 text-red-700 dark:bg-red-900/30 dark:border-red-700 dark:text-red-300'
+                              : 'bg-pill border-hairline text-mid'
+                        }`}
                         value={a.status}
                         onChange={(e) =>
                           setAttendanceMutation.mutate({
