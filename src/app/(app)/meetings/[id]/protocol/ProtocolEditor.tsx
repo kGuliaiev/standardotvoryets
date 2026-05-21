@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { trpc } from '@/lib/trpc/client';
 import { useSession } from 'next-auth/react';
-import { Download, FileText } from 'lucide-react';
+import { Download, FileText, Sparkles, ChevronDown, Loader2 } from 'lucide-react';
 import { Avatar } from '@/components/ui/Avatar';
 import { can } from '@/lib/rbac';
 import type { GlobalRole, WorkingGroupRole } from '@prisma/client';
@@ -50,6 +50,24 @@ export interface AgendaDraft {
   deadline: string;
   responsibleId: string;
   dirty: boolean; // unsaved changes flag
+}
+
+/** Shape returned by meeting.generateProtocolDraft (kept local to avoid a
+ *  client import of the server AI module). */
+interface AiProtocolDraft {
+  agenda: { title: string; speakerId: string | null }[];
+  heard: {
+    title: string;
+    speakerId: string | null;
+    heardText: string;
+    discussionText: string;
+  }[];
+  decisions: {
+    title: string;
+    decisionText: string;
+    deadline: string | null;
+    responsibleId: string | null;
+  }[];
 }
 
 function rankPrefix(rank?: string | null) {
@@ -168,6 +186,61 @@ export function ProtocolEditor({ meetingId }: { meetingId: string }) {
     } else {
       setItems((prev) => prev.filter((_, i) => i !== idx));
     }
+  }
+
+  /** Append an AI-generated draft into the editor as new, unsaved (dirty)
+   *  rows. Never persists — the user reviews each section and saves manually.
+   *  Order continues after whatever already exists in each section. */
+  function applyDraft(draft: AiProtocolDraft) {
+    setItems((prev) => {
+      const next = [...prev];
+      const blank = {
+        speakerId: '',
+        heardText: '',
+        discussionText: '',
+        decisionText: '',
+        deadline: '',
+        responsibleId: '',
+      };
+      let aOrd = next.filter((p) => p.section === 'AGENDA').length;
+      let hOrd = next.filter((p) => p.section === 'HEARD').length;
+      let dOrd = next.filter((p) => p.section === 'DECISION').length;
+      for (const a of draft.agenda) {
+        next.push({
+          ...blank,
+          section: 'AGENDA',
+          order: ++aOrd,
+          title: a.title,
+          speakerId: a.speakerId ?? '',
+          dirty: true,
+        });
+      }
+      for (const h of draft.heard) {
+        next.push({
+          ...blank,
+          section: 'HEARD',
+          order: ++hOrd,
+          title: h.title,
+          speakerId: h.speakerId ?? '',
+          heardText: h.heardText,
+          discussionText: h.discussionText,
+          dirty: true,
+        });
+      }
+      for (const d of draft.decisions) {
+        next.push({
+          ...blank,
+          section: 'DECISION',
+          order: ++dOrd,
+          title: d.title,
+          decisionText: d.decisionText,
+          deadline: d.deadline ?? '',
+          responsibleId: d.responsibleId ?? '',
+          dirty: true,
+        });
+      }
+      return next;
+    });
   }
 
   function addItem(section: ProtocolSection) {
@@ -326,6 +399,9 @@ export function ProtocolEditor({ meetingId }: { meetingId: string }) {
         </div>
       </div>
 
+      {/* ШІ-чернетка: секретар пише вільним текстом → ШІ структурує у 3 розділи */}
+      {canEdit && <AiDraftPanel meetingId={meetingId} onApply={applyDraft} />}
+
       {/* Two-column layout: protocol main + narrow attendance rail.
           Stacks vertically on <lg so the attendance card sits below
           on phones / tablets. */}
@@ -412,6 +488,118 @@ export function ProtocolEditor({ meetingId }: { meetingId: string }) {
           </ul>
         </aside>
       </div>
+    </div>
+  );
+}
+
+/* ─────────── ШІ-чернетка протоколу ─────────── */
+
+function AiDraftPanel({
+  meetingId,
+  onApply,
+}: {
+  meetingId: string;
+  onApply: (d: AiProtocolDraft) => void;
+}) {
+  const { data: aiEnabled, isLoading: enabledLoading } = trpc.meeting.aiEnabled.useQuery();
+  const [open, setOpen] = useState(false);
+  const [text, setText] = useState('');
+  const [result, setResult] = useState<string | null>(null);
+
+  const gen = trpc.meeting.generateProtocolDraft.useMutation({
+    onSuccess: (draft) => {
+      onApply(draft);
+      const n = draft.agenda.length + draft.heard.length + draft.decisions.length;
+      setResult(
+        n > 0
+          ? `Додано пунктів: ${n}. Перегляньте розділи нижче та натисніть «Зберегти все».`
+          : 'ШІ не виділив пунктів протоколу з цього тексту — спробуйте описати докладніше.',
+      );
+    },
+  });
+
+  const configured = aiEnabled === true;
+  const tooShort = text.trim().length < 10;
+
+  return (
+    <div className="card overflow-hidden">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className="w-full flex items-center gap-2.5 px-5 py-3.5 text-left hover:bg-pill/50 transition-colors"
+      >
+        <Sparkles className="w-4 h-4 text-brand shrink-0" />
+        <span className="text-sm font-bold text-ink">ШІ-чернетка протоколу</span>
+        <span className="text-xs text-light hidden sm:inline">
+          напишіть своїми словами — ШІ заповнить розділи
+        </span>
+        {!enabledLoading && !configured && (
+          <span className="ml-1 text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-pill text-light">
+            не налаштовано
+          </span>
+        )}
+        <ChevronDown
+          className={`w-4 h-4 text-light ml-auto shrink-0 transition-transform ${open ? 'rotate-180' : ''}`}
+        />
+      </button>
+
+      {open && (
+        <div className="px-5 pb-5 pt-1 border-t border-hairline space-y-3">
+          {!configured ? (
+            <p className="text-xs text-mid leading-relaxed pt-3">
+              Функція вимкнена: не задано змінну середовища{' '}
+              <code className="font-mono text-[11px] bg-pill px-1 py-0.5 rounded">
+                ANTHROPIC_API_KEY
+              </code>
+              . Додайте ключ у налаштуваннях застосунку, щоб увімкнути генерацію.
+            </p>
+          ) : (
+            <>
+              <textarea
+                rows={8}
+                className="textarea resize-y w-full mt-3"
+                placeholder={
+                  'Опишіть засідання вільним текстом. Напр.:\n\nОбговорили поетапний план виконання програми стандартизації на 2026 рік. Доповідала Масленникова — про строки розроблення стандартів. Гуляєв звернув увагу на форму ТЗ за наказом № 832. Вирішили: Жуку підготувати проєкти ТЗ до 1 травня, відповідальний — Іщук.'
+                }
+                value={text}
+                onChange={(e) => {
+                  setText(e.target.value);
+                  if (result) setResult(null);
+                }}
+                disabled={gen.isPending}
+              />
+              {gen.error && (
+                <p className="text-xs text-red-600 dark:text-red-400">{gen.error.message}</p>
+              )}
+              {result && !gen.error && (
+                <p className="text-xs text-emerald-700 dark:text-emerald-400">{result}</p>
+              )}
+              <div className="flex items-center justify-between gap-3">
+                <p className="text-[11px] text-light">
+                  Присутні й дата беруться із засідання. Результат — чернетка, нічого не
+                  зберігається автоматично.
+                </p>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setResult(null);
+                    gen.mutate({ meetingId, rawText: text.trim() });
+                  }}
+                  disabled={gen.isPending || tooShort}
+                  className="btn-primary px-3 py-1.5 text-xs disabled:opacity-50 shrink-0"
+                >
+                  {gen.isPending ? (
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  ) : (
+                    <Sparkles className="w-3.5 h-3.5" />
+                  )}
+                  {gen.isPending ? 'Генерую…' : 'Згенерувати'}
+                </button>
+              </div>
+            </>
+          )}
+        </div>
+      )}
     </div>
   );
 }
