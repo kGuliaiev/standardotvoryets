@@ -198,18 +198,25 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
     );
   }
 
-  // Agenda
+  // Split items by protocol section — each section is its own list. (Without
+  // this filter every section's items leaked into ПОРЯДОК ДЕННИЙ.)
+  const agendaItems = meeting.agendaItems.filter((i) => (i.section ?? 'AGENDA') === 'AGENDA');
+  const heardItems = meeting.agendaItems.filter((i) => i.section === 'HEARD');
+  const decisionItems = meeting.agendaItems.filter((i) => i.section === 'DECISION');
+
+  const speakerLabel = (s: { name: string; rank: string } | null) =>
+    s ? `${rankPrefix(s.rank)}${s.name}` : '';
+
+  // ПОРЯДОК ДЕННИЙ
   children.push(
     new Paragraph({
       spacing: { before: 120, after: 120 },
       children: [new TextRun({ text: 'ПОРЯДОК ДЕННИЙ:', bold: true, size: 24 })],
     }),
   );
-
-  meeting.agendaItems.forEach((item, idx) => {
+  agendaItems.forEach((item, idx) => {
     children.push(
       new Paragraph({
-        numbering: undefined,
         spacing: { after: 80 },
         children: [
           new TextRun({ text: `${idx + 1}. `, bold: true, size: 22 }),
@@ -233,18 +240,20 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
     }
   });
 
-  // СЛУХАЛИ / ВИСТУПИЛИ / ВИРІШИЛИ per agenda item
-  meeting.agendaItems.forEach((item, idx) => {
+  // СЛУХАЛИ / ВИСТУПИЛИ — underlined speaker name leads the narrative
+  heardItems.forEach((item) => {
     if (item.heardText) {
+      const runs: TextRun[] = [];
+      if (item.speaker) {
+        runs.push(new TextRun({ text: `${speakerLabel(item.speaker)} `, underline: {}, size: 22 }));
+      }
+      runs.push(new TextRun({ text: item.heardText, size: 22 }));
       children.push(
         new Paragraph({
           spacing: { before: 200, after: 80 },
           children: [new TextRun({ text: 'СЛУХАЛИ:', bold: true, size: 24 })],
         }),
-        new Paragraph({
-          spacing: { after: 120 },
-          children: [new TextRun({ text: item.heardText, size: 22 })],
-        }),
+        new Paragraph({ spacing: { after: 120 }, children: runs }),
       );
     }
     if (item.discussionText) {
@@ -259,17 +268,24 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
         }),
       );
     }
-    if (item.decisionText) {
+  });
+
+  // ВИРІШИЛИ — single header, decisions numbered within the section
+  const decisionsWithText = decisionItems.filter((i) => i.decisionText);
+  if (decisionsWithText.length > 0) {
+    children.push(
+      new Paragraph({
+        spacing: { before: 200, after: 80 },
+        children: [new TextRun({ text: 'ВИРІШИЛИ:', bold: true, size: 24 })],
+      }),
+    );
+    decisionsWithText.forEach((item, idx) => {
       children.push(
         new Paragraph({
-          spacing: { before: 120, after: 80 },
-          children: [new TextRun({ text: 'ВИРІШИЛИ:', bold: true, size: 24 })],
-        }),
-        new Paragraph({
-          spacing: { after: 60 },
+          spacing: { after: 40 },
           children: [
             new TextRun({ text: `${idx + 1}. `, bold: true, size: 22 }),
-            new TextRun({ text: item.decisionText, size: 22 }),
+            new TextRun({ text: item.decisionText ?? '', size: 22 }),
           ],
         }),
       );
@@ -302,8 +318,8 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
           }),
         );
       }
-    }
-  });
+    });
+  }
 
   // Signatures
   children.push(new Paragraph({ spacing: { before: 480 }, children: [new TextRun({ text: '' })] }));
