@@ -25,6 +25,7 @@
     "prepare": "husky"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.97.1",
     "@auth/prisma-adapter": "^2.7.0",
     "@aws-sdk/client-s3": "^3.1047.0",
     "@aws-sdk/s3-request-presigner": "^3.600.0",

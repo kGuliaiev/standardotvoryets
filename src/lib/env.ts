@@ -24,6 +24,13 @@ const envSchema = z.object({
 
   // ── Cron — shared secret guards /api/cron/* against public traffic ───────
   CRON_SECRET: z.string().optional(),
+
+  // ── Anthropic (ШІ-чернетка протоколу) — optional. If ANTHROPIC_API_KEY is
+  //    unset, the AI draft feature is disabled and the UI shows "не
+  //    налаштовано". ANTHROPIC_MODEL overrides the default model (e.g. set it
+  //    to claude-haiku-4-5 for a cheaper run). ───────────────────────────────
+  ANTHROPIC_API_KEY: z.string().optional(),
+  ANTHROPIC_MODEL: z.string().default('claude-opus-4-7'),
 });
 
 export type Env = z.infer<typeof envSchema>;

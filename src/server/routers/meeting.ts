@@ -10,6 +10,7 @@ import {
   notifyAttendanceDeclined,
   notifyProtocolPublished,
 } from '@/server/notify';
+import { isAiConfigured, generateProtocolDraft } from '@/server/ai/protocol';
 import type { GlobalRole, WorkingGroupRole } from '@prisma/client';
 
 function userCtx(session: {
@@ -416,6 +417,72 @@ export const meetingRouter = createTRPCRouter({
         after: created,
       });
       return created;
+    }),
+
+  // ── aiEnabled: чи налаштований ШІ (ANTHROPIC_API_KEY) ────────────────
+  aiEnabled: protectedProcedure.query(() => isAiConfigured()),
+
+  // ── generateProtocolDraft: ШІ перетворює вільні нотатки на структуру ──
+  //    протоколу (порядок денний / слухали-виступили / вирішили). Повертає
+  //    ЧЕРНЕТКУ — нічого не зберігає в БД. Присутні й дата закріплені з
+  //    даних засідання, не з тексту. Користувач переглядає і зберігає сам.
+  generateProtocolDraft: protectedProcedure
+    .input(
+      z.object({
+        meetingId: z.string().cuid(),
+        rawText: z.string().min(10).max(20000),
+      }),
+    )
+    .mutation(async ({ ctx, input }) => {
+      const meeting = await ctx.db.meeting.findUnique({
+        where: { id: input.meetingId },
+        include: {
+          workingGroup: {
+            select: {
+              code: true,
+              name: true,
+              members: {
+                include: { user: { select: { id: true, name: true, rank: true } } },
+                orderBy: { joinedAt: 'asc' },
+              },
+            },
+          },
+          attendances: {
+            where: { status: 'CONFIRMED' },
+            include: { user: { select: { id: true, name: true, rank: true } } },
+          },
+        },
+      });
+      if (!meeting) throw new TRPCError({ code: 'NOT_FOUND' });
+
+      if (!can(userCtx(ctx.session), 'meeting:uploadMinutes', meeting.workingGroupId)) {
+        throw new TRPCError({ code: 'FORBIDDEN' });
+      }
+      if (!isAiConfigured()) {
+        throw new TRPCError({
+          code: 'PRECONDITION_FAILED',
+          message: 'ШІ не налаштовано (відсутній ANTHROPIC_API_KEY).',
+        });
+      }
+
+      try {
+        return await generateProtocolDraft(input.rawText, {
+          wgCode: meeting.workingGroup.code,
+          wgName: meeting.workingGroup.name,
+          meetingDateISO: meeting.startAt.toISOString().slice(0, 10),
+          attendees: meeting.attendances.map((a) => a.user.name),
+          roster: meeting.workingGroup.members.map((m) => ({
+            id: m.user.id,
+            name: m.user.name,
+            rank: m.user.rank,
+          })),
+        });
+      } catch (e) {
+        throw new TRPCError({
+          code: 'INTERNAL_SERVER_ERROR',
+          message: e instanceof Error ? e.message : 'Помилка ШІ-генерації протоколу.',
+        });
+      }
     }),
 
   // ── deleteAgendaItem ─────────────────────────────────────────────────
