@@ -20,6 +20,7 @@ import {
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import type { AgendaDraft, ProtocolSection } from './ProtocolEditor';
+import { ProtocolText } from './ProtocolText';
 
 interface MemberLite {
   userId: string;
@@ -50,36 +51,6 @@ function rankPrefix(rank?: string | null) {
   if (!rank) return '';
   const r = RANK_LABELS[rank];
   return r ? `${r} ` : '';
-}
-
-function wgNumber(code: string) {
-  return /(\d+)/.exec(code)?.[1] ?? code;
-}
-
-const MONTHS_GEN = [
-  'січня',
-  'лютого',
-  'березня',
-  'квітня',
-  'травня',
-  'червня',
-  'липня',
-  'серпня',
-  'вересня',
-  'жовтня',
-  'листопада',
-  'грудня',
-];
-
-function formatDateUA(d: Date) {
-  return `«${String(d.getDate()).padStart(2, '0')}» ${MONTHS_GEN[d.getMonth()]} ${d.getFullYear()} року`;
-}
-
-function formatDeadline(s: string) {
-  if (!s) return '';
-  const [y, m, d] = s.split('-');
-  if (!y || !m || !d) return s;
-  return `${d}.${m}.${y}`;
 }
 
 const CUSTOM = '__custom__';
@@ -579,13 +550,6 @@ function OverviewBlock({
   presentNames,
   protocolNumber,
 }: OverviewProps) {
-  const date = new Date(meetingStartAt);
-  const wgNum = wgNumber(wgCode);
-  const year = date.getFullYear();
-  const title = protocolNumber
-    ? `ПРОТОКОЛ № ${protocolNumber}/${wgNum}/${year}`
-    : 'ПРОТОКОЛ № _/_/_';
-
   const memberName = (id: string | null | undefined) => {
     if (!id) return '';
     const m = members.find((x) => x.userId === id);
@@ -593,141 +557,38 @@ function OverviewBlock({
   };
   // Roster member by id, else the free-text name (external person).
   const personDisplay = (id: string, name: string) => memberName(id) || name;
+  const personLabel = (u: UserLite | null) => (u ? `${rankPrefix(u.rank)}${u.name}` : '');
 
   return (
     <div className="px-8 py-6 bg-page/40 max-h-[70vh] overflow-y-auto">
-      <div className="max-w-3xl mx-auto font-serif text-ink leading-relaxed">
-        <h3 className="text-center text-base font-bold mb-2">{title}</h3>
-        <p className="text-center text-sm">Засідання робочої групи із стандартизації</p>
-        <p className="text-center text-sm font-bold mb-4">
-          {wgCode}
-          {wgName ? ` «${wgName}»` : ''}
-        </p>
-        <p className="flex justify-between text-sm mb-5">
-          <span>{formatDateUA(date)}</span>
-          <span>м. Київ</span>
-        </p>
-
-        {chairman && (
-          <p className="text-sm mb-1">
-            <span className="text-mid">Головуючий — </span>
-            <span className="font-bold">
-              {rankPrefix(chairman.rank)}
-              {chairman.name}
-            </span>
-            <span className="text-mid"> (керівник робочої групи)</span>
-          </p>
-        )}
-        {secretary && (
-          <p className="text-sm mb-1">
-            <span className="text-mid">Секретар — </span>
-            <span className="font-bold">
-              {rankPrefix(secretary.rank)}
-              {secretary.name}
-            </span>
-          </p>
-        )}
-        {presentNames.length > 0 && (
-          <p className="text-sm mb-4">
-            <span className="text-mid">Присутні: </span>
-            {presentNames.join(', ')}
-          </p>
-        )}
-
-        {agendaItems.length > 0 && (
-          <>
-            <p className="text-sm font-bold mt-4 mb-2">ПОРЯДОК ДЕННИЙ:</p>
-            <ol className="space-y-2 text-sm">
-              {agendaItems.map((it, idx) => (
-                <li key={it.id ?? `oa-${idx}`}>
-                  <p>
-                    <span className="font-bold">{idx + 1}. </span>
-                    {it.title || <span className="text-light italic">(без назви)</span>}
-                  </p>
-                  {(it.speakerId || it.speakerName) && (
-                    <p className="text-xs italic text-mid pl-5">
-                      Доповідач: {personDisplay(it.speakerId, it.speakerName)}.
-                    </p>
-                  )}
-                </li>
-              ))}
-            </ol>
-          </>
-        )}
-
-        {heardItems.map((it, idx) => (
-          <div key={it.id ?? `oh-${idx}`} className="mt-5 text-sm">
-            {it.heardText && (
-              <>
-                <p className="font-bold mb-1">СЛУХАЛИ:</p>
-                <p className="whitespace-pre-line text-justify">
-                  {(it.speakerId || it.speakerName) && (
-                    <span className="underline">
-                      {personDisplay(it.speakerId, it.speakerName)}{' '}
-                    </span>
-                  )}
-                  {it.heardText}
-                </p>
-              </>
-            )}
-            {it.discussionText && (
-              <>
-                <p className="font-bold mt-2 mb-1">ВИСТУПИЛИ:</p>
-                <p className="whitespace-pre-line text-justify">{it.discussionText}</p>
-              </>
-            )}
-          </div>
-        ))}
-
-        {decisionItems.length > 0 && (
-          <div className="mt-5">
-            <p className="text-sm font-bold mb-2">ВИРІШИЛИ:</p>
-            <ol className="space-y-2 text-sm">
-              {decisionItems.map((it, idx) => (
-                <li key={it.id ?? `od-${idx}`}>
-                  <p className="text-justify">
-                    <span className="font-bold">{idx + 1}. </span>
-                    <span className="whitespace-pre-line">{it.decisionText || it.title}</span>
-                  </p>
-                  {it.deadline && (
-                    <p className="italic text-xs mt-1 pl-5">
-                      Термін: до {formatDeadline(it.deadline)}.
-                    </p>
-                  )}
-                  {(it.responsibleId || it.responsibleName) && (
-                    <p className="italic text-xs pl-5">
-                      Відповідальний: {personDisplay(it.responsibleId, it.responsibleName)}.
-                    </p>
-                  )}
-                </li>
-              ))}
-            </ol>
-          </div>
-        )}
-
-        <div className="mt-10 grid grid-cols-2 gap-6 text-sm">
-          {chairman && (
-            <p>
-              <span className="text-mid">Головуючий</span>
-              <br />
-              <span className="font-bold">
-                {rankPrefix(chairman.rank)}
-                {chairman.name}
-              </span>
-            </p>
-          )}
-          {secretary && (
-            <p>
-              <span className="text-mid">Секретар</span>
-              <br />
-              <span className="font-bold">
-                {rankPrefix(secretary.rank)}
-                {secretary.name}
-              </span>
-            </p>
-          )}
-        </div>
-      </div>
+      <ProtocolText
+        protocolNumber={protocolNumber}
+        wgCode={wgCode}
+        wgName={wgName}
+        date={new Date(meetingStartAt)}
+        chairman={personLabel(chairman)}
+        secretary={personLabel(secretary)}
+        presentNames={presentNames}
+        agenda={agendaItems.map((it, i) => ({
+          key: it.id ?? `oa-${i}`,
+          title: it.title,
+          speaker: personDisplay(it.speakerId, it.speakerName),
+        }))}
+        heard={heardItems.map((it, i) => ({
+          key: it.id ?? `oh-${i}`,
+          title: it.title,
+          speaker: personDisplay(it.speakerId, it.speakerName),
+          heardText: it.heardText,
+          discussionText: it.discussionText,
+        }))}
+        decisions={decisionItems.map((it, i) => ({
+          key: it.id ?? `od-${i}`,
+          title: it.title,
+          decisionText: it.decisionText,
+          deadline: it.deadline,
+          responsible: personDisplay(it.responsibleId, it.responsibleName),
+        }))}
+      />
     </div>
   );
 }

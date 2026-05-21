@@ -11,7 +11,8 @@ import { ConfirmModal } from '@/components/ui/ConfirmModal';
 import { ActivityFeed } from '@/components/ActivityFeed';
 import { can } from '@/lib/rbac';
 import { useEscape } from '@/lib/useEscape';
-import { rankWeight, extractSurname } from '@/lib/ranks';
+import { rankWeight, extractSurname, rankLabel } from '@/lib/ranks';
+import { ProtocolText } from './protocol/ProtocolText';
 import type { GlobalRole, WorkingGroupRole } from '@prisma/client';
 
 // Short UA weekday, indexed by Date.getDay() (0 = Sunday).
@@ -388,52 +389,72 @@ export function MeetingDetail({ id }: Props) {
                 )}
 
                 {started && hasItems && (
-                  <div className="space-y-4 text-sm">
+                  <div className="max-h-[60vh] overflow-y-auto -mx-1 px-1">
                     {(() => {
-                      const sections = [
-                        { key: 'AGENDA', label: 'ПОРЯДОК ДЕННИЙ' },
-                        { key: 'HEARD', label: 'СЛУХАЛИ / ВИСТУПИЛИ' },
-                        { key: 'DECISION', label: 'ВИРІШИЛИ' },
-                      ] as const;
-                      return sections.map((sec) => {
-                        const items = meeting.agendaItems.filter(
-                          (it) => (it.section ?? 'AGENDA') === sec.key,
-                        );
-                        if (items.length === 0) return null;
-                        return (
-                          <div key={sec.key}>
-                            <p className="text-[11px] font-bold uppercase tracking-wide text-light mb-1.5">
-                              {sec.label}
-                            </p>
-                            <ol className="space-y-1.5">
-                              {items.map((it, idx) => (
-                                <li key={it.id} className="text-mid leading-snug">
-                                  <span className="font-bold text-ink">{idx + 1}. </span>
-                                  {it.title || (
-                                    <span className="text-light italic">(без назви)</span>
-                                  )}
-                                  {sec.key === 'AGENDA' && it.speaker && (
-                                    <span className="text-light italic ml-1">
-                                      · доповідач {it.speaker.name}
-                                    </span>
-                                  )}
-                                  {sec.key === 'HEARD' && it.heardText && (
-                                    <p className="text-xs text-light italic mt-0.5 pl-4 line-clamp-2">
-                                      {it.heardText}
-                                    </p>
-                                  )}
-                                  {sec.key === 'DECISION' && it.deadline && (
-                                    <p className="text-xs text-light italic mt-0.5 pl-4">
-                                      Термін: до {new Date(it.deadline).toLocaleDateString('uk-UA')}
-                                      {it.responsible && ` · ${it.responsible.name}`}
-                                    </p>
-                                  )}
-                                </li>
-                              ))}
-                            </ol>
-                          </div>
-                        );
-                      });
+                      const rp = (rank?: string | null) => {
+                        const l = rankLabel(rank as Parameters<typeof rankLabel>[0]);
+                        return l ? `${l} ` : '';
+                      };
+                      const speakerOf = (it: (typeof meeting.agendaItems)[number]) =>
+                        it.speaker
+                          ? `${rp(it.speaker.rank)}${it.speaker.name}`
+                          : (it.speakerName ?? '');
+                      const respOf = (it: (typeof meeting.agendaItems)[number]) =>
+                        it.responsible
+                          ? `${rp(it.responsible.rank)}${it.responsible.name}`
+                          : (it.responsibleName ?? '');
+                      const toISO = (d: Date | string | null) =>
+                        d ? new Date(d).toISOString().slice(0, 10) : '';
+                      const leaderUser =
+                        meeting.workingGroup.members.find((m) => m.role === 'LEADER')?.user ?? null;
+                      const secretaryUser =
+                        meeting.workingGroup.members.find((m) => m.role === 'SECRETARY')?.user ??
+                        null;
+                      const chairmanUser = meeting.chairman ?? leaderUser;
+                      const present = meeting.attendances
+                        .filter(
+                          (a) =>
+                            a.status === 'CONFIRMED' &&
+                            a.user.id !== chairmanUser?.id &&
+                            a.user.id !== secretaryUser?.id,
+                        )
+                        .map((a) => a.user.name);
+                      const bySection = (key: 'AGENDA' | 'HEARD' | 'DECISION') =>
+                        meeting.agendaItems.filter((it) => (it.section ?? 'AGENDA') === key);
+                      return (
+                        <ProtocolText
+                          protocolNumber={meeting.protocolNumber ?? null}
+                          wgCode={meeting.workingGroup.code}
+                          wgName={meeting.workingGroup.name}
+                          date={new Date(meeting.startAt)}
+                          chairman={
+                            chairmanUser ? `${rp(chairmanUser.rank)}${chairmanUser.name}` : ''
+                          }
+                          secretary={
+                            secretaryUser ? `${rp(secretaryUser.rank)}${secretaryUser.name}` : ''
+                          }
+                          presentNames={present}
+                          agenda={bySection('AGENDA').map((it, i) => ({
+                            key: it.id ?? `a${i}`,
+                            title: it.title,
+                            speaker: speakerOf(it),
+                          }))}
+                          heard={bySection('HEARD').map((it, i) => ({
+                            key: it.id ?? `h${i}`,
+                            title: it.title,
+                            speaker: speakerOf(it),
+                            heardText: it.heardText ?? '',
+                            discussionText: it.discussionText ?? '',
+                          }))}
+                          decisions={bySection('DECISION').map((it, i) => ({
+                            key: it.id ?? `d${i}`,
+                            title: it.title,
+                            decisionText: it.decisionText ?? '',
+                            deadline: toISO(it.deadline),
+                            responsible: respOf(it),
+                          }))}
+                        />
+                      );
                     })()}
                   </div>
                 )}
