@@ -27,6 +27,11 @@ declare module 'next-auth/jwt' {
   interface JWT {
     id: string;
     globalRole: string;
+    memberships?: {
+      workingGroupId: string;
+      role: string;
+      workingGroup: { code: string; color: string };
+    }[];
   }
 }
 
@@ -72,26 +77,23 @@ export const authOptions: NextAuthOptions = {
     }),
   ],
   callbacks: {
-    jwt({ token, user }) {
+    async jwt({ token, user, trigger }) {
       if (user) {
         token.id = user.id;
         token.globalRole = user.globalRole;
       }
-      return token;
-    },
-    async session({ session, token }) {
-      if (token) {
-        session.user.id = token.id;
-        session.user.globalRole = token.globalRole;
-
-        // Load memberships for RBAC. Wrapped in try/catch so a DB
-        // outage doesn't throw a JWT_SESSION_ERROR (which floods the
-        // logs with a full Prisma stack on every page load and breaks
-        // the session). During an outage we degrade gracefully:
-        // return the session with empty memberships; the next refresh
-        // re-populates them once the DB is back.
+      // Cache WG memberships IN THE TOKEN — refreshed on sign-in, on an
+      // explicit session.update(), or once if the token has none yet. The
+      // `session` callback below then needs NO database access, so the
+      // /api/auth/session revalidation (run by the client on focus/mount) is
+      // a pure JWT decode. Previously memberships were loaded in `session` on
+      // every revalidation; a DB hiccup could hang that request, the client
+      // session would resolve to null, and the user lost all rights (admins
+      // included, since globalRole then read as undefined). On a DB failure
+      // here we keep the last-known memberships rather than wiping them.
+      if (token.id && (Boolean(user) || trigger === 'update' || token.memberships === undefined)) {
         try {
-          const memberships = await db.workingGroupMember.findMany({
+          token.memberships = await db.workingGroupMember.findMany({
             where: { userId: token.id },
             select: {
               workingGroupId: true,
@@ -99,12 +101,19 @@ export const authOptions: NextAuthOptions = {
               workingGroup: { select: { code: true, color: true } },
             },
           });
-          session.user.memberships = memberships;
         } catch (e) {
           const msg = e instanceof Error ? e.message.split('\n')[0] : String(e);
-          console.warn('[auth.session] memberships load failed (DB down?):', msg);
-          session.user.memberships = [];
+          console.warn('[auth.jwt] memberships load failed (DB down?):', msg);
+          token.memberships = token.memberships ?? [];
         }
+      }
+      return token;
+    },
+    session({ session, token }) {
+      if (token) {
+        session.user.id = token.id;
+        session.user.globalRole = token.globalRole;
+        session.user.memberships = token.memberships ?? [];
       }
       return session;
     },
