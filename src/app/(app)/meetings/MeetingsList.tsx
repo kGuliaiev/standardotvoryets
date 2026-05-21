@@ -744,10 +744,11 @@ function WeekView({
                           ? `Створити засідання · ${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`
                           : undefined
                       }
-                      className={`absolute left-0 right-0 ${
-                        m === 0
-                          ? 'border-b border-hairline'
-                          : 'border-b border-dashed border-hairline/50'
+                      className={`absolute left-0 right-0 border-b border-hairline ${
+                        // The slot's bottom edge lands on the hour when m === 30
+                        // (e.g. 08:30 slot ends at 09:00) → solid; the 08:00 slot
+                        // ends at 08:30 → dashed. Same grey for both.
+                        m === 30 ? '' : 'border-dashed'
                       } ${canCreate ? 'hover:bg-brand-soft/40' : 'cursor-default'}`}
                       style={{ top: s * WV_SLOT_PX, height: WV_SLOT_PX }}
                     />
