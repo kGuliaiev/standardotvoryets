@@ -550,14 +550,15 @@ function OverviewBlock({
   presentNames,
   protocolNumber,
 }: OverviewProps) {
+  // Protocol text uses only «Ім'я ПРІЗВИЩЕ» — no military rank prefix.
   const memberName = (id: string | null | undefined) => {
     if (!id) return '';
     const m = members.find((x) => x.userId === id);
-    return m ? `${rankPrefix(m.user.rank)}${m.user.name}` : '';
+    return m ? m.user.name : '';
   };
   // Roster member by id, else the free-text name (external person).
   const personDisplay = (id: string, name: string) => memberName(id) || name;
-  const personLabel = (u: UserLite | null) => (u ? `${rankPrefix(u.rank)}${u.name}` : '');
+  const personLabel = (u: UserLite | null) => u?.name ?? '';
 
   return (
     <div className="px-8 py-6 bg-page/40 max-h-[70vh] overflow-y-auto">

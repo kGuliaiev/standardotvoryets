@@ -6,26 +6,6 @@ import { Document, Page, Text, View, StyleSheet, renderToBuffer, Font } from '@r
 import { createElement, type ReactElement, type ReactNode } from 'react';
 import type { DocumentProps } from '@react-pdf/renderer';
 
-const RANK_LABELS: Record<string, string> = {
-  CIVILIAN: '',
-  LIEUTENANT: 'лейтенант',
-  SENIOR_LIEUTENANT: 'старший лейтенант',
-  CAPTAIN: 'капітан',
-  MAJOR: 'майор',
-  LIEUTENANT_COLONEL: 'підполковник',
-  COLONEL: 'полковник',
-  BRIGADIER_GENERAL: 'бригадний генерал',
-  MAJOR_GENERAL: 'генерал-майор',
-  LIEUTENANT_GENERAL: 'генерал-лейтенант',
-  GENERAL: 'генерал',
-};
-
-function rankPrefix(rank?: string | null) {
-  if (!rank) return '';
-  const r = RANK_LABELS[rank];
-  return r ? `${r} ` : '';
-}
-
 function wgNumber(code: string) {
   return /(\d+)/.exec(code)?.[1] ?? code;
 }
@@ -120,8 +100,9 @@ interface ProtocolData {
 function fmtDeadline(d: Date) {
   return `${String(d.getDate()).padStart(2, '0')}.${String(d.getMonth() + 1).padStart(2, '0')}.${d.getFullYear()}`;
 }
+// Protocol uses only «Ім'я ПРІЗВИЩЕ» — no military rank.
 function personLabel(p: Person | null) {
-  return p ? `${rankPrefix(p.rank)}${p.name}` : '';
+  return p ? p.name : '';
 }
 // Roster member (rank + name) wins; otherwise the free-text external name.
 function speakerOf(it: Item) {
@@ -190,12 +171,10 @@ function ProtocolDoc({ d }: { d: ProtocolData }) {
     body.push(
       createElement(Text, { key: `a-${idx}`, style: styles.item }, `${idx + 1}. ${it.title}`),
     );
-    if (it.speaker || it.speakerName) {
-      const label = it.speaker
-        ? `${it.speaker.position ? `${it.speaker.position} ` : ''}${personLabel(it.speaker)}`
-        : it.speakerName;
+    const speaker = speakerOf(it);
+    if (speaker) {
       body.push(
-        createElement(Text, { key: `a-sp-${idx}`, style: styles.meta }, `Доповідач: ${label}.`),
+        createElement(Text, { key: `a-sp-${idx}`, style: styles.meta }, `Доповідач: ${speaker}.`),
       );
     }
   });
@@ -339,6 +318,15 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
       (a) => a.status === 'CONFIRMED' && a.user.id !== chairman?.id && a.user.id !== secretary?.id,
     )
     .map((a) => a.user.name);
+  // External presenters (free-text speakers not in the WG roster) were present.
+  const extraPresent = Array.from(
+    new Set(
+      meeting.agendaItems
+        .filter((i) => (i.section ?? 'AGENDA') === 'AGENDA' || i.section === 'HEARD')
+        .map((i) => (i.speakerName ?? '').trim())
+        .filter((n) => n.length > 0),
+    ),
+  ).filter((n) => !presentNames.includes(n));
 
   const data: ProtocolData = {
     protoTitle: `ПРОТОКОЛ № ${meeting.protocolNumber ?? '_'}/${wgNumber(meeting.workingGroup.code)}/${year}`,
@@ -346,7 +334,7 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
     dateLine,
     chairman: chairman ?? null,
     secretary: secretary ?? null,
-    presentNames,
+    presentNames: [...presentNames, ...extraPresent],
     agenda: meeting.agendaItems.filter((i) => (i.section ?? 'AGENDA') === 'AGENDA'),
     heard: meeting.agendaItems.filter((i) => i.section === 'HEARD'),
     decisions: meeting.agendaItems.filter((i) => i.section === 'DECISION'),

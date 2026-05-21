@@ -11,7 +11,7 @@ import { ConfirmModal } from '@/components/ui/ConfirmModal';
 import { ActivityFeed } from '@/components/ActivityFeed';
 import { can } from '@/lib/rbac';
 import { useEscape } from '@/lib/useEscape';
-import { rankWeight, extractSurname, rankLabel } from '@/lib/ranks';
+import { rankWeight, extractSurname } from '@/lib/ranks';
 import { ProtocolText } from './protocol/ProtocolText';
 import type { GlobalRole, WorkingGroupRole } from '@prisma/client';
 
@@ -391,18 +391,11 @@ export function MeetingDetail({ id }: Props) {
                 {started && hasItems && (
                   <div className="max-h-[60vh] overflow-y-auto -mx-1 px-1">
                     {(() => {
-                      const rp = (rank?: string | null) => {
-                        const l = rankLabel(rank as Parameters<typeof rankLabel>[0]);
-                        return l ? `${l} ` : '';
-                      };
+                      // Protocol text uses only «Ім'я ПРІЗВИЩЕ» — no rank.
                       const speakerOf = (it: (typeof meeting.agendaItems)[number]) =>
-                        it.speaker
-                          ? `${rp(it.speaker.rank)}${it.speaker.name}`
-                          : (it.speakerName ?? '');
+                        it.speaker ? it.speaker.name : (it.speakerName ?? '');
                       const respOf = (it: (typeof meeting.agendaItems)[number]) =>
-                        it.responsible
-                          ? `${rp(it.responsible.rank)}${it.responsible.name}`
-                          : (it.responsibleName ?? '');
+                        it.responsible ? it.responsible.name : (it.responsibleName ?? '');
                       const toISO = (d: Date | string | null) =>
                         d ? new Date(d).toISOString().slice(0, 10) : '';
                       const leaderUser =
@@ -411,6 +404,8 @@ export function MeetingDetail({ id }: Props) {
                         meeting.workingGroup.members.find((m) => m.role === 'SECRETARY')?.user ??
                         null;
                       const chairmanUser = meeting.chairman ?? leaderUser;
+                      const bySection = (key: 'AGENDA' | 'HEARD' | 'DECISION') =>
+                        meeting.agendaItems.filter((it) => (it.section ?? 'AGENDA') === key);
                       const present = meeting.attendances
                         .filter(
                           (a) =>
@@ -419,21 +414,25 @@ export function MeetingDetail({ id }: Props) {
                             a.user.id !== secretaryUser?.id,
                         )
                         .map((a) => a.user.name);
-                      const bySection = (key: 'AGENDA' | 'HEARD' | 'DECISION') =>
-                        meeting.agendaItems.filter((it) => (it.section ?? 'AGENDA') === key);
+                      // External presenters (free-text speakers, not WG members)
+                      // were present too — add them so a доповідач isn't missing.
+                      const extraPresent = Array.from(
+                        new Set(
+                          [...bySection('AGENDA'), ...bySection('HEARD')]
+                            .map((it) => (it.speakerName ?? '').trim())
+                            .filter((n) => n.length > 0),
+                        ),
+                      ).filter((n) => !present.includes(n));
+                      const presentAll = [...present, ...extraPresent];
                       return (
                         <ProtocolText
                           protocolNumber={meeting.protocolNumber ?? null}
                           wgCode={meeting.workingGroup.code}
                           wgName={meeting.workingGroup.name}
                           date={new Date(meeting.startAt)}
-                          chairman={
-                            chairmanUser ? `${rp(chairmanUser.rank)}${chairmanUser.name}` : ''
-                          }
-                          secretary={
-                            secretaryUser ? `${rp(secretaryUser.rank)}${secretaryUser.name}` : ''
-                          }
-                          presentNames={present}
+                          chairman={chairmanUser ? chairmanUser.name : ''}
+                          secretary={secretaryUser ? secretaryUser.name : ''}
+                          presentNames={presentAll}
                           agenda={bySection('AGENDA').map((it, i) => ({
                             key: it.id ?? `a${i}`,
                             title: it.title,

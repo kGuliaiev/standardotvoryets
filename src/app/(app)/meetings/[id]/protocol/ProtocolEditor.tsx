@@ -366,6 +366,17 @@ export function ProtocolEditor({ meetingId }: { meetingId: string }) {
         a.user.id !== secretaryUser?.id,
     )
     .map((a) => a.user.name);
+  // External presenters (free-text speakers not in the WG roster) were present
+  // too — add their names to «Присутні» so a доповідач never goes unlisted.
+  const extraPresent = Array.from(
+    new Set(
+      items
+        .filter((it) => it.section === 'AGENDA' || it.section === 'HEARD')
+        .map((it) => it.speakerName.trim())
+        .filter((n) => n.length > 0),
+    ),
+  ).filter((n) => !presentNames.includes(n));
+  const presentAll = [...presentNames, ...extraPresent];
 
   // Short Ukrainian role labels for the slim attendance sidebar
   const ROLE_SHORT: Record<string, string> = {
@@ -552,7 +563,7 @@ export function ProtocolEditor({ meetingId }: { meetingId: string }) {
           meetingStartAt={meeting.startAt}
           wgCode={meeting.workingGroup.code}
           wgName={meeting.workingGroup.name}
-          presentNames={presentNames}
+          presentNames={presentAll}
           protocolNumber={meeting.protocolNumber ?? null}
           canEdit={canEdit}
           savingAll={savingAll}

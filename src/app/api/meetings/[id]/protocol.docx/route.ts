@@ -13,25 +13,6 @@ import {
   PageOrientation,
 } from 'docx';
 
-const RANK_LABELS: Record<string, string> = {
-  CIVILIAN: '',
-  LIEUTENANT: 'лейтенант',
-  SENIOR_LIEUTENANT: 'старший лейтенант',
-  CAPTAIN: 'капітан',
-  MAJOR: 'майор',
-  LIEUTENANT_COLONEL: 'підполковник',
-  COLONEL: 'полковник',
-  BRIGADIER_GENERAL: 'бригадний генерал',
-  MAJOR_GENERAL: 'генерал-майор',
-  LIEUTENANT_GENERAL: 'генерал-лейтенант',
-  GENERAL: 'генерал',
-};
-
-function rankPrefix(rank: string) {
-  const r = RANK_LABELS[rank];
-  return r ? `${r} ` : '';
-}
-
 function wgNumber(code: string) {
   const m = /(\d+)/.exec(code);
   return m ? m[1] : code;
@@ -116,6 +97,17 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
       (a) => a.status === 'CONFIRMED' && a.user.id !== chairman?.id && a.user.id !== secretary?.id,
     )
     .map((a) => a.user.name);
+  // External presenters (free-text speakers not in the WG roster) were present
+  // too — add their names so a доповідач isn't missing from «Присутні».
+  const extraPresent = Array.from(
+    new Set(
+      meeting.agendaItems
+        .filter((i) => (i.section ?? 'AGENDA') === 'AGENDA' || i.section === 'HEARD')
+        .map((i) => (i.speakerName ?? '').trim())
+        .filter((n) => n.length > 0),
+    ),
+  ).filter((n) => !presentNames.includes(n));
+  const presentAll = [...presentNames, ...extraPresent];
 
   const protoNum = meeting.protocolNumber ?? '_';
   const protoTitle = `ПРОТОКОЛ № ${protoNum}/${wgNumber(meeting.workingGroup.code)}/${year}`;
@@ -161,11 +153,7 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
         spacing: { after: 60 },
         children: [
           new TextRun({ text: 'Головуючий — ', size: 22 }),
-          new TextRun({
-            text: `${rankPrefix(chairman.rank)}${chairman.name}`,
-            bold: true,
-            size: 22,
-          }),
+          new TextRun({ text: chairman.name, bold: true, size: 22 }),
           new TextRun({ text: ' (керівник робочої групи)', size: 22 }),
         ],
       }),
@@ -177,22 +165,18 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
         spacing: { after: 60 },
         children: [
           new TextRun({ text: 'Секретар — ', size: 22 }),
-          new TextRun({
-            text: `${rankPrefix(secretary.rank)}${secretary.name}`,
-            bold: true,
-            size: 22,
-          }),
+          new TextRun({ text: secretary.name, bold: true, size: 22 }),
         ],
       }),
     );
   }
-  if (presentNames.length > 0) {
+  if (presentAll.length > 0) {
     children.push(
       new Paragraph({
         spacing: { after: 240 },
         children: [
           new TextRun({ text: 'Присутні: ', size: 22 }),
-          new TextRun({ text: presentNames.join(', '), size: 22 }),
+          new TextRun({ text: presentAll.join(', '), size: 22 }),
         ],
       }),
     );
@@ -204,19 +188,14 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
   const heardItems = meeting.agendaItems.filter((i) => i.section === 'HEARD');
   const decisionItems = meeting.agendaItems.filter((i) => i.section === 'DECISION');
 
-  // Speaker/responsible display: roster member (rank + name) wins; otherwise
-  // the free-text name entered for an external person.
-  const speakerOf = (it: {
-    speaker: { name: string; rank: string } | null;
-    speakerName: string | null;
-  }) => (it.speaker ? `${rankPrefix(it.speaker.rank)}${it.speaker.name}` : (it.speakerName ?? ''));
+  // Speaker/responsible display: roster member name wins; otherwise the
+  // free-text name. No military rank — only «Ім'я ПРІЗВИЩЕ».
+  const speakerOf = (it: { speaker: { name: string } | null; speakerName: string | null }) =>
+    it.speaker ? it.speaker.name : (it.speakerName ?? '');
   const responsibleOf = (it: {
-    responsible: { name: string; rank: string } | null;
+    responsible: { name: string } | null;
     responsibleName: string | null;
-  }) =>
-    it.responsible
-      ? `${rankPrefix(it.responsible.rank)}${it.responsible.name}`
-      : (it.responsibleName ?? '');
+  }) => (it.responsible ? it.responsible.name : (it.responsibleName ?? ''));
 
   // ПОРЯДОК ДЕННИЙ
   children.push(
@@ -235,14 +214,12 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
         ],
       }),
     );
-    if (item.speaker || item.speakerName) {
-      const txt = item.speaker
-        ? `${item.speaker.position ? item.speaker.position + ' ' : ''}${rankPrefix(item.speaker.rank)}${item.speaker.name}`
-        : item.speakerName;
+    const speaker = speakerOf(item);
+    if (speaker) {
       children.push(
         new Paragraph({
           spacing: { after: 80 },
-          children: [new TextRun({ text: `Доповідач: ${txt}.`, italics: true, size: 22 })],
+          children: [new TextRun({ text: `Доповідач: ${speaker}.`, italics: true, size: 22 })],
         }),
       );
     }
@@ -334,10 +311,7 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
         spacing: { after: 240 },
         children: [
           new TextRun({ text: 'Головуючий', size: 22 }),
-          new TextRun({
-            text: `\t${rankPrefix(chairman.rank)}${chairman.name}`,
-            size: 22,
-          }),
+          new TextRun({ text: `\t${chairman.name}`, size: 22 }),
         ],
       }),
     );
@@ -348,10 +322,7 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
         tabStops: [{ type: TabStopType.RIGHT, position: TabStopPosition.MAX }],
         children: [
           new TextRun({ text: 'Секретар', size: 22 }),
-          new TextRun({
-            text: `\t${rankPrefix(secretary.rank)}${secretary.name}`,
-            size: 22,
-          }),
+          new TextRun({ text: `\t${secretary.name}`, size: 22 }),
         ],
       }),
     );
