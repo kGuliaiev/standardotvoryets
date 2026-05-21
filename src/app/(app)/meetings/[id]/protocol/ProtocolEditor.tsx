@@ -92,6 +92,11 @@ export function ProtocolEditor({ meetingId }: { meetingId: string }) {
   const [items, setItems] = useState<AgendaDraft[]>([]);
   const [chairmanId, setChairmanId] = useState('');
   const [savingAll, setSavingAll] = useState(false);
+  // AI draft flow: bump aiPanelKey to remount (collapse + clear) the panel;
+  // pendingDraft holds a generated draft awaiting the replace/append choice.
+  const [aiPanelKey, setAiPanelKey] = useState(0);
+  const [pendingDraft, setPendingDraft] = useState<AiProtocolDraft | null>(null);
+  const [aiNote, setAiNote] = useState<string | null>(null);
 
   useEffect(() => {
     if (!meeting) return;
@@ -132,6 +137,14 @@ export function ProtocolEditor({ meetingId }: { meetingId: string }) {
     return can(userCtx, 'meeting:uploadMinutes', meeting.workingGroup.id);
   }, [userCtx, meeting]);
 
+  // Separate permission for the AI-draft button (configurable in
+  // /admin/permissions). Editing rights are still required to auto-save.
+  const canAiDraft = useMemo(() => {
+    if (!userCtx || !meeting) return false;
+    if (userCtx.globalRole === 'ADMIN') return true;
+    return can(userCtx, 'meeting:generateAiDraft', meeting.workingGroup.id);
+  }, [userCtx, meeting]);
+
   const upsertItemMutation = trpc.meeting.upsertAgendaItem.useMutation({
     onSuccess: () => void utils.meeting.byId.invalidate({ id: meetingId }),
   });
@@ -148,6 +161,24 @@ export function ProtocolEditor({ meetingId }: { meetingId: string }) {
     onSuccess: () => void utils.meeting.byId.invalidate({ id: meetingId }),
   });
 
+  function payloadFor(it: AgendaDraft) {
+    return {
+      id: it.id,
+      meetingId,
+      order: it.order,
+      section: it.section,
+      title: it.title || `Пункт ${it.order}`,
+      speakerId: it.speakerId === '' ? null : it.speakerId,
+      speakerName: it.speakerName.trim() || null,
+      heardText: it.heardText.trim() || null,
+      discussionText: it.discussionText.trim() || null,
+      decisionText: it.decisionText.trim() || null,
+      deadline: it.deadline ? new Date(it.deadline) : null,
+      responsibleId: it.responsibleId === '' ? null : it.responsibleId,
+      responsibleName: it.responsibleName.trim() || null,
+    };
+  }
+
   async function saveAll() {
     if (!canEdit) return;
     const dirty = items.filter((it) => it.dirty || !it.id);
@@ -155,23 +186,8 @@ export function ProtocolEditor({ meetingId }: { meetingId: string }) {
     setSavingAll(true);
     try {
       for (const it of dirty) {
-        const due = it.deadline ? new Date(it.deadline) : null;
         // eslint-disable-next-line no-await-in-loop
-        const saved = await upsertItemMutation.mutateAsync({
-          id: it.id,
-          meetingId,
-          order: it.order,
-          section: it.section,
-          title: it.title || `Пункт ${it.order}`,
-          speakerId: it.speakerId === '' ? null : it.speakerId,
-          speakerName: it.speakerName.trim() || null,
-          heardText: it.heardText.trim() || null,
-          discussionText: it.discussionText.trim() || null,
-          decisionText: it.decisionText.trim() || null,
-          deadline: due,
-          responsibleId: it.responsibleId === '' ? null : it.responsibleId,
-          responsibleName: it.responsibleName.trim() || null,
-        });
+        const saved = await upsertItemMutation.mutateAsync(payloadFor(it));
         // Replace the draft with the saved version (id + reset dirty flag)
         setItems((prev) =>
           prev.map((p) =>
@@ -196,64 +212,107 @@ export function ProtocolEditor({ meetingId }: { meetingId: string }) {
     }
   }
 
-  /** Append an AI-generated draft into the editor as new, unsaved (dirty)
-   *  rows. Never persists — the user reviews each section and saves manually.
-   *  Order continues after whatever already exists in each section. */
-  function applyDraft(draft: AiProtocolDraft) {
-    setItems((prev) => {
-      const next = [...prev];
-      const blank = {
-        speakerId: '',
-        speakerName: '',
-        heardText: '',
-        discussionText: '',
-        decisionText: '',
-        deadline: '',
-        responsibleId: '',
-        responsibleName: '',
-      };
-      let aOrd = next.filter((p) => p.section === 'AGENDA').length;
-      let hOrd = next.filter((p) => p.section === 'HEARD').length;
-      let dOrd = next.filter((p) => p.section === 'DECISION').length;
-      for (const a of draft.agenda) {
-        next.push({
-          ...blank,
-          section: 'AGENDA',
-          order: ++aOrd,
-          title: a.title,
-          speakerId: a.speakerId ?? '',
-          speakerName: a.speakerName ?? '',
-          dirty: true,
-        });
+  /** Convert an AI draft into editor rows (all new + dirty). Order continues
+   *  after whatever already exists in each section of `base`. */
+  function draftToRows(draft: AiProtocolDraft, base: AgendaDraft[]): AgendaDraft[] {
+    const blank = {
+      speakerId: '',
+      speakerName: '',
+      heardText: '',
+      discussionText: '',
+      decisionText: '',
+      deadline: '',
+      responsibleId: '',
+      responsibleName: '',
+    };
+    let aOrd = base.filter((p) => p.section === 'AGENDA').length;
+    let hOrd = base.filter((p) => p.section === 'HEARD').length;
+    let dOrd = base.filter((p) => p.section === 'DECISION').length;
+    const rows: AgendaDraft[] = [];
+    for (const a of draft.agenda) {
+      rows.push({
+        ...blank,
+        section: 'AGENDA',
+        order: ++aOrd,
+        title: a.title,
+        speakerId: a.speakerId ?? '',
+        speakerName: a.speakerName ?? '',
+        dirty: true,
+      });
+    }
+    for (const h of draft.heard) {
+      rows.push({
+        ...blank,
+        section: 'HEARD',
+        order: ++hOrd,
+        title: h.title,
+        speakerId: h.speakerId ?? '',
+        speakerName: h.speakerName ?? '',
+        heardText: h.heardText,
+        discussionText: h.discussionText,
+        dirty: true,
+      });
+    }
+    for (const d of draft.decisions) {
+      rows.push({
+        ...blank,
+        section: 'DECISION',
+        order: ++dOrd,
+        title: d.title,
+        decisionText: d.decisionText,
+        deadline: d.deadline ?? '',
+        responsibleId: d.responsibleId ?? '',
+        responsibleName: d.responsibleName ?? '',
+        dirty: true,
+      });
+    }
+    return rows;
+  }
+
+  /** Insert an AI draft and persist immediately. `replace` first deletes the
+   *  existing protocol items; `append` keeps them and adds after. Always
+   *  collapses + clears the AI panel afterwards. */
+  async function applyAndSave(draft: AiProtocolDraft, mode: 'replace' | 'append') {
+    if (!canEdit) return;
+    setSavingAll(true);
+    setAiNote(null);
+    try {
+      if (mode === 'replace') {
+        const ids = items.filter((it) => it.id).map((it) => it.id!);
+        for (const id of ids) {
+          // eslint-disable-next-line no-await-in-loop
+          await deleteItemMutation.mutateAsync({ id });
+        }
       }
-      for (const h of draft.heard) {
-        next.push({
-          ...blank,
-          section: 'HEARD',
-          order: ++hOrd,
-          title: h.title,
-          speakerId: h.speakerId ?? '',
-          speakerName: h.speakerName ?? '',
-          heardText: h.heardText,
-          discussionText: h.discussionText,
-          dirty: true,
-        });
+      const base = mode === 'replace' ? [] : items;
+      const rows = draftToRows(draft, base);
+      setItems([...base, ...rows]);
+      for (const row of rows) {
+        // eslint-disable-next-line no-await-in-loop
+        const saved = await upsertItemMutation.mutateAsync(payloadFor(row));
+        setItems((prev) => prev.map((p) => (p === row ? { ...p, id: saved.id, dirty: false } : p)));
       }
-      for (const d of draft.decisions) {
-        next.push({
-          ...blank,
-          section: 'DECISION',
-          order: ++dOrd,
-          title: d.title,
-          decisionText: d.decisionText,
-          deadline: d.deadline ?? '',
-          responsibleId: d.responsibleId ?? '',
-          responsibleName: d.responsibleName ?? '',
-          dirty: true,
-        });
-      }
-      return next;
-    });
+      await utils.meeting.byId.invalidate({ id: meetingId });
+      setAiNote(
+        mode === 'replace'
+          ? `Протокол замінено ШІ-чернеткою (${rows.length} пунктів). Збережено.`
+          : `Додано ${rows.length} пунктів зі ШІ-чернетки. Збережено.`,
+      );
+    } finally {
+      setSavingAll(false);
+      setAiPanelKey((k) => k + 1); // collapse + clear the AI panel
+    }
+  }
+
+  /** Called when the AI panel returns a draft. If the protocol already has
+   *  items, ask replace-or-append; otherwise insert + save straight away. */
+  function handleGenerated(draft: AiProtocolDraft) {
+    setAiNote(null);
+    if (items.length > 0) {
+      setPendingDraft(draft);
+    } else {
+      void applyAndSave(draft, 'append');
+    }
   }
 
   function addItem(section: ProtocolSection) {
@@ -410,7 +469,60 @@ export function ProtocolEditor({ meetingId }: { meetingId: string }) {
       </div>
 
       {/* ШІ-чернетка: секретар пише вільним текстом → ШІ структурує у 3 розділи */}
-      {canEdit && <AiDraftPanel meetingId={meetingId} onApply={applyDraft} />}
+      {canEdit && canAiDraft && (
+        <AiDraftPanel key={aiPanelKey} meetingId={meetingId} onGenerated={handleGenerated} />
+      )}
+      {aiNote && (
+        <div className="rounded-lg bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800 px-4 py-2 text-sm text-emerald-800 dark:text-emerald-300">
+          {aiNote}
+        </div>
+      )}
+
+      {/* Replace-or-append choice when the protocol already has items */}
+      {pendingDraft && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
+          role="dialog"
+          aria-modal="true"
+        >
+          <div className="bg-card rounded-xl border border-hairline shadow-xl max-w-md w-full p-5 space-y-4">
+            <div>
+              <h3 className="text-base font-bold text-ink">Протокол уже містить пункти</h3>
+              <p className="text-sm text-mid mt-1">
+                У редакторі вже є заповнені пункти. Що зробити зі ШІ-чернеткою?
+              </p>
+            </div>
+            <div className="flex flex-col gap-2">
+              <button
+                onClick={() => {
+                  const d = pendingDraft;
+                  setPendingDraft(null);
+                  void applyAndSave(d, 'append');
+                }}
+                className="btn-primary w-full justify-center"
+              >
+                Доповнити (залишити наявні)
+              </button>
+              <button
+                onClick={() => {
+                  const d = pendingDraft;
+                  setPendingDraft(null);
+                  void applyAndSave(d, 'replace');
+                }}
+                className="inline-flex w-full items-center justify-center gap-1.5 rounded-lg border border-red-300 px-4 py-2 text-sm font-medium text-red-700 hover:bg-red-50 transition-colors dark:border-red-800 dark:text-red-400 dark:hover:bg-red-900/30"
+              >
+                Замінити (видалити наявні)
+              </button>
+              <button
+                onClick={() => setPendingDraft(null)}
+                className="btn-secondary w-full justify-center"
+              >
+                Скасувати
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Two-column layout: protocol main + narrow attendance rail.
           Stacks vertically on <lg so the attendance card sits below
@@ -506,26 +618,17 @@ export function ProtocolEditor({ meetingId }: { meetingId: string }) {
 
 function AiDraftPanel({
   meetingId,
-  onApply,
+  onGenerated,
 }: {
   meetingId: string;
-  onApply: (d: AiProtocolDraft) => void;
+  onGenerated: (d: AiProtocolDraft) => void;
 }) {
   const { data: aiEnabled, isLoading: enabledLoading } = trpc.meeting.aiEnabled.useQuery();
   const [open, setOpen] = useState(false);
   const [text, setText] = useState('');
-  const [result, setResult] = useState<string | null>(null);
 
   const gen = trpc.meeting.generateProtocolDraft.useMutation({
-    onSuccess: (draft) => {
-      onApply(draft);
-      const n = draft.agenda.length + draft.heard.length + draft.decisions.length;
-      setResult(
-        n > 0
-          ? `Додано пунктів: ${n}. Перегляньте розділи нижче та натисніть «Зберегти все».`
-          : 'ШІ не виділив пунктів протоколу з цього тексту — спробуйте описати докладніше.',
-      );
-    },
+    onSuccess: (draft) => onGenerated(draft),
   });
 
   const configured = aiEnabled === true;
@@ -572,29 +675,20 @@ function AiDraftPanel({
                   'Опишіть засідання вільним текстом. Напр.:\n\nОбговорили поетапний план виконання програми стандартизації на 2026 рік. Доповідала Масленникова — про строки розроблення стандартів. Гуляєв звернув увагу на форму ТЗ за наказом № 832. Вирішили: Жуку підготувати проєкти ТЗ до 1 травня, відповідальний — Іщук.'
                 }
                 value={text}
-                onChange={(e) => {
-                  setText(e.target.value);
-                  if (result) setResult(null);
-                }}
+                onChange={(e) => setText(e.target.value)}
                 disabled={gen.isPending}
               />
               {gen.error && (
                 <p className="text-xs text-red-600 dark:text-red-400">{gen.error.message}</p>
               )}
-              {result && !gen.error && (
-                <p className="text-xs text-emerald-700 dark:text-emerald-400">{result}</p>
-              )}
               <div className="flex items-center justify-between gap-3">
                 <p className="text-[11px] text-light">
-                  Присутні й дата беруться із засідання. Результат — чернетка, нічого не
-                  зберігається автоматично.
+                  Присутні й дата беруться із засідання. Згенеровані пункти одразу зберігаються —
+                  потім їх можна відредагувати.
                 </p>
                 <button
                   type="button"
-                  onClick={() => {
-                    setResult(null);
-                    gen.mutate({ meetingId, rawText: text.trim() });
-                  }}
+                  onClick={() => gen.mutate({ meetingId, rawText: text.trim() })}
                   disabled={gen.isPending || tooShort}
                   className="btn-primary px-3 py-1.5 text-xs disabled:opacity-50 shrink-0"
                 >

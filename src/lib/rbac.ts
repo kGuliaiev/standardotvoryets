@@ -92,6 +92,7 @@ export const ALL_ACTIONS: readonly string[] = [
   'meeting:create',
   'meeting:cancel',
   'meeting:uploadMinutes',
+  'meeting:generateAiDraft',
   'meeting:deleteProtocol',
   'task:create',
   'task:editAny',
@@ -116,6 +117,7 @@ export const ACTION_LABELS: Record<string, { feature: string; label: string }> =
   'meeting:create': { feature: 'Засідання', label: 'Створити засідання' },
   'meeting:cancel': { feature: 'Засідання', label: 'Скасувати' },
   'meeting:uploadMinutes': { feature: 'Засідання', label: 'Завантажити протокол' },
+  'meeting:generateAiDraft': { feature: 'Засідання', label: 'Згенерувати протокол (ШІ)' },
   'meeting:deleteProtocol': { feature: 'Засідання', label: 'Видалити протокол' },
   'task:create': { feature: 'Доручення', label: 'Створити доручення' },
   'task:editAny': { feature: 'Доручення', label: 'Редагувати чужі' },
@@ -200,6 +202,9 @@ export const PERMISSIONS: Record<string, readonly string[]> = {
   'meeting:create': STAFF,
   'meeting:cancel': LEADERS,
   'meeting:uploadMinutes': STAFF,
+  // ШІ-чернетка протоколу — за замовчуванням секретар + керівництво (як і
+  // завантаження протоколу). Регулюється в /admin/permissions.
+  'meeting:generateAiDraft': STAFF,
   // Destructive — default to the WG leader only; admins always; adjustable
   // in /admin/permissions.
   'meeting:deleteProtocol': ['LEADER'],

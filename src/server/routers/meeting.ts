@@ -461,7 +461,7 @@ export const meetingRouter = createTRPCRouter({
       });
       if (!meeting) throw new TRPCError({ code: 'NOT_FOUND' });
 
-      if (!can(userCtx(ctx.session), 'meeting:uploadMinutes', meeting.workingGroupId)) {
+      if (!can(userCtx(ctx.session), 'meeting:generateAiDraft', meeting.workingGroupId)) {
         throw new TRPCError({ code: 'FORBIDDEN' });
       }
       if (!isAiConfigured()) {

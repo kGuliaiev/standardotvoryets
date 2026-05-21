@@ -45,20 +45,20 @@ const MONTH_GEN = [
   'грудня',
 ];
 
-// Register a static, Cyrillic-capable serif. @react-pdf cannot resolve weights
-// from a *variable* font (the previous NotoSans[wght] build threw "Could not
-// resolve font … fontWeight 400"), so we use PT Serif's static TTFs.
+// Tinos — Google's metric-compatible equivalent of Times New Roman (static
+// TTFs, full Cyrillic). We use it so the PDF matches the Word export's Times
+// New Roman. (@react-pdf can't resolve weights from a *variable* font, which
+// is why the old NotoSans[wght] build threw "Could not resolve font …".)
+const TINOS = 'https://cdn.jsdelivr.net/gh/google/fonts@main/ofl/tinos';
 let fontRegistered = false;
 function ensureFont() {
   if (fontRegistered) return;
   Font.register({
-    family: 'PTSerif',
+    family: 'Tinos',
     fonts: [
-      { src: 'https://cdn.jsdelivr.net/gh/google/fonts@main/ofl/ptserif/PT_Serif-Web-Regular.ttf' },
-      {
-        src: 'https://cdn.jsdelivr.net/gh/google/fonts@main/ofl/ptserif/PT_Serif-Web-Bold.ttf',
-        fontWeight: 700,
-      },
+      { src: `${TINOS}/Tinos-Regular.ttf` },
+      { src: `${TINOS}/Tinos-Bold.ttf`, fontWeight: 700 },
+      { src: `${TINOS}/Tinos-Italic.ttf`, fontStyle: 'italic' },
     ],
   });
   fontRegistered = true;
@@ -68,10 +68,10 @@ const styles = StyleSheet.create({
   page: {
     paddingVertical: 56,
     paddingHorizontal: 64,
-    fontFamily: 'PTSerif',
-    fontSize: 11,
+    fontFamily: 'Tinos',
+    fontSize: 12,
     color: '#1a1a1a',
-    lineHeight: 1.45,
+    lineHeight: 1.4,
   },
   title: { fontSize: 14, fontWeight: 700, textAlign: 'center', marginBottom: 4 },
   subtitle: { fontSize: 11, textAlign: 'center' },
@@ -82,7 +82,7 @@ const styles = StyleSheet.create({
   muted: { color: '#555' },
   sectionTitle: { fontWeight: 700, marginTop: 12, marginBottom: 5 },
   item: { marginBottom: 5, textAlign: 'justify' },
-  meta: { color: '#444', marginBottom: 3, marginLeft: 16 },
+  meta: { color: '#333', marginBottom: 3, marginLeft: 16, fontStyle: 'italic' },
   underline: { textDecoration: 'underline' },
   sigRow: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 40 },
 });

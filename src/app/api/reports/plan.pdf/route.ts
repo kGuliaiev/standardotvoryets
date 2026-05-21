@@ -30,27 +30,22 @@ function fmtDot(d: Date | null) {
   return `${String(d.getDate()).padStart(2, '0')}.${String(d.getMonth() + 1).padStart(2, '0')}.${d.getFullYear()}`;
 }
 
+// Tinos = Google's metric-compatible Times New Roman (static TTFs, Cyrillic),
+// so the PDF report matches the Word export's Times New Roman. The old
+// NotoSans[wght] *variable* font couldn't be resolved by @react-pdf.
+const TINOS = 'https://cdn.jsdelivr.net/gh/google/fonts@main/ofl/tinos';
 let fontRegistered = false;
 function ensureFont() {
   if (fontRegistered) return;
-  try {
-    Font.register({
-      family: 'NotoSans',
-      fonts: [
-        {
-          src: 'https://cdn.jsdelivr.net/gh/google/fonts@main/ofl/notosans/NotoSans%5Bwdth%2Cwght%5D.ttf',
-          fontWeight: 400,
-        },
-        {
-          src: 'https://cdn.jsdelivr.net/gh/google/fonts@main/ofl/notosans/NotoSans%5Bwdth%2Cwght%5D.ttf',
-          fontWeight: 700,
-        },
-      ],
-    });
-    fontRegistered = true;
-  } catch {
-    // ignore
-  }
+  Font.register({
+    family: 'Tinos',
+    fonts: [
+      { src: `${TINOS}/Tinos-Regular.ttf` },
+      { src: `${TINOS}/Tinos-Bold.ttf`, fontWeight: 700 },
+      { src: `${TINOS}/Tinos-Italic.ttf`, fontStyle: 'italic' },
+    ],
+  });
+  fontRegistered = true;
 }
 
 const styles = StyleSheet.create({
@@ -58,7 +53,7 @@ const styles = StyleSheet.create({
     paddingTop: 36,
     paddingBottom: 48,
     paddingHorizontal: 24,
-    fontFamily: 'NotoSans',
+    fontFamily: 'Tinos',
     fontSize: 8,
     color: '#1a2540',
     lineHeight: 1.3,
