@@ -55,10 +55,11 @@ export interface GenerateProtocolContext {
 }
 
 export interface ProtocolDraft {
-  agenda: { title: string; speakerId: string | null }[];
+  agenda: { title: string; speakerId: string | null; speakerName: string | null }[];
   heard: {
     title: string;
     speakerId: string | null;
+    speakerName: string | null;
     heardText: string;
     discussionText: string;
   }[];
@@ -67,6 +68,7 @@ export interface ProtocolDraft {
     decisionText: string;
     deadline: string | null; // YYYY-MM-DD
     responsibleId: string | null;
+    responsibleName: string | null;
   }[];
 }
 
@@ -86,7 +88,7 @@ const SYSTEM_INSTRUCTIONS = `Ти — досвідчений секретар р
 
 Правила:
 - Дотримуйся правильного відмінювання українських прізвищ та імен у тексті (родовий, давальний, орудний відмінки): «інформацію Сергія КОВАЛЕНКА», «доручити Юрію ЖУКУ», «під головуванням Максима ІЩУКА». Прізвища пиши ВЕЛИКИМИ літерами, ім'я — звичайними.
-- speakerId та responsibleId МАЮТЬ бути одним зі значень id зі списку учасників, наданого в повідомленні, або null. Зіставляй за прізвищем/іменем; якщо особи немає у списку — null (ім'я все одно згадуй у тексті, відмінюючи його).
+- Доповідач/відповідальний: якщо особа Є у списку учасників — заповни speakerId/responsibleId її id (зіставляй за прізвищем/іменем), а speakerName/responsibleName залиш null. Якщо особи НЕМАЄ у списку — id = null, а ПІБ впиши у speakerName/responsibleName у форматі «звання Ім'я ПРІЗВИЩЕ» у називному відмінку (напр. «полковник Сергій КОВАЛЕНКО»). Не заповнюй одночасно і id, і name.
 - deadline — у форматі YYYY-MM-DD. Відносні строки («до кінця місяця», «за два тижні», «не пізніше наступного засідання») обчислюй від дати засідання. Немає строку — null.
 - Не вигадуй фактів, яких немає в нотатках, але офіційно й повно розкривай те, що є. Якщо для розділу немає змісту — залиш масив порожнім. Не додавай присутніх, дату, місто чи підписи — це підставляє система.`;
 
@@ -106,7 +108,12 @@ const TOOL: Anthropic.Tool = {
             title: { type: 'string', description: 'Коротка тема питання порядку денного.' },
             speakerId: {
               type: ['string', 'null'],
-              description: 'id доповідача зі списку учасників або null.',
+              description: 'id доповідача зі списку учасників, або null якщо особи там немає.',
+            },
+            speakerName: {
+              type: ['string', 'null'],
+              description:
+                'ПІБ доповідача текстом («звання Ім’я ПРІЗВИЩЕ»), якщо його НЕМАЄ у списку учасників; інакше null.',
             },
           },
           required: ['title'],
@@ -121,7 +128,12 @@ const TOOL: Anthropic.Tool = {
             title: { type: 'string', description: 'Тема пункту (напр. назва доповіді).' },
             speakerId: {
               type: ['string', 'null'],
-              description: 'id основного доповідача зі списку учасників або null.',
+              description: 'id основного доповідача зі списку учасників, або null якщо немає.',
+            },
+            speakerName: {
+              type: ['string', 'null'],
+              description:
+                'ПІБ доповідача текстом, якщо його НЕМАЄ у списку учасників; інакше null.',
             },
             heardText: { type: 'string', description: 'Текст розділу СЛУХАЛИ (доповідь).' },
             discussionText: {
@@ -146,7 +158,12 @@ const TOOL: Anthropic.Tool = {
             },
             responsibleId: {
               type: ['string', 'null'],
-              description: 'id відповідального зі списку учасників або null.',
+              description: 'id відповідального зі списку учасників, або null якщо немає.',
+            },
+            responsibleName: {
+              type: ['string', 'null'],
+              description:
+                'ПІБ відповідального текстом, якщо його НЕМАЄ у списку учасників; інакше null.',
             },
           },
           required: ['decisionText'],
@@ -163,6 +180,7 @@ const draftSchema = z.object({
       z.object({
         title: z.string(),
         speakerId: z.string().nullish(),
+        speakerName: z.string().nullish(),
       }),
     )
     .default([]),
@@ -171,6 +189,7 @@ const draftSchema = z.object({
       z.object({
         title: z.string(),
         speakerId: z.string().nullish(),
+        speakerName: z.string().nullish(),
         heardText: z.string().nullish(),
         discussionText: z.string().nullish(),
       }),
@@ -183,6 +202,7 @@ const draftSchema = z.object({
         decisionText: z.string(),
         deadline: z.string().nullish(),
         responsibleId: z.string().nullish(),
+        responsibleName: z.string().nullish(),
       }),
     )
     .default([]),
@@ -235,26 +255,45 @@ export async function generateProtocolDraft(
   const rosterIds = new Set(c.roster.map((m) => m.id));
   const validId = (id?: string | null): string | null => (id && rosterIds.has(id) ? id : null);
   const validDate = (d?: string | null): string | null => (d && ISO_DATE.test(d) ? d : null);
+  // The FK wins: if we matched a roster id, drop any free-text name. Otherwise
+  // keep the trimmed free-text name (external person not in the roster).
+  const freeName = (id: string | null, name?: string | null): string | null =>
+    id ? null : (name?.trim() ?? '') || null;
 
   return {
     agenda: parsed.agenda
       .filter((a) => a.title.trim())
-      .map((a) => ({ title: a.title.trim(), speakerId: validId(a.speakerId) })),
+      .map((a) => {
+        const speakerId = validId(a.speakerId);
+        return {
+          title: a.title.trim(),
+          speakerId,
+          speakerName: freeName(speakerId, a.speakerName),
+        };
+      }),
     heard: parsed.heard
       .filter((h) => h.title.trim())
-      .map((h) => ({
-        title: h.title.trim(),
-        speakerId: validId(h.speakerId),
-        heardText: (h.heardText ?? '').trim(),
-        discussionText: (h.discussionText ?? '').trim(),
-      })),
+      .map((h) => {
+        const speakerId = validId(h.speakerId);
+        return {
+          title: h.title.trim(),
+          speakerId,
+          speakerName: freeName(speakerId, h.speakerName),
+          heardText: (h.heardText ?? '').trim(),
+          discussionText: (h.discussionText ?? '').trim(),
+        };
+      }),
     decisions: parsed.decisions
       .filter((d) => d.decisionText.trim())
-      .map((d) => ({
-        title: (d.title ?? '').trim(),
-        decisionText: d.decisionText.trim(),
-        deadline: validDate(d.deadline),
-        responsibleId: validId(d.responsibleId),
-      })),
+      .map((d) => {
+        const responsibleId = validId(d.responsibleId);
+        return {
+          title: (d.title ?? '').trim(),
+          decisionText: d.decisionText.trim(),
+          deadline: validDate(d.deadline),
+          responsibleId,
+          responsibleName: freeName(responsibleId, d.responsibleName),
+        };
+      }),
   };
 }

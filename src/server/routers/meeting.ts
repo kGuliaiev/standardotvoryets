@@ -369,11 +369,13 @@ export const meetingRouter = createTRPCRouter({
         title: z.string().min(2).max(500),
         section: z.enum(['AGENDA', 'HEARD', 'DECISION']).default('AGENDA'),
         speakerId: z.string().cuid().optional().nullable(),
+        speakerName: z.string().max(200).optional().nullable(),
         heardText: z.string().optional().nullable(),
         discussionText: z.string().optional().nullable(),
         decisionText: z.string().optional().nullable(),
         deadline: z.date().optional().nullable(),
         responsibleId: z.string().cuid().optional().nullable(),
+        responsibleName: z.string().max(200).optional().nullable(),
       }),
     )
     .mutation(async ({ ctx, input }) => {
@@ -383,17 +385,21 @@ export const meetingRouter = createTRPCRouter({
       if (!can(userCtx(ctx.session), 'meeting:uploadMinutes', meeting.workingGroupId)) {
         throw new TRPCError({ code: 'FORBIDDEN' });
       }
+      // FK wins over free-text: when a speaker/responsible id is set, null out
+      // the free-text name so they never coexist.
       const data = {
         meetingId: input.meetingId,
         order: input.order,
         title: input.title,
         section: input.section,
         speakerId: input.speakerId ?? null,
+        speakerName: input.speakerId ? null : (input.speakerName?.trim() ?? '') || null,
         heardText: input.heardText ?? null,
         discussionText: input.discussionText ?? null,
         decisionText: input.decisionText ?? null,
         deadline: input.deadline ?? null,
         responsibleId: input.responsibleId ?? null,
+        responsibleName: input.responsibleId ? null : (input.responsibleName?.trim() ?? '') || null,
       };
       if (input.id) {
         const before = await ctx.db.agendaItem.findUnique({ where: { id: input.id } });

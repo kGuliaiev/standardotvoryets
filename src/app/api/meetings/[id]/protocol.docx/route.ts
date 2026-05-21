@@ -204,8 +204,19 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
   const heardItems = meeting.agendaItems.filter((i) => i.section === 'HEARD');
   const decisionItems = meeting.agendaItems.filter((i) => i.section === 'DECISION');
 
-  const speakerLabel = (s: { name: string; rank: string } | null) =>
-    s ? `${rankPrefix(s.rank)}${s.name}` : '';
+  // Speaker/responsible display: roster member (rank + name) wins; otherwise
+  // the free-text name entered for an external person.
+  const speakerOf = (it: {
+    speaker: { name: string; rank: string } | null;
+    speakerName: string | null;
+  }) => (it.speaker ? `${rankPrefix(it.speaker.rank)}${it.speaker.name}` : (it.speakerName ?? ''));
+  const responsibleOf = (it: {
+    responsible: { name: string; rank: string } | null;
+    responsibleName: string | null;
+  }) =>
+    it.responsible
+      ? `${rankPrefix(it.responsible.rank)}${it.responsible.name}`
+      : (it.responsibleName ?? '');
 
   // ПОРЯДОК ДЕННИЙ
   children.push(
@@ -224,17 +235,14 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
         ],
       }),
     );
-    if (item.speaker) {
+    if (item.speaker || item.speakerName) {
+      const txt = item.speaker
+        ? `${item.speaker.position ? item.speaker.position + ' ' : ''}${rankPrefix(item.speaker.rank)}${item.speaker.name}`
+        : item.speakerName;
       children.push(
         new Paragraph({
           spacing: { after: 80 },
-          children: [
-            new TextRun({
-              text: `Доповідач: ${item.speaker.position ? item.speaker.position + ' ' : ''}${rankPrefix(item.speaker.rank)}${item.speaker.name}.`,
-              italics: true,
-              size: 22,
-            }),
-          ],
+          children: [new TextRun({ text: `Доповідач: ${txt}.`, italics: true, size: 22 })],
         }),
       );
     }
@@ -244,8 +252,9 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
   heardItems.forEach((item) => {
     if (item.heardText) {
       const runs: TextRun[] = [];
-      if (item.speaker) {
-        runs.push(new TextRun({ text: `${speakerLabel(item.speaker)} `, underline: {}, size: 22 }));
+      const spk = speakerOf(item);
+      if (spk) {
+        runs.push(new TextRun({ text: `${spk} `, underline: {}, size: 22 }));
       }
       runs.push(new TextRun({ text: item.heardText, size: 22 }));
       children.push(
@@ -304,17 +313,12 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
           }),
         );
       }
-      if (item.responsible) {
+      const resp = responsibleOf(item);
+      if (resp) {
         children.push(
           new Paragraph({
             spacing: { after: 80 },
-            children: [
-              new TextRun({
-                text: `Відповідальний: ${rankPrefix(item.responsible.rank)}${item.responsible.name}.`,
-                italics: true,
-                size: 22,
-              }),
-            ],
+            children: [new TextRun({ text: `Відповідальний: ${resp}.`, italics: true, size: 22 })],
           }),
         );
       }

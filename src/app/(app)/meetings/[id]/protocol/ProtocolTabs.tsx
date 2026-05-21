@@ -82,6 +82,71 @@ function formatDeadline(s: string) {
   return `${d}.${m}.${y}`;
 }
 
+const CUSTOM = '__custom__';
+
+/**
+ * Доповідач / Відповідальний picker. Lists WG members (by id); selecting
+ * «інша особа» reveals a free-text input for people who aren't in the roster.
+ * Emits both id and name — exactly one is non-empty.
+ */
+function PersonPicker({
+  members,
+  valueId,
+  valueName,
+  disabled,
+  onChange,
+}: {
+  members: MemberLite[];
+  valueId: string;
+  valueName: string;
+  disabled: boolean;
+  onChange: (next: { id: string; name: string }) => void;
+}) {
+  const [custom, setCustom] = useState(valueId === '' && valueName.trim() !== '');
+  const selectValue = valueId ? valueId : custom ? CUSTOM : '';
+  return (
+    <div className="space-y-2">
+      <select
+        className="select"
+        value={selectValue}
+        disabled={disabled}
+        onChange={(e) => {
+          const v = e.target.value;
+          if (v === CUSTOM) {
+            setCustom(true);
+            onChange({ id: '', name: valueName });
+          } else if (v === '') {
+            setCustom(false);
+            onChange({ id: '', name: '' });
+          } else {
+            setCustom(false);
+            onChange({ id: v, name: '' });
+          }
+        }}
+      >
+        <option value="">— не вказано —</option>
+        {members.map((m) => (
+          <option key={m.userId} value={m.userId}>
+            {rankPrefix(m.user.rank)}
+            {m.user.name}
+          </option>
+        ))}
+        <option value={CUSTOM}>інша особа (вписати) …</option>
+      </select>
+      {custom && (
+        <input
+          className="input"
+          placeholder="Звання Ім'я ПРІЗВИЩЕ"
+          value={valueName}
+          disabled={disabled}
+          maxLength={200}
+          onChange={(e) => onChange({ id: '', name: e.target.value })}
+        />
+      )}
+    </div>
+  );
+}
+
 type TabKey = 'overview' | 'AGENDA' | 'HEARD' | 'DECISION';
 
 const TABS: { key: TabKey; label: string }[] = [
@@ -239,20 +304,13 @@ export function ProtocolTabs(props: Props) {
                 />
                 <div>
                   <label className="field-label">Доповідач</label>
-                  <select
-                    className="select"
-                    value={it.speakerId}
+                  <PersonPicker
+                    members={members}
+                    valueId={it.speakerId}
+                    valueName={it.speakerName}
                     disabled={!canEdit}
-                    onChange={(e) => patch(idx, { speakerId: e.target.value })}
-                  >
-                    <option value="">— не вказано —</option>
-                    {members.map((m) => (
-                      <option key={m.userId} value={m.userId}>
-                        {rankPrefix(m.user.rank)}
-                        {m.user.name}
-                      </option>
-                    ))}
-                  </select>
+                    onChange={(n) => patch(idx, { speakerId: n.id, speakerName: n.name })}
+                  />
                 </div>
               </div>
             );
@@ -281,20 +339,13 @@ export function ProtocolTabs(props: Props) {
                 />
                 <div>
                   <label className="field-label">Доповідач (необов&apos;язково)</label>
-                  <select
-                    className="select"
-                    value={it.speakerId}
+                  <PersonPicker
+                    members={members}
+                    valueId={it.speakerId}
+                    valueName={it.speakerName}
                     disabled={!canEdit}
-                    onChange={(e) => patch(idx, { speakerId: e.target.value })}
-                  >
-                    <option value="">— не вказано —</option>
-                    {members.map((m) => (
-                      <option key={m.userId} value={m.userId}>
-                        {rankPrefix(m.user.rank)}
-                        {m.user.name}
-                      </option>
-                    ))}
-                  </select>
+                    onChange={(n) => patch(idx, { speakerId: n.id, speakerName: n.name })}
+                  />
                 </div>
                 <div>
                   <label className="field-label">СЛУХАЛИ (доповідь)</label>
@@ -364,20 +415,13 @@ export function ProtocolTabs(props: Props) {
                   </div>
                   <div>
                     <label className="field-label">Відповідальний</label>
-                    <select
-                      className="select"
+                    <PersonPicker
+                      members={members}
+                      valueId={it.responsibleId}
+                      valueName={it.responsibleName}
                       disabled={!canEdit}
-                      value={it.responsibleId}
-                      onChange={(e) => patch(idx, { responsibleId: e.target.value })}
-                    >
-                      <option value="">— не вказано —</option>
-                      {members.map((m) => (
-                        <option key={m.userId} value={m.userId}>
-                          {rankPrefix(m.user.rank)}
-                          {m.user.name}
-                        </option>
-                      ))}
-                    </select>
+                      onChange={(n) => patch(idx, { responsibleId: n.id, responsibleName: n.name })}
+                    />
                   </div>
                 </div>
               </div>
@@ -543,6 +587,8 @@ function OverviewBlock({
     const m = members.find((x) => x.userId === id);
     return m ? `${rankPrefix(m.user.rank)}${m.user.name}` : '';
   };
+  // Roster member by id, else the free-text name (external person).
+  const personDisplay = (id: string, name: string) => memberName(id) || name;
 
   return (
     <div className="px-8 py-6 bg-page/40 max-h-[70vh] overflow-y-auto">
@@ -585,9 +631,9 @@ function OverviewBlock({
                     <span className="font-bold">{idx + 1}. </span>
                     {it.title || <span className="text-light italic">(без назви)</span>}
                   </p>
-                  {it.speakerId && (
+                  {(it.speakerId || it.speakerName) && (
                     <p className="text-xs italic text-mid pl-5">
-                      Доповідач: {memberName(it.speakerId)}
+                      Доповідач: {personDisplay(it.speakerId, it.speakerName)}
                     </p>
                   )}
                 </li>
@@ -603,7 +649,9 @@ function OverviewBlock({
               <div key={it.id ?? `oh-${idx}`} className="mb-3 text-sm">
                 <p className="text-xs uppercase text-mid mb-1">
                   {idx + 1}. {it.title || '(без назви)'}
-                  {it.speakerId && <span className="italic"> · {memberName(it.speakerId)}</span>}
+                  {(it.speakerId || it.speakerName) && (
+                    <span className="italic"> · {personDisplay(it.speakerId, it.speakerName)}</span>
+                  )}
                 </p>
                 {it.heardText && (
                   <>
@@ -637,9 +685,9 @@ function OverviewBlock({
                     Термін: до {formatDeadline(it.deadline)}.
                   </p>
                 )}
-                {it.responsibleId && (
+                {(it.responsibleId || it.responsibleName) && (
                   <p className="italic text-xs pl-5">
-                    Відповідальний: {memberName(it.responsibleId)}.
+                    Відповідальний: {personDisplay(it.responsibleId, it.responsibleName)}.
                   </p>
                 )}
               </div>

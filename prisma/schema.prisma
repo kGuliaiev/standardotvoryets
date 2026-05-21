@@ -669,11 +669,16 @@ model AgendaItem {
   // Protocol fields (the editor uses different ones per section, but the
   // columns stay unified to keep the schema flat).
   speakerId       String?
+  // Free-text доповідач / відповідальний — used when the person is NOT in the
+  // WG roster (e.g. an external presenter). When the FK (speakerId /
+  // responsibleId) is set it wins; otherwise these names are rendered.
+  speakerName     String?
   heardText       String?  @db.Text // СЛУХАЛИ
   discussionText  String?  @db.Text // ВИСТУПИЛИ
   decisionText    String?  @db.Text // ВИРІШИЛИ
   deadline        DateTime?
   responsibleId   String?
+  responsibleName String?
 
   meeting     Meeting @relation(fields: [meetingId], references: [id], onDelete: Cascade)
   speaker     User?   @relation("AgendaSpeaker", fields: [speakerId], references: [id])

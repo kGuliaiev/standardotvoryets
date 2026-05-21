@@ -44,21 +44,24 @@ export interface AgendaDraft {
   order: number;
   title: string;
   speakerId: string;
+  speakerName: string; // free-text доповідач (коли немає у складі РГ)
   heardText: string;
   discussionText: string;
   decisionText: string;
   deadline: string;
   responsibleId: string;
+  responsibleName: string; // free-text відповідальний
   dirty: boolean; // unsaved changes flag
 }
 
 /** Shape returned by meeting.generateProtocolDraft (kept local to avoid a
  *  client import of the server AI module). */
 interface AiProtocolDraft {
-  agenda: { title: string; speakerId: string | null }[];
+  agenda: { title: string; speakerId: string | null; speakerName: string | null }[];
   heard: {
     title: string;
     speakerId: string | null;
+    speakerName: string | null;
     heardText: string;
     discussionText: string;
   }[];
@@ -67,6 +70,7 @@ interface AiProtocolDraft {
     decisionText: string;
     deadline: string | null;
     responsibleId: string | null;
+    responsibleName: string | null;
   }[];
 }
 
@@ -99,11 +103,13 @@ export function ProtocolEditor({ meetingId }: { meetingId: string }) {
         order: a.order ?? idx + 1,
         title: a.title,
         speakerId: a.speakerId ?? '',
+        speakerName: a.speakerName ?? '',
         heardText: a.heardText ?? '',
         discussionText: a.discussionText ?? '',
         decisionText: a.decisionText ?? '',
         deadline: a.deadline ? new Date(a.deadline).toISOString().slice(0, 10) : '',
         responsibleId: a.responsibleId ?? '',
+        responsibleName: a.responsibleName ?? '',
         dirty: false,
       })),
     );
@@ -158,11 +164,13 @@ export function ProtocolEditor({ meetingId }: { meetingId: string }) {
           section: it.section,
           title: it.title || `Пункт ${it.order}`,
           speakerId: it.speakerId === '' ? null : it.speakerId,
+          speakerName: it.speakerName.trim() || null,
           heardText: it.heardText.trim() || null,
           discussionText: it.discussionText.trim() || null,
           decisionText: it.decisionText.trim() || null,
           deadline: due,
           responsibleId: it.responsibleId === '' ? null : it.responsibleId,
+          responsibleName: it.responsibleName.trim() || null,
         });
         // Replace the draft with the saved version (id + reset dirty flag)
         setItems((prev) =>
@@ -196,11 +204,13 @@ export function ProtocolEditor({ meetingId }: { meetingId: string }) {
       const next = [...prev];
       const blank = {
         speakerId: '',
+        speakerName: '',
         heardText: '',
         discussionText: '',
         decisionText: '',
         deadline: '',
         responsibleId: '',
+        responsibleName: '',
       };
       let aOrd = next.filter((p) => p.section === 'AGENDA').length;
       let hOrd = next.filter((p) => p.section === 'HEARD').length;
@@ -212,6 +222,7 @@ export function ProtocolEditor({ meetingId }: { meetingId: string }) {
           order: ++aOrd,
           title: a.title,
           speakerId: a.speakerId ?? '',
+          speakerName: a.speakerName ?? '',
           dirty: true,
         });
       }
@@ -222,6 +233,7 @@ export function ProtocolEditor({ meetingId }: { meetingId: string }) {
           order: ++hOrd,
           title: h.title,
           speakerId: h.speakerId ?? '',
+          speakerName: h.speakerName ?? '',
           heardText: h.heardText,
           discussionText: h.discussionText,
           dirty: true,
@@ -236,6 +248,7 @@ export function ProtocolEditor({ meetingId }: { meetingId: string }) {
           decisionText: d.decisionText,
           deadline: d.deadline ?? '',
           responsibleId: d.responsibleId ?? '',
+          responsibleName: d.responsibleName ?? '',
           dirty: true,
         });
       }
@@ -253,11 +266,13 @@ export function ProtocolEditor({ meetingId }: { meetingId: string }) {
           order: sameSection.length + 1,
           title: '',
           speakerId: '',
+          speakerName: '',
           heardText: '',
           discussionText: '',
           decisionText: '',
           deadline: '',
           responsibleId: '',
+          responsibleName: '',
           dirty: true,
         },
       ];

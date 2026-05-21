@@ -101,7 +101,9 @@ interface Item {
   decisionText: string | null;
   deadline: Date | null;
   speaker: Person | null;
+  speakerName: string | null;
   responsible: Person | null;
+  responsibleName: string | null;
 }
 interface ProtocolData {
   protoTitle: string;
@@ -120,6 +122,13 @@ function fmtDeadline(d: Date) {
 }
 function personLabel(p: Person | null) {
   return p ? `${rankPrefix(p.rank)}${p.name}` : '';
+}
+// Roster member (rank + name) wins; otherwise the free-text external name.
+function speakerOf(it: Item) {
+  return it.speaker ? personLabel(it.speaker) : (it.speakerName ?? '');
+}
+function responsibleOf(it: Item) {
+  return it.responsible ? personLabel(it.responsible) : (it.responsibleName ?? '');
 }
 
 function ProtocolDoc({ d }: { d: ProtocolData }) {
@@ -181,14 +190,12 @@ function ProtocolDoc({ d }: { d: ProtocolData }) {
     body.push(
       createElement(Text, { key: `a-${idx}`, style: styles.item }, `${idx + 1}. ${it.title}`),
     );
-    if (it.speaker) {
-      const pos = it.speaker.position ? `${it.speaker.position} ` : '';
+    if (it.speaker || it.speakerName) {
+      const label = it.speaker
+        ? `${it.speaker.position ? `${it.speaker.position} ` : ''}${personLabel(it.speaker)}`
+        : it.speakerName;
       body.push(
-        createElement(
-          Text,
-          { key: `a-sp-${idx}`, style: styles.meta },
-          `Доповідач: ${pos}${personLabel(it.speaker)}.`,
-        ),
+        createElement(Text, { key: `a-sp-${idx}`, style: styles.meta }, `Доповідач: ${label}.`),
       );
     }
   });
@@ -196,14 +203,13 @@ function ProtocolDoc({ d }: { d: ProtocolData }) {
   // СЛУХАЛИ / ВИСТУПИЛИ
   d.heard.forEach((it, idx) => {
     if (it.heardText) {
+      const spk = speakerOf(it);
       body.push(
         createElement(Text, { key: `h-h-${idx}`, style: styles.sectionTitle }, 'СЛУХАЛИ:'),
         createElement(
           Text,
           { key: `h-b-${idx}`, style: styles.item },
-          it.speaker
-            ? createElement(Text, { style: styles.underline }, `${personLabel(it.speaker)} `)
-            : null,
+          spk ? createElement(Text, { style: styles.underline }, `${spk} `) : null,
           it.heardText,
         ),
       );
@@ -237,12 +243,13 @@ function ProtocolDoc({ d }: { d: ProtocolData }) {
           ),
         );
       }
-      if (it.responsible) {
+      const resp = responsibleOf(it);
+      if (resp) {
         body.push(
           createElement(
             Text,
             { key: `dec-r-${idx}`, style: styles.meta },
-            `Відповідальний: ${personLabel(it.responsible)}.`,
+            `Відповідальний: ${resp}.`,
           ),
         );
       }
