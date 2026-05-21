@@ -261,16 +261,16 @@ export function ProtocolsList() {
                           {m.title}
                         </Link>
                       </td>
-                      <td className="px-3 py-3 hidden md:table-cell">
+                      <td className="px-3 py-3 hidden md:table-cell whitespace-nowrap">
                         <Link
                           href={`/working-groups/${m.workingGroup.id}`}
                           className="inline-flex items-center gap-1.5"
                         >
                           <span
-                            className="w-2 h-2 rounded-full"
+                            className="w-2 h-2 rounded-full shrink-0"
                             style={{ backgroundColor: m.workingGroup.color }}
                           />
-                          <span className="text-xs text-mid font-mono font-semibold">
+                          <span className="text-xs text-mid font-mono font-semibold whitespace-nowrap">
                             {m.workingGroup.code}
                           </span>
                         </Link>
