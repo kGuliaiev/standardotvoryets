@@ -246,7 +246,7 @@ export function ProtocolsList() {
                     : '— чернетка —';
                   return (
                     <tr key={m.id} className="hover:bg-page transition-colors group">
-                      <td className="px-4 py-3 font-mono text-xs">
+                      <td className="px-4 py-3 font-mono text-xs whitespace-nowrap">
                         {m.protocolNumber ? (
                           <span className="text-ink font-bold">{protoLabel}</span>
                         ) : (
