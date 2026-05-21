@@ -255,7 +255,7 @@ export function ProtocolsList() {
                       </td>
                       <td className="px-3 py-3 max-w-md">
                         <Link
-                          href={`/meetings/${m.id}`}
+                          href={`/meetings/${m.id}/protocol`}
                           className="font-medium text-ink hover:text-brand line-clamp-1"
                         >
                           {m.title}
