@@ -82,38 +82,62 @@ export const authOptions: NextAuthOptions = {
         token.id = user.id;
         token.globalRole = user.globalRole;
       }
-      // Cache WG memberships IN THE TOKEN — refreshed on sign-in, on an
-      // explicit session.update(), or once if the token has none yet. The
-      // `session` callback below then needs NO database access, so the
-      // /api/auth/session revalidation (run by the client on focus/mount) is
-      // a pure JWT decode. Previously memberships were loaded in `session` on
-      // every revalidation; a DB hiccup could hang that request, the client
-      // session would resolve to null, and the user lost all rights (admins
-      // included, since globalRole then read as undefined). On a DB failure
-      // here we keep the last-known memberships rather than wiping them.
+      // Cache globalRole + memberships in the token as a FALLBACK for when the
+      // DB is unreachable in the `session` callback. Refreshed on sign-in, on
+      // an explicit session.update(), or the first time the token lacks them.
       if (token.id && (Boolean(user) || trigger === 'update' || token.memberships === undefined)) {
         try {
-          token.memberships = await db.workingGroupMember.findMany({
+          const [dbUser, memberships] = await Promise.all([
+            db.user.findUnique({ where: { id: token.id }, select: { globalRole: true } }),
+            db.workingGroupMember.findMany({
+              where: { userId: token.id },
+              select: {
+                workingGroupId: true,
+                role: true,
+                workingGroup: { select: { code: true, color: true } },
+              },
+            }),
+          ]);
+          if (dbUser) token.globalRole = dbUser.globalRole;
+          token.memberships = memberships;
+        } catch (e) {
+          const msg = e instanceof Error ? e.message.split('\n')[0] : String(e);
+          console.warn('[auth.jwt] refresh failed (DB down?):', msg);
+          token.memberships = token.memberships ?? [];
+        }
+      }
+      return token;
+    },
+    async session({ session, token }) {
+      if (!token) return session;
+      // Token values are the fallback (used if the DB read below fails).
+      session.user.id = token.id;
+      session.user.globalRole = token.globalRole;
+      session.user.memberships = token.memberships ?? [];
+
+      // Refresh globalRole + memberships from the DB so role/membership
+      // changes take effect on the next page load (without forcing re-login).
+      // This is safe now that the client no longer revalidates on focus (see
+      // SessionWrapper) — the previous focus-refetch + DB-call combo was what
+      // intermittently nulled the session and stripped rights. On a DB outage
+      // we keep the token fallback above rather than wiping anything.
+      try {
+        const [dbUser, memberships] = await Promise.all([
+          db.user.findUnique({ where: { id: token.id }, select: { globalRole: true } }),
+          db.workingGroupMember.findMany({
             where: { userId: token.id },
             select: {
               workingGroupId: true,
               role: true,
               workingGroup: { select: { code: true, color: true } },
             },
-          });
-        } catch (e) {
-          const msg = e instanceof Error ? e.message.split('\n')[0] : String(e);
-          console.warn('[auth.jwt] memberships load failed (DB down?):', msg);
-          token.memberships = token.memberships ?? [];
-        }
-      }
-      return token;
-    },
-    session({ session, token }) {
-      if (token) {
-        session.user.id = token.id;
-        session.user.globalRole = token.globalRole;
-        session.user.memberships = token.memberships ?? [];
+          }),
+        ]);
+        if (dbUser) session.user.globalRole = dbUser.globalRole;
+        session.user.memberships = memberships;
+      } catch (e) {
+        const msg = e instanceof Error ? e.message.split('\n')[0] : String(e);
+        console.warn('[auth.session] refresh failed (DB down?):', msg);
       }
       return session;
     },
