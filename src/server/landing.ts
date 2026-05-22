@@ -17,6 +17,7 @@ const MENU_ROUTES: Record<string, string> = {
   'menu:tasks': '/tasks',
   'menu:discussions': '/discussions',
   'menu:reports': '/reports',
+  'menu:notifications': '/notifications',
 };
 
 /**

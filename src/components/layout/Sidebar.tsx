@@ -71,6 +71,7 @@ const MENU_KEY: Record<string, string> = {
   '/tasks': 'menu:tasks',
   '/discussions': 'menu:discussions',
   '/reports': 'menu:reports',
+  '/notifications': 'menu:notifications',
 };
 
 export function Sidebar({ session, forceExpanded = false, initialMenuVis }: SidebarProps) {

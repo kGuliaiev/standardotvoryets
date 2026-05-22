@@ -79,6 +79,7 @@ export const MENU_ACTIONS = [
   'menu:tasks',
   'menu:discussions',
   'menu:reports',
+  'menu:notifications',
 ] as const;
 
 /** Stable list of all (role, action) pairs the admin UI exposes as
@@ -135,6 +136,7 @@ export const ACTION_LABELS: Record<string, { feature: string; label: string }> =
   'menu:tasks': { feature: 'Меню', label: 'Завдання' },
   'menu:discussions': { feature: 'Меню', label: 'Обговорення' },
   'menu:reports': { feature: 'Меню', label: 'Звіт' },
+  'menu:notifications': { feature: 'Меню', label: 'Сповіщення' },
 };
 
 /** All assignable WG roles in the order the admin UI should show
@@ -224,4 +226,5 @@ export const PERMISSIONS: Record<string, readonly string[]> = {
   'menu:tasks': ALL_ROLES_INCL_DIRECTOR,
   'menu:discussions': ALL_ROLES_INCL_DIRECTOR,
   'menu:reports': ALL_ROLES_INCL_DIRECTOR,
+  'menu:notifications': ALL_ROLES_INCL_DIRECTOR,
 };
