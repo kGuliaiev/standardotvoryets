@@ -73,6 +73,24 @@ export const permissionRouter = createTRPCRouter({
     return menuVisibleForRoles(Array.from(roles));
   }),
 
+  // The (role, action) overrides relevant to the CURRENT user, so the client
+  // `can()` can apply DB overrides. The client's override lookup is otherwise
+  // null → it falls back to hardcoded defaults and misses grants like the
+  // «Керівництво центру» (DIRECTOR) column. Returns "ROLE:action" → allowed.
+  myOverrides: protectedProcedure.query(async ({ ctx }): Promise<Record<string, boolean>> => {
+    const map: Record<string, boolean> = {};
+    if (ctx.session.user.globalRole === 'ADMIN') return map; // can() short-circuits for admin
+    await ensureLoaded();
+    const roles = new Set<string>(ctx.session.user.memberships.map((m) => m.role));
+    if (ctx.session.user.globalRole === 'DIRECTOR') roles.add('DIRECTOR');
+    if (roles.size === 0) return map;
+    const rows = await ctx.db.rolePermission.findMany({
+      where: { role: { in: Array.from(roles) } },
+    });
+    for (const r of rows) map[`${r.role}:${r.action}`] = r.allowed;
+    return map;
+  }),
+
   // Upsert a single (role, action, allowed) cell. If the requested
   // value matches the hardcoded default we delete the row instead so
   // the override table stays minimal.

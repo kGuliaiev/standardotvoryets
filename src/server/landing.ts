@@ -1,5 +1,5 @@
 import { menuVisibleForRoles, MENU_ACTIONS, registerOverrideLookup } from '@/lib/rbac';
-import { ensureLoaded, getOverride } from '@/lib/permissionsCache';
+import { ensureLoaded, getOverride, listOverrides } from '@/lib/permissionsCache';
 
 // The landing redirect (root page) can render before any tRPC bootstrap runs,
 // so make sure the DB override lookup is wired up here too. Idempotent — tRPC
@@ -63,4 +63,26 @@ export async function menuVisForUser(user: {
   const roles = new Set<string>((user.memberships ?? []).map((m) => m.role));
   if (user.globalRole === 'DIRECTOR') roles.add('DIRECTOR');
   return menuVisibleForRoles(Array.from(roles));
+}
+
+/**
+ * The (role, action) overrides relevant to a user, keyed "ROLE:action".
+ * Seeded into the client's PermissionsBootstrap so client-side `can()` applies
+ * DB overrides on first paint (matches permission.myOverrides).
+ */
+export async function overridesForUser(user: {
+  globalRole: string;
+  memberships?: { role: string }[];
+}): Promise<Record<string, boolean>> {
+  if (user.globalRole === 'ADMIN') return {};
+  const roles = new Set<string>((user.memberships ?? []).map((m) => m.role));
+  if (user.globalRole === 'DIRECTOR') roles.add('DIRECTOR');
+  if (roles.size === 0) return {};
+  const all = await listOverrides(); // Map<"ROLE:action", boolean>
+  const map: Record<string, boolean> = {};
+  all.forEach((allowed, key) => {
+    const role = key.slice(0, key.indexOf(':')); // role is the first segment
+    if (roles.has(role)) map[key] = allowed;
+  });
+  return map;
 }
