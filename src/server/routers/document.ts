@@ -542,13 +542,14 @@ export const documentRouter = createTRPCRouter({
         include: { standard: { select: { workingGroupId: true } } },
       });
 
-      // Verify ownership / membership
-      const isAdmin = ctx.session.user.globalRole === 'ADMIN';
+      // Visibility: admins / center director / secretaries see all groups;
+      // everyone else needs membership (same rule as the documents list).
       const isMember = ctx.session.user.memberships?.some(
         (m) => m.workingGroupId === doc.standard.workingGroupId,
       );
-
-      if (!isAdmin && !isMember) throw new TRPCError({ code: 'FORBIDDEN' });
+      if (!seesAllWorkingGroups(ctx.session.user) && !isMember) {
+        throw new TRPCError({ code: 'FORBIDDEN' });
+      }
 
       // Documents created empty have no S3 object. Caller should fall
       // through to the body-export endpoint to generate a fresh .docx

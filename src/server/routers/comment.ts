@@ -28,11 +28,14 @@ export const commentRouter = createTRPCRouter({
         where: { id: input.standardId },
         select: { workingGroupId: true },
       });
-      const isAdmin = ctx.session.user.globalRole === 'ADMIN';
+      // View access matches the standard's other tabs: admins / center
+      // director / secretaries see all groups; others need membership.
       const isMember = ctx.session.user.memberships?.some(
         (m) => m.workingGroupId === standard.workingGroupId,
       );
-      if (!isAdmin && !isMember) throw new TRPCError({ code: 'FORBIDDEN' });
+      if (!seesAllWorkingGroups(ctx.session.user) && !isMember) {
+        throw new TRPCError({ code: 'FORBIDDEN' });
+      }
 
       return ctx.db.comment.findMany({
         where: { standardId: input.standardId },
