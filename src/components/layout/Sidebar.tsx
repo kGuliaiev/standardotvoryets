@@ -167,45 +167,30 @@ export function Sidebar({ session, forceExpanded = false }: SidebarProps) {
     },
   ];
 
-  if (session.user.globalRole === 'ADMIN' || session.user.globalRole === 'DIRECTOR') {
+  // Сповіщення — an informational feed for EVERY user. It lives in the last
+  // regular section (РОБОТА), not under АДМІН.
+  const lastSection = sections[sections.length - 1];
+  if (lastSection) {
+    lastSection.items.push({
+      href: '/notifications',
+      label: 'Сповіщення',
+      icon: Bell,
+      badge: counts?.unreadNotifications ?? null,
+      badgeTone: counts?.unreadNotifications ? 'rose' : 'gray',
+    });
+  }
+
+  // Admin-only tools — including «Налаштування». Center directors (DIRECTOR)
+  // don't get these; the /admin/* routes are ADMIN-gated by middleware anyway.
+  if (session.user.globalRole === 'ADMIN') {
     sections.push({
       label: 'АДМІН',
       items: [
-        ...(session.user.globalRole === 'ADMIN'
-          ? [
-              {
-                href: '/admin/users',
-                label: 'Користувачі',
-                icon: Users,
-              } satisfies NavItem,
-              {
-                href: '/admin/permissions',
-                label: 'Ролі та права',
-                icon: ShieldCheck,
-              } satisfies NavItem,
-            ]
-          : []),
+        { href: '/admin/users', label: 'Користувачі', icon: Users },
+        { href: '/admin/permissions', label: 'Ролі та права', icon: ShieldCheck },
         { href: '/admin/settings', label: 'Налаштування', icon: Settings },
-        {
-          href: '/notifications',
-          label: 'Сповіщення',
-          icon: Bell,
-          badge: counts?.unreadNotifications ?? null,
-          badgeTone: counts?.unreadNotifications ? 'rose' : 'gray',
-        },
       ],
     });
-  } else {
-    const lastSection = sections[sections.length - 1];
-    if (lastSection) {
-      lastSection.items.push({
-        href: '/notifications',
-        label: 'Сповіщення',
-        icon: Bell,
-        badge: counts?.unreadNotifications ?? null,
-        badgeTone: counts?.unreadNotifications ? 'rose' : 'gray',
-      });
-    }
   }
 
   return (

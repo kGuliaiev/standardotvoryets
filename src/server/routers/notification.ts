@@ -93,6 +93,20 @@ export const notificationRouter = createTRPCRouter({
         take: 2000,
       });
 
+      // The journal is a SHARED activity feed, so personalised titles read
+      // wrong for other viewers. A mention notification is stored as
+      // "<Author> згадав вас у коментарі" (addressed to the mentioned person);
+      // shown to anyone else it falsely implies they were mentioned. Re-title
+      // mentions neutrally here — the personalised "…згадав вас…" still appears
+      // in the recipient's own inbox (feedForUser), which uses the raw title.
+      const MENTION_SUFFIX = ' згадав вас у коментарі';
+      const journalTitle = (type: NotificationType, title: string): string => {
+        if (type === 'MENTION' && title.endsWith(MENTION_SUFFIX)) {
+          return `${title.slice(0, -MENTION_SUFFIX.length)} написав коментар`;
+        }
+        return title;
+      };
+
       // Collapse the per-recipient fan-out (same type/title/body/link within
       // the same minute = one event) and flag whether *this* user still has
       // an unread copy of it, so the journal can highlight what's new for them.
@@ -118,7 +132,7 @@ export const notificationRouter = createTRPCRouter({
           groups.set(key, {
             id: n.id,
             type: n.type,
-            title: n.title,
+            title: journalTitle(n.type, n.title),
             body: n.body,
             link: n.link,
             createdAt: n.createdAt,
