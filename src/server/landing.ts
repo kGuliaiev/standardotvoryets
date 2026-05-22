@@ -43,3 +43,24 @@ export async function landingPathForUser(user: {
   // Everything hidden (shouldn't happen) — fall back to the dashboard.
   return '/dashboard';
 }
+
+/**
+ * Per-role menu visibility, computed server-side so the layout can seed it as
+ * the Sidebar's query initialData. Without this the client renders the full
+ * menu first (query still loading → nothing hidden), then collapses once
+ * `permission.menuForMe` resolves — a visible flicker. Mirrors that procedure.
+ */
+export async function menuVisForUser(user: {
+  globalRole: string;
+  memberships?: { role: string }[];
+}): Promise<Record<string, boolean>> {
+  if (user.globalRole === 'ADMIN') {
+    const all: Record<string, boolean> = {};
+    for (const a of MENU_ACTIONS) all[a] = true;
+    return all;
+  }
+  await ensureLoaded();
+  const roles = new Set<string>((user.memberships ?? []).map((m) => m.role));
+  if (user.globalRole === 'DIRECTOR') roles.add('DIRECTOR');
+  return menuVisibleForRoles(Array.from(roles));
+}

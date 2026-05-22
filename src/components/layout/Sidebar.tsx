@@ -31,6 +31,9 @@ interface SidebarProps {
   session: Session;
   /** When true, ignore the persisted collapsed state and always show the full sidebar. Used for the mobile drawer. */
   forceExpanded?: boolean;
+  /** Server-resolved menu visibility, used as the menuForMe query's initial
+   *  data so the first paint is already role-correct (no flicker). */
+  initialMenuVis?: Record<string, boolean>;
 }
 
 type BadgeTone = 'brand' | 'rose' | 'amber' | 'blue' | 'gray';
@@ -70,7 +73,7 @@ const MENU_KEY: Record<string, string> = {
   '/reports': 'menu:reports',
 };
 
-export function Sidebar({ session, forceExpanded = false }: SidebarProps) {
+export function Sidebar({ session, forceExpanded = false, initialMenuVis }: SidebarProps) {
   const pathname = usePathname();
   const memberships = session.user.memberships ?? [];
   const [persistedCollapsed, setCollapsed] = useLocalStorageState<boolean>(
@@ -83,9 +86,12 @@ export function Sidebar({ session, forceExpanded = false }: SidebarProps) {
     refetchInterval: 60_000,
   });
   // Per-role menu visibility, resolved server-side (DB overrides apply).
-  // Until it loads we show everything, so the gate only ever hides.
+  // Seeded with the server-computed `initialMenuVis` so the first paint is
+  // already role-correct (no full-menu → role-menu flicker); revalidates in
+  // the background.
   const { data: menuVis } = trpc.permission.menuForMe.useQuery(undefined, {
     staleTime: 60_000,
+    initialData: initialMenuVis,
   });
   const isHidden = (href: string) => {
     const key = MENU_KEY[href];

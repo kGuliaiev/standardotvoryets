@@ -11,9 +11,12 @@ import { CommandPalette } from '@/components/CommandPalette';
 interface ShellProps {
   children: React.ReactNode;
   session: Session;
+  /** Server-resolved menu visibility, seeded into the Sidebar query to avoid
+   *  a full-menu → role-menu flicker on first paint. */
+  initialMenuVis?: Record<string, boolean>;
 }
 
-export function Shell({ children, session }: ShellProps) {
+export function Shell({ children, session, initialMenuVis }: ShellProps) {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const pathname = usePathname();
 
@@ -36,7 +39,7 @@ export function Shell({ children, session }: ShellProps) {
     <div className="flex h-screen h-[100dvh] bg-page overflow-hidden">
       {/* Desktop sidebar — visible on lg+ */}
       <div className="hidden lg:flex">
-        <Sidebar session={session} />
+        <Sidebar session={session} initialMenuVis={initialMenuVis} />
       </div>
 
       {/* Mobile sidebar drawer + backdrop */}
@@ -49,7 +52,7 @@ export function Shell({ children, session }: ShellProps) {
             className="lg:hidden fixed inset-0 z-40 bg-black/40 backdrop-blur-sm"
           />
           <div className="lg:hidden fixed inset-y-0 left-0 z-50 max-w-[85%] flex animate-[slideInFromLeft_180ms_ease-out]">
-            <Sidebar session={session} forceExpanded />
+            <Sidebar session={session} forceExpanded initialMenuVis={initialMenuVis} />
           </div>
         </>
       )}
