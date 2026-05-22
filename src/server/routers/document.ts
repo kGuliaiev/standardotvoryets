@@ -2,6 +2,7 @@ import { z } from 'zod';
 import { TRPCError } from '@trpc/server';
 import { createTRPCRouter, protectedProcedure } from '@/server/trpc';
 import { can } from '@/lib/rbac';
+import { seesAllWorkingGroups } from '@/server/permissions';
 import { logActivity } from '@/server/audit';
 import { s3, getPresignedUploadUrl, getPresignedDownloadUrl } from '@/server/s3';
 import { DeleteObjectCommand } from '@aws-sdk/client-s3';
@@ -263,11 +264,17 @@ export const documentRouter = createTRPCRouter({
   byWorkingGroup: protectedProcedure
     .input(z.object({ workingGroupId: z.string().cuid() }))
     .query(async ({ ctx, input }) => {
-      const isAdmin = ctx.session.user.globalRole === 'ADMIN';
+      // Visibility matches the WG's other tabs (standards/meetings): admins,
+      // the center director and secretaries see all groups; everyone else
+      // needs membership. Previously this gated on ADMIN || member only, so a
+      // director (not a WG member) got FORBIDDEN and the Документи tab hung on
+      // «Завантаження…».
       const isMember = ctx.session.user.memberships?.some(
         (m) => m.workingGroupId === input.workingGroupId,
       );
-      if (!isAdmin && !isMember) throw new TRPCError({ code: 'FORBIDDEN' });
+      if (!seesAllWorkingGroups(ctx.session.user) && !isMember) {
+        throw new TRPCError({ code: 'FORBIDDEN' });
+      }
 
       const [docs, meetingsWithMinutes] = await Promise.all([
         ctx.db.document.findMany({
