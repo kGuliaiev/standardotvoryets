@@ -516,6 +516,26 @@ const WORKING_GROUPS: WGSeed[] = [
 async function main() {
   console.log('🌱 Seeding database (per Наказ №32 від 23.03.2026 + зміни)…');
 
+  // ── IDEMPOTENCY GUARD ────────────────────────────────────────────────
+  // This seed is a destructive "reset to seed state": it overwrites user
+  // globalRole, deletes & recreates WG memberships, and removes working
+  // groups (and their standards/meetings/…) whose code isn't in the seed.
+  // The Docker start command runs it on EVERY boot, so without this guard a
+  // redeploy silently wipes manual admin changes — e.g. a user promoted to
+  // «Керівник центру» (DIRECTOR) reverts to their seed role.
+  //
+  // So: run the full seed ONLY on a fresh database. If working groups already
+  // exist, the DB is initialised — skip entirely and preserve all live data.
+  // (A deliberate `prisma migrate reset` drops everything first → count 0 →
+  // seed runs again, as intended.)
+  const existingGroups = await prisma.workingGroup.count();
+  if (existingGroups > 0) {
+    console.log(
+      `↩️  DB already initialised (${existingGroups} working groups) — skipping seed to preserve live data.`,
+    );
+    return;
+  }
+
   /* ── Users ─────────────────────────────────────────────────────────── */
   const userPassword = await bcrypt.hash('User123!', HASH_ROUNDS);
   const adminPassword = await bcrypt.hash('Admin123!', HASH_ROUNDS);
