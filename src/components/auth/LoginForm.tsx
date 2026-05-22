@@ -42,7 +42,9 @@ export function LoginForm() {
         return;
       }
 
-      router.push('/dashboard');
+      // Route through the root page, which redirects to the first section the
+      // user may actually see (skips «Дашборд» if it's hidden for their role).
+      router.push('/');
       router.refresh();
     } catch {
       setError('Виникла помилка. Спробуйте ще раз.');

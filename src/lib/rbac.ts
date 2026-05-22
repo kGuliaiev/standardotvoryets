@@ -35,6 +35,8 @@ export function getUserRoleInGroup(
 /** Returns true if user can see the working group at all */
 export function canAccessGroup(user: UserContext, workingGroupId: string): boolean {
   if (user.globalRole === 'ADMIN') return true;
+  // Center director oversees the whole institute → sees every working group.
+  if (user.globalRole === 'DIRECTOR') return true;
   return user.memberships.some((m) => m.workingGroupId === workingGroupId);
 }
 
@@ -49,16 +51,18 @@ function effectiveAllowed(role: string, action: string): boolean {
 
 export function can(user: UserContext, action: string, workingGroupId: string): boolean {
   if (user.globalRole === 'ADMIN') return true;
-  const role = getUserRoleInGroup(user, workingGroupId);
-  if (!role) return false;
-  // Center director (DIRECTOR) keeps full read everywhere they're a
-  // member, plus any extra powers the admin grants via the
-  // "Керівництво центру" column; otherwise they fall back to the rights
-  // of their actual WG role.
+  // Center director (DIRECTOR) oversees ALL working groups — their rights are
+  // NOT gated by membership. They read everything, plus whatever the
+  // "Керівництво центру" column grants in /admin/permissions, applied across
+  // every WG. (If they're also a member of a WG, their member-role rights
+  // still apply below.) This is checked before the membership gate so the
+  // column actually takes effect in groups they don't belong to.
   if (user.globalRole === 'DIRECTOR') {
     if (READ_ACTIONS.includes(action)) return true;
     if (effectiveAllowed('DIRECTOR', action)) return true;
   }
+  const role = getUserRoleInGroup(user, workingGroupId);
+  if (!role) return false;
   return effectiveAllowed(role, action);
 }
 
