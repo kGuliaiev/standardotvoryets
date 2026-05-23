@@ -236,25 +236,28 @@ function ProtocolDoc({ d }: { d: ProtocolData }) {
     });
   }
 
-  // Signatures
-  body.push(
-    createElement(
-      View,
-      { key: 'sig', style: styles.sigRow },
+  // Signatures — two stacked rows (label left, name right), matching the Word
+  // export's two signature paragraphs rather than one side-by-side row.
+  if (d.chairman) {
+    body.push(
       createElement(
-        Text,
-        {},
-        'Головуючий          ',
-        createElement(Text, { style: styles.bold }, personLabel(d.chairman)),
+        View,
+        { key: 'sig-chair', style: styles.sigRow },
+        createElement(Text, {}, 'Головуючий'),
+        createElement(Text, {}, personLabel(d.chairman)),
       ),
+    );
+  }
+  if (d.secretary) {
+    body.push(
       createElement(
-        Text,
-        {},
-        'Секретар          ',
-        createElement(Text, { style: styles.bold }, personLabel(d.secretary)),
+        View,
+        { key: 'sig-sec', style: [styles.sigRow, { marginTop: 12 }] },
+        createElement(Text, {}, 'Секретар'),
+        createElement(Text, {}, personLabel(d.secretary)),
       ),
-    ),
-  );
+    );
+  }
 
   return createElement(
     Document,
