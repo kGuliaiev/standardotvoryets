@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/server/auth';
 import { db } from '@/server/db';
+import { seesAllWorkingGroups } from '@/server/permissions';
 import { Document, Page, Text, View, StyleSheet, renderToBuffer, Font } from '@react-pdf/renderer';
 import { createElement, type ReactElement, type ReactNode } from 'react';
 import type { DocumentProps } from '@react-pdf/renderer';
@@ -295,12 +296,12 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
     return NextResponse.json({ error: 'Not found' }, { status: 404 });
   }
 
-  const isAdmin = session.user.globalRole === 'ADMIN';
+  // Visibility: admins / center director / secretaries see all groups; others
+  // need membership of this WG. (DIRECTOR previously got 403 here.)
   const isMember = session.user.memberships?.some(
     (m) => m.workingGroupId === meeting.workingGroup.id,
   );
-  const isAnySec = session.user.memberships?.some((m) => m.role === 'SECRETARY');
-  if (!isAdmin && !isMember && !isAnySec) {
+  if (!seesAllWorkingGroups(session.user) && !isMember) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
 
