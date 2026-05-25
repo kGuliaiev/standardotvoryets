@@ -831,6 +831,8 @@ function SuggestionDraftModal({
               initialHtml={draft.proposedText}
               onChange={(html) => onChange({ ...draft, proposedText: html })}
               autoFocus
+              stickyToolbar
+              toolbarTopOffset={71}
               placeholder={
                 draft.operation === 'INSERT_AFTER'
                   ? 'Введіть текст нового параграфа…'
@@ -975,6 +977,8 @@ function BulkEditModal({
           onChange={setHtml}
           className="rounded-[10px] border border-hairline bg-card min-h-[400px]"
           autoFocus
+          stickyToolbar
+          toolbarTopOffset={71}
         />
         <div className="flex justify-end gap-2 pt-2 border-t border-hairline">
           <button onClick={onClose} className="btn-secondary">
