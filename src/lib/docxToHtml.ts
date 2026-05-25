@@ -46,20 +46,47 @@ interface MammothParagraph {
   alignment?: string | null;
   styleName?: string | null;
 }
-type MammothTransformFn = (element: MammothParagraph) => MammothParagraph;
+interface MammothRun {
+  fontSize?: number | null; // points (mammoth = w:sz / 2)
+  styleName?: string | null;
+}
+type MammothParagraphFn = (element: MammothParagraph) => MammothParagraph;
+type MammothRunFn = (element: MammothRun) => MammothRun;
 interface MammothTransforms {
-  paragraph: (fn: MammothTransformFn) => MammothTransformFn;
+  paragraph: (fn: MammothParagraphFn) => (doc: unknown) => unknown;
+  run: (fn: MammothRunFn) => (doc: unknown) => unknown;
 }
 
-// One-time setup of the transform + style map; they're pure data so we
+// One-time setup of the transforms + style map; they're pure data so we
 // can build them at module load.
 const mammothTransforms = (mammoth as unknown as { transforms: MammothTransforms }).transforms;
-const transformDocument = mammothTransforms.paragraph((paragraph) => {
+
+// Paragraph alignment → synthetic styleName suffix (see file header).
+const paragraphTransform = mammothTransforms.paragraph((paragraph) => {
   const target = alignSuffix(paragraph.alignment);
   if (!target) return paragraph;
   const base = paragraph.styleName ?? '';
   return { ...paragraph, styleName: base ? `${base}__align-${target}` : `__align-${target}` };
 });
+
+// Run font size: mammoth reads w:sz onto run.fontSize (points) but drops it
+// from the HTML. We stamp a synthetic run styleName encoding the size in
+// HALF-POINTS (so 10.5pt → 21, integer-only), map it to a marker class, and
+// post-process the class into inline `font-size: <pt>pt` below. pt matches
+// the editor's font-size dropdown, so styled imports stay editable.
+const FS_MIN_HP = 2; // 1pt
+const FS_MAX_HP = 240; // 120pt
+const runTransform = mammothTransforms.run((run) => {
+  if (run.fontSize == null) return run;
+  const hp = Math.round(run.fontSize * 2);
+  if (hp < FS_MIN_HP || hp > FS_MAX_HP) return run;
+  // Override the run styleName: run-level character styles are rare here and
+  // aren't needed for bold/italic/underline (mammoth tracks those separately).
+  return { ...run, styleName: `__fs-${hp}` };
+});
+
+// Apply both transforms: paragraphs first (alignment), then runs (font size).
+const transformDocument = (doc: unknown) => runTransform(paragraphTransform(doc));
 
 const HEADING_LEVELS = [1, 2, 3, 4, 5, 6] as const;
 const alignmentStyleMap: string[] = [];
@@ -70,6 +97,12 @@ for (const target of ['center', 'right', 'justify'] as const) {
       `p[style-name='Heading ${lvl}__align-${target}'] => h${lvl}.ta-${target}:fresh`,
     );
   }
+}
+
+// One rule per half-point so any size in range wraps the run in <span class="fs-N">.
+const fontSizeStyleMap: string[] = [];
+for (let hp = FS_MIN_HP; hp <= FS_MAX_HP; hp++) {
+  fontSizeStyleMap.push(`r[style-name='__fs-${hp}'] => span.fs-${hp}:fresh`);
 }
 
 export interface ConvertResult {
@@ -88,7 +121,7 @@ export async function docxBufferToHtml(buffer: Buffer): Promise<ConvertResult> {
     {
       ignoreEmptyParagraphs: false,
       transformDocument,
-      styleMap: alignmentStyleMap,
+      styleMap: [...alignmentStyleMap, ...fontSizeStyleMap],
       convertImage: mammoth.images.imgElement(() => Promise.resolve({ src: '' })),
     },
   );
@@ -96,7 +129,9 @@ export async function docxBufferToHtml(buffer: Buffer): Promise<ConvertResult> {
   const html = result.value
     .replace(/\sclass="ta-center"/g, ' style="text-align: center"')
     .replace(/\sclass="ta-right"/g, ' style="text-align: right"')
-    .replace(/\sclass="ta-justify"/g, ' style="text-align: justify"');
+    .replace(/\sclass="ta-justify"/g, ' style="text-align: justify"')
+    // Run font-size marker → inline style (half-points → pt).
+    .replace(/\sclass="fs-(\d+)"/g, (_m, hp: string) => ` style="font-size: ${Number(hp) / 2}pt"`);
 
   return {
     html,
