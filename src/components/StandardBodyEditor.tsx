@@ -1,12 +1,16 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useSession } from 'next-auth/react';
 import { trpc } from '@/lib/trpc/client';
 import { Avatar } from '@/components/ui/Avatar';
 import { Modal } from '@/components/ui/Modal';
 import { RichTextEditor } from '@/components/ui/RichTextEditor';
-import { InlineComments, InlineCommentsList } from '@/components/InlineComments';
+import {
+  InlineComments,
+  InlineCommentsList,
+  type InlineCommentTarget,
+} from '@/components/InlineComments';
 import { splitHtmlBlocks, htmlToPlainText, normalizeBodyHtml } from '@/lib/standardBody';
 import { wordDiff } from '@/lib/wordDiff';
 import {
@@ -92,7 +96,12 @@ export function StandardBodyEditor({ target, bodyText, bodyUpdatedAt, bodyUpdate
     };
   }, [me]);
 
-  const canEditMeta = userCtx ? can(userCtx, 'standard:editMeta', target.workingGroupId) : false;
+  // Direct, no-approval body editing (TASKS.md #3). Users with this right
+  // get an always-on inline WYSIWYG with autosave; everyone else keeps the
+  // read-only view + suggestion (пропозиція) flow. (This replaced the old
+  // `standard:editMeta` gate on the body editor — editMeta now only governs
+  // the standard's metadata card elsewhere.)
+  const canEditBody = userCtx ? can(userCtx, 'standard:editBody', target.workingGroupId) : false;
   const canSuggest = userCtx ? can(userCtx, 'comment:add', target.workingGroupId) : false;
 
   // Body is HTML emitted by TipTap (legacy plain-text bodies are migrated to
@@ -164,6 +173,28 @@ export function StandardBodyEditor({ target, bodyText, bodyUpdatedAt, bodyUpdate
   const [pendingImport, setPendingImport] = useState<{ html: string; filename: string } | null>(
     null,
   );
+  // Inline-editor (canEditBody) seed. The editor mounts once and is NOT
+  // re-seeded by the `standard.byId` poll — re-seeding mid-session would
+  // clobber whatever the user is typing. `editorSeedHtml` stays null in
+  // the normal case (so the editor seeds from the freshly-loaded
+  // `normalizedBody` at first mount); it's only set after a .docx import
+  // replaces the entire body, paired with an `editorSeedKey` bump that
+  // forces a clean remount.
+  const [editorSeedHtml, setEditorSeedHtml] = useState<string | null>(null);
+  const [editorSeedKey, setEditorSeedKey] = useState(0);
+  // editBody users get two views: the always-on inline editor (default)
+  // and a "Правки" review view (the read-only article + suggestion rail)
+  // so they can still accept/reject proposals submitted by suggest-only
+  // members. Non-editBody users only ever see the review/suggestion view.
+  const [bodyViewMode, setBodyViewMode] = useState<'edit' | 'review'>('edit');
+  // Switching AWAY from the editor clears any import-seed override so that
+  // re-entering the editor seeds from the latest saved body — not the
+  // pre-edit imported snapshot, which would visually drop (and then risk
+  // overwriting) edits made after the import.
+  const handleBodyModeChange = (m: 'edit' | 'review') => {
+    if (m === 'review') setEditorSeedHtml(null);
+    setBodyViewMode(m);
+  };
 
   const pendingSuggestionCount = useMemo(
     () => (suggestions ?? []).filter((s) => s.status === 'PENDING').length,
@@ -259,7 +290,7 @@ export function StandardBodyEditor({ target, bodyText, bodyUpdatedAt, bodyUpdate
     reactMutation.mutate({ suggestionId, type: next });
   }
 
-  if (!bodyText && !canEditMeta) {
+  if (!bodyText && !canEditBody) {
     return (
       <div className="bg-card rounded-xl border border-hairline p-12 text-center text-light text-sm">
         Текст документа ще не додано. Зверніться до керівника РГ.
@@ -267,7 +298,7 @@ export function StandardBodyEditor({ target, bodyText, bodyUpdatedAt, bodyUpdate
     );
   }
 
-  if (!bodyText && canEditMeta) {
+  if (!bodyText && canEditBody) {
     // Empty body — invite the leader to seed it (manually or via .docx import)
     return (
       <div className="bg-card rounded-xl border border-hairline p-8 text-center space-y-4">
@@ -329,6 +360,110 @@ export function StandardBodyEditor({ target, bodyText, bodyUpdatedAt, bodyUpdate
     ? 'sticky top-[51px] md:top-[71px] z-10 bg-card/90 backdrop-blur-md -mx-5 md:-mx-7 px-5 md:px-7 py-2 border-b border-hairline'
     : 'sticky top-0 z-10 bg-card/90 backdrop-blur-md py-2 border-b border-hairline';
 
+  // ── Direct-edit mode (TASKS.md #3) ─────────────────────────────────────
+  // Users with `standard:editBody` get an always-on inline WYSIWYG editor
+  // with debounced autosave. The formatting toolbar is pinned to the top
+  // (sticky) so it never scrolls away. No "Редагувати все" button, no
+  // per-paragraph suggestion overlay (that combo hung the renderer on real
+  // docs) — direct edits land straight in the body.
+  if (canEditBody && bodyViewMode === 'edit') {
+    const savingNow = updateBodyMutation.isPending || replaceBodyMutation.isPending;
+    return (
+      <div className="space-y-3">
+        {/* Action strip — metadata + export/import. Deliberately NOT
+            sticky here: only the editor's own formatting toolbar is
+            pinned, so the two never stack/overlap. */}
+        <div className="flex items-center justify-between flex-wrap gap-2">
+          <div className="flex items-center gap-3 flex-wrap">
+            <BodyModeToggle
+              mode="edit"
+              onChange={handleBodyModeChange}
+              pendingCount={pendingSuggestionCount}
+            />
+            <p className="text-[11px] text-light">
+              {savingNow ? (
+                <span className="inline-flex items-center gap-1 text-mid">
+                  <Loader2 className="w-3 h-3 animate-spin" />
+                  Збереження…
+                </span>
+              ) : bodyUpdatedAt && bodyUpdatedBy ? (
+                `Збережено автоматично · ${new Date(bodyUpdatedAt).toLocaleString('uk-UA')} · ${bodyUpdatedBy.name}`
+              ) : (
+                'Автозбереження увімкнено'
+              )}
+            </p>
+          </div>
+          <div className="flex items-center gap-1.5 flex-wrap">
+            <a
+              href={exportUrl}
+              download
+              className="text-xs px-2.5 py-1 rounded border border-hairline text-mid hover:text-ink hover:bg-pill inline-flex items-center gap-1.5"
+              title="Зберегти текст документа як файл Microsoft Word (.docx)"
+            >
+              <FileDown className="w-3 h-3" />
+              Експортувати .docx
+            </a>
+            <DocxImportButton
+              standardIdForUpload={parentStandardId}
+              variant="header"
+              onImported={(html, filename) => setPendingImport({ html, filename })}
+              disabled={replaceBodyMutation.isPending}
+            />
+          </div>
+        </div>
+
+        {/* Two columns: the always-on editor on the left, the same
+            Зміни/Коментарі rail on the right that the read-only view has.
+            No selection overlay here (there's no read-only article to
+            select in) — the rail lists still show every change/comment. */}
+        <div className="grid grid-cols-1 lg:grid-cols-[1fr_300px] gap-5 items-start">
+          <InlineBodyEditor
+            seedHtml={editorSeedHtml ?? normalizedBody}
+            seedKey={editorSeedKey}
+            stickyOffset={isInModal ? 71 : 0}
+            onAutosave={(html) => updateBodyMutation.mutate({ ...targetInput, bodyText: html })}
+          />
+          <BodyRail
+            isInModal={isInModal}
+            railTab={railTab}
+            onRailTab={setRailTab}
+            pendingSuggestionCount={pendingSuggestionCount}
+            suggestionsTotal={suggestionsTotal}
+            inlineCommentsOpenCount={inlineCommentsOpenCount}
+            inlineCommentsTotal={inlineCommentsTotal}
+            suggestions={suggestions ?? []}
+            resolvedRecent={resolvedRecent}
+            targetInput={targetInput}
+            canSuggest={canSuggest}
+            articleRef={articleRef}
+            withOverlay={false}
+          />
+        </div>
+
+        {/* Import always replaces the whole body in edit mode (the body
+            already exists here), so route through the confirm modal that
+            warns about wiping orphaned suggestions/comments. */}
+        <ImportConfirmModal
+          pending={pendingImport}
+          pendingSuggestionCount={pendingSuggestionCount}
+          inlineCommentsCount={inlineCommentsTotal}
+          isApplying={replaceBodyMutation.isPending}
+          onCancel={() => setPendingImport(null)}
+          onConfirm={() => {
+            if (pendingImport) {
+              const importedHtml = pendingImport.html;
+              replaceBodyMutation.mutate({ ...targetInput, bodyText: importedHtml });
+              // Remount the editor on the imported body so what the user
+              // sees matches what was just persisted.
+              setEditorSeedHtml(normalizeBodyHtml(importedHtml));
+              setEditorSeedKey((k) => k + 1);
+            }
+          }}
+        />
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-3">
       {/* Header strip / action toolbar — pinned to top so it stays
@@ -336,16 +471,27 @@ export function StandardBodyEditor({ target, bodyText, bodyUpdatedAt, bodyUpdate
           grid so it spans the full width and the right rail starts at
           the same vertical position as the article body. */}
       <div className={`${toolbarSticky} flex items-center justify-between flex-wrap gap-2`}>
-        <p className="text-[11px] text-light">
-          {bodyUpdatedAt && bodyUpdatedBy
-            ? `Оновлено ${new Date(bodyUpdatedAt).toLocaleString('uk-UA')} · ${bodyUpdatedBy.name}`
-            : 'Без правок'}
-          {suggestions && suggestions.filter((s) => s.status === 'PENDING').length > 0 && (
-            <span className="ml-2 text-amber-600 dark:text-amber-400 font-semibold">
-              · {suggestions.filter((s) => s.status === 'PENDING').length} відкритих правок
-            </span>
+        <div className="flex items-center gap-3 flex-wrap">
+          {/* editBody users can jump back to the inline editor; suggest-only
+              users never see this toggle. */}
+          {canEditBody && (
+            <BodyModeToggle
+              mode="review"
+              onChange={handleBodyModeChange}
+              pendingCount={pendingSuggestionCount}
+            />
           )}
-        </p>
+          <p className="text-[11px] text-light">
+            {bodyUpdatedAt && bodyUpdatedBy
+              ? `Оновлено ${new Date(bodyUpdatedAt).toLocaleString('uk-UA')} · ${bodyUpdatedBy.name}`
+              : 'Без правок'}
+            {suggestions && suggestions.filter((s) => s.status === 'PENDING').length > 0 && (
+              <span className="ml-2 text-amber-600 dark:text-amber-400 font-semibold">
+                · {suggestions.filter((s) => s.status === 'PENDING').length} відкритих правок
+              </span>
+            )}
+          </p>
+        </div>
         <div className="flex items-center gap-1.5 flex-wrap">
           <a
             href={exportUrl}
@@ -356,27 +502,6 @@ export function StandardBodyEditor({ target, bodyText, bodyUpdatedAt, bodyUpdate
             <FileDown className="w-3 h-3" />
             Експортувати .docx
           </a>
-          {canEditMeta && (
-            <DocxImportButton
-              standardIdForUpload={parentStandardId}
-              variant="header"
-              onImported={(html, filename) => setPendingImport({ html, filename })}
-              disabled={replaceBodyMutation.isPending}
-            />
-          )}
-          {canEditMeta && (
-            <button
-              onClick={() => {
-                setBulkText(normalizedBody);
-                setBulkOpen(true);
-              }}
-              className="text-xs px-2.5 py-1 rounded border border-hairline text-mid hover:text-ink hover:bg-pill inline-flex items-center gap-1.5"
-              title="Редагувати весь текст із форматуванням як у Word"
-            >
-              <Edit3 className="w-3 h-3" />
-              Редагувати все
-            </button>
-          )}
         </div>
       </div>
 
@@ -402,7 +527,7 @@ export function StandardBodyEditor({ target, bodyText, bodyUpdatedAt, bodyUpdate
                 pending={pending}
                 myUserId={me?.id ?? null}
                 canSuggest={canSuggest}
-                canResolve={canEditMeta}
+                canResolve={canEditBody}
                 onSuggestReplace={() => openSuggest(idx, 'REPLACE')}
                 onSuggestDelete={() => openSuggest(idx, 'DELETE')}
                 onSuggestInsert={() => openInsertAfter(idx)}
@@ -425,76 +550,25 @@ export function StandardBodyEditor({ target, bodyText, bodyUpdatedAt, bodyUpdate
           )}
         </article>
 
-        {/* Right rail card with two tabs: Зміни (suggestions) and
-            Коментарі (inline). Sticky so the rail stays put while the
-            body scrolls underneath. Each tab has its own scrollable
-            content area (max-h on the tab body itself) — the rail
-            never has to scroll as a unit. */}
-        <div className="lg:self-stretch lg:h-full">
-          {/* Sticky lives on the card itself, not the wrapper. The
-              wrapper takes the full grid-row height so the card has
-              a tall containing block to scroll-anchor against —
-              that's required for `position: sticky` to actually
-              engage. The card has a hard `h-[...]` so it never
-              exceeds the modal's visible viewport.
-              The top offset clears the modal title (~64 px) AND the
-              sticky action toolbar (~52 px) so the card's tab bar
-              isn't hidden behind them. */}
-          <div
-            className={`bg-card rounded-xl border border-hairline overflow-hidden flex flex-col ${
-              isInModal
-                ? // Top: 130 px (modal title 64 + toolbar 52 + 14 gap)
-                  // Bottom: 20 px clearance to the modal panel's pb-5
-                  // → card fills the full visible area between them.
-                  'lg:sticky lg:top-[130px] lg:h-[calc(92vh-150px)]'
-                : 'lg:sticky lg:top-4 lg:h-[calc(100vh-3rem)]'
-            }`}
-          >
-            <div className="flex border-b border-hairline shrink-0">
-              <RailTabButton
-                active={railTab === 'changes'}
-                onClick={() => setRailTab('changes')}
-                label="Зміни"
-                open={pendingSuggestionCount}
-                total={suggestionsTotal}
-              />
-              <RailTabButton
-                active={railTab === 'comments'}
-                onClick={() => setRailTab('comments')}
-                label="Коментарі"
-                open={inlineCommentsOpenCount}
-                total={inlineCommentsTotal}
-              />
-            </div>
-            {/* The tab body owns its own overflow — the card never
-                scrolls as a whole, the inner list does. */}
-            <div className="flex-1 overflow-y-auto scrollbar-thin">
-              {railTab === 'changes' ? (
-                <ChangesPanel
-                  suggestions={suggestions ?? []}
-                  resolvedRecent={resolvedRecent}
-                  articleRef={articleRef}
-                />
-              ) : (
-                <InlineCommentsList
-                  target={targetInput}
-                  canComment={canSuggest}
-                  articleRef={articleRef}
-                />
-              )}
-            </div>
-          </div>
-          {/* InlineComments overlay (no rail rendering) mounted
-              always so selection capture, the floating composer, and
-              inline highlights work regardless of which tab is
-              active. */}
-          <InlineComments
-            target={targetInput}
-            canComment={canSuggest}
-            articleRef={articleRef}
-            showRail={false}
-          />
-        </div>
+        {/* Right rail: Зміни (suggestions) + Коментарі (inline). Shared
+            with the inline editor via <BodyRail>. The InlineComments
+            overlay is mounted here (withOverlay) because this view has the
+            read-only <article> users select text in. */}
+        <BodyRail
+          isInModal={isInModal}
+          railTab={railTab}
+          onRailTab={setRailTab}
+          pendingSuggestionCount={pendingSuggestionCount}
+          suggestionsTotal={suggestionsTotal}
+          inlineCommentsOpenCount={inlineCommentsOpenCount}
+          inlineCommentsTotal={inlineCommentsTotal}
+          suggestions={suggestions ?? []}
+          resolvedRecent={resolvedRecent}
+          targetInput={targetInput}
+          canSuggest={canSuggest}
+          articleRef={articleRef}
+          withOverlay
+        />
       </div>
 
       {/* Suggest modal */}
@@ -534,6 +608,222 @@ export function StandardBodyEditor({ target, bodyText, bodyUpdatedAt, bodyUpdate
           }
         }}
       />
+    </div>
+  );
+}
+
+/** Segmented control letting editBody users flip between the inline
+ *  editor and the "Правки" review view (read-only article + suggestion
+ *  rail). The badge surfaces how many proposals still await a decision. */
+function BodyModeToggle({
+  mode,
+  onChange,
+  pendingCount,
+}: {
+  mode: 'edit' | 'review';
+  onChange: (m: 'edit' | 'review') => void;
+  pendingCount: number;
+}) {
+  const base =
+    'text-[11px] font-semibold px-2.5 py-1 rounded-md transition-colors inline-flex items-center gap-1';
+  const active = 'bg-card text-ink shadow-sm';
+  const inactive = 'text-mid hover:text-ink';
+  return (
+    <div className="inline-flex items-center gap-0.5 rounded-lg bg-pill p-0.5 border border-hairline">
+      <button
+        type="button"
+        onClick={() => onChange('edit')}
+        className={`${base} ${mode === 'edit' ? active : inactive}`}
+        title="Пряме редагування тексту з автозбереженням"
+      >
+        <Pencil className="w-3 h-3" />
+        Редагування
+      </button>
+      <button
+        type="button"
+        onClick={() => onChange('review')}
+        className={`${base} ${mode === 'review' ? active : inactive}`}
+        title="Переглянути та опрацювати запропоновані правки"
+      >
+        Правки
+        {pendingCount > 0 && (
+          <span className="ml-0.5 text-[10px] font-bold px-1 rounded bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300 tabular-nums">
+            {pendingCount}
+          </span>
+        )}
+      </button>
+    </div>
+  );
+}
+
+/**
+ * Always-on WYSIWYG body editor for users with `standard:editBody`
+ * (TASKS.md #3). Debounced autosave — there is no Save button; the
+ * formatting toolbar is pinned (sticky) to the top of the scroll
+ * container so it never scrolls away.
+ *
+ * Mount contract: the editor seeds `content` exactly ONCE per `seedKey`.
+ * The parent must NOT bump `seedKey` on the routine `standard.byId` poll
+ * — only when the whole body is swapped (e.g. a .docx import) — otherwise
+ * in-flight typing would be clobbered.
+ */
+function InlineBodyEditor({
+  seedHtml,
+  seedKey,
+  stickyOffset,
+  onAutosave,
+}: {
+  seedHtml: string;
+  seedKey: number;
+  stickyOffset: number;
+  onAutosave: (html: string) => void;
+}) {
+  // Refs (not state) so the debounce timer + unmount cleanup always read
+  // the freshest values without re-subscribing or forcing re-renders.
+  const htmlRef = useRef(seedHtml);
+  const savedRef = useRef(seedHtml);
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const onAutosaveRef = useRef(onAutosave);
+  onAutosaveRef.current = onAutosave;
+
+  const flush = useCallback(() => {
+    if (timerRef.current) {
+      clearTimeout(timerRef.current);
+      timerRef.current = null;
+    }
+    if (htmlRef.current !== savedRef.current) {
+      savedRef.current = htmlRef.current;
+      onAutosaveRef.current(htmlRef.current);
+    }
+  }, []);
+
+  // A fresh seed (import remount) resets the baseline and cancels any
+  // pending autosave so we neither echo the seeded content back nor race
+  // the import's own write. Keyed on seedKey ONLY — adding seedHtml would
+  // reset the baseline on every poll and clobber typing.
+  useEffect(() => {
+    if (timerRef.current) {
+      clearTimeout(timerRef.current);
+      timerRef.current = null;
+    }
+    htmlRef.current = seedHtml;
+    savedRef.current = seedHtml;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [seedKey]);
+
+  // Flush the last edit when the editor unmounts (switching to the review
+  // view, navigating away) so no keystrokes are lost.
+  useEffect(() => () => flush(), [flush]);
+
+  const handleChange = useCallback(
+    (html: string) => {
+      htmlRef.current = html;
+      if (timerRef.current) clearTimeout(timerRef.current);
+      timerRef.current = setTimeout(flush, 1200);
+    },
+    [flush],
+  );
+
+  return (
+    <RichTextEditor
+      key={`inline-body-${seedKey}`}
+      initialHtml={seedHtml}
+      onChange={handleChange}
+      className="rounded-xl border border-hairline bg-card min-h-[60vh]"
+      stickyToolbar
+      toolbarTopOffset={stickyOffset}
+    />
+  );
+}
+
+/**
+ * Right rail shared by both body-editor views: the "Зміни" (suggestions)
+ * and "Коментарі" (inline comments) tabs. Extracted so the inline editor
+ * keeps the same changes/comments panel the read-only view has.
+ *
+ * `withOverlay` mounts the InlineComments selection-capture overlay — only
+ * meaningful when there's a read-only `<article>` to select text in, so
+ * the always-on editor passes `false` (the rail lists still work; they
+ * just don't get text-selection-driven highlights).
+ */
+function BodyRail({
+  isInModal,
+  railTab,
+  onRailTab,
+  pendingSuggestionCount,
+  suggestionsTotal,
+  inlineCommentsOpenCount,
+  inlineCommentsTotal,
+  suggestions,
+  resolvedRecent,
+  targetInput,
+  canSuggest,
+  articleRef,
+  withOverlay = true,
+}: {
+  isInModal: boolean;
+  railTab: 'changes' | 'comments';
+  onRailTab: (t: 'changes' | 'comments') => void;
+  pendingSuggestionCount: number;
+  suggestionsTotal: number;
+  inlineCommentsOpenCount: number;
+  inlineCommentsTotal: number;
+  suggestions: SuggestionListItem[];
+  resolvedRecent: SuggestionListItem[];
+  targetInput: InlineCommentTarget;
+  canSuggest: boolean;
+  articleRef: React.RefObject<HTMLElement>;
+  withOverlay?: boolean;
+}) {
+  return (
+    <div className="lg:self-stretch lg:h-full">
+      <div
+        className={`bg-card rounded-xl border border-hairline overflow-hidden flex flex-col ${
+          isInModal
+            ? 'lg:sticky lg:top-[130px] lg:h-[calc(92vh-150px)]'
+            : 'lg:sticky lg:top-4 lg:h-[calc(100vh-3rem)]'
+        }`}
+      >
+        <div className="flex border-b border-hairline shrink-0">
+          <RailTabButton
+            active={railTab === 'changes'}
+            onClick={() => onRailTab('changes')}
+            label="Зміни"
+            open={pendingSuggestionCount}
+            total={suggestionsTotal}
+          />
+          <RailTabButton
+            active={railTab === 'comments'}
+            onClick={() => onRailTab('comments')}
+            label="Коментарі"
+            open={inlineCommentsOpenCount}
+            total={inlineCommentsTotal}
+          />
+        </div>
+        <div className="flex-1 overflow-y-auto scrollbar-thin">
+          {railTab === 'changes' ? (
+            <ChangesPanel
+              suggestions={suggestions}
+              resolvedRecent={resolvedRecent}
+              articleRef={articleRef}
+            />
+          ) : (
+            <InlineCommentsList
+              target={targetInput}
+              canComment={canSuggest}
+              articleRef={articleRef}
+            />
+          )}
+        </div>
+      </div>
+      {withOverlay && (
+        <InlineComments
+          target={targetInput}
+          canComment={canSuggest}
+          articleRef={articleRef}
+          showRail={false}
+        />
+      )}
     </div>
   );
 }

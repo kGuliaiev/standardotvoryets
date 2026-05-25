@@ -320,7 +320,9 @@ export const suggestionRouter = createTRPCRouter({
       if (!workingGroupId) {
         throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: 'Suggestion has no parent' });
       }
-      if (!can(userCtx(ctx.session), 'standard:editMeta', workingGroupId)) {
+      // Accepting a suggestion writes it into the body — gate on the same
+      // direct-edit right as updateBody/replaceBody.
+      if (!can(userCtx(ctx.session), 'standard:editBody', workingGroupId)) {
         throw new TRPCError({ code: 'FORBIDDEN' });
       }
       if (sug.status !== 'PENDING') {
@@ -460,7 +462,9 @@ export const suggestionRouter = createTRPCRouter({
       if (!workingGroupId) {
         throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: 'Suggestion has no parent' });
       }
-      if (!can(userCtx(ctx.session), 'standard:editMeta', workingGroupId)) {
+      // Resolving the suggestion queue is part of curating the body — gate on
+      // the same direct-edit right as accept.
+      if (!can(userCtx(ctx.session), 'standard:editBody', workingGroupId)) {
         throw new TRPCError({ code: 'FORBIDDEN' });
       }
       if (sug.status !== 'PENDING') {
@@ -488,12 +492,12 @@ export const suggestionRouter = createTRPCRouter({
       return { ok: true };
     }),
 
-  // ── updateBody (LEADER/DEPUTY/SECRETARY or ADMIN: direct edit) ───────
+  // ── updateBody (standard:editBody — direct, no-approval edit) ───────
   updateBody: protectedProcedure
     .input(targetInput.and(z.object({ bodyText: z.string().max(200_000) })))
     .mutation(async ({ ctx, input }) => {
       const target = await resolveTarget(ctx.db, input);
-      if (!can(userCtx(ctx.session), 'standard:editMeta', target.workingGroupId)) {
+      if (!can(userCtx(ctx.session), 'standard:editBody', target.workingGroupId)) {
         throw new TRPCError({ code: 'FORBIDDEN' });
       }
       const before = { bodyText: target.body ?? '' };
@@ -548,7 +552,7 @@ export const suggestionRouter = createTRPCRouter({
     .input(targetInput.and(z.object({ bodyText: z.string().max(200_000) })))
     .mutation(async ({ ctx, input }) => {
       const target = await resolveTarget(ctx.db, input);
-      if (!can(userCtx(ctx.session), 'standard:editMeta', target.workingGroupId)) {
+      if (!can(userCtx(ctx.session), 'standard:editBody', target.workingGroupId)) {
         throw new TRPCError({ code: 'FORBIDDEN' });
       }
       const before = { bodyText: target.body ?? '' };

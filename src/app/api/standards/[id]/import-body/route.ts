@@ -20,8 +20,9 @@
  *   editor renders it without surprises. Images and footnotes are dropped
  *   to keep the body lightweight; we can revisit if users ask for them.
  *
- * Permission: same as bulk body edit — only roles with `standard:editMeta`
- * may import (LEADER / DEPUTY / SECRETARY / ADMIN).
+ * Permission: same as direct body edit — only roles with `standard:editBody`
+ * may import (default: LEADER / DEPUTY / SECRETARY / ADMIN; adjustable in
+ * /admin/permissions).
  */
 
 import { NextResponse } from 'next/server';
@@ -63,7 +64,7 @@ export async function POST(req: Request, { params }: { params: { id: string } })
       role: WorkingGroupRole;
     }[],
   };
-  if (!can(userCtx, 'standard:editMeta', standard.workingGroupId)) {
+  if (!can(userCtx, 'standard:editBody', standard.workingGroupId)) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
 

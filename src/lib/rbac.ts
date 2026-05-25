@@ -88,6 +88,7 @@ export const ALL_ACTIONS: readonly string[] = [
   'standard:create',
   'standard:changeStatus',
   'standard:editMeta',
+  'standard:editBody',
   'document:upload',
   'document:setCurrent',
   'document:delete',
@@ -113,6 +114,7 @@ export const ACTION_LABELS: Record<string, { feature: string; label: string }> =
   'standard:create': { feature: 'Стандарти', label: 'Створити стандарт' },
   'standard:changeStatus': { feature: 'Стандарти', label: 'Змінити статус' },
   'standard:editMeta': { feature: 'Стандарти', label: 'Редагувати картку' },
+  'standard:editBody': { feature: 'Стандарти', label: 'Редагувати текст документа' },
   'document:upload': { feature: 'Документи', label: 'Завантажити / редагувати' },
   'document:setCurrent': { feature: 'Документи', label: 'Позначити актуальним' },
   'document:delete': { feature: 'Документи', label: 'Видалити документ' },
@@ -196,6 +198,9 @@ export const PERMISSIONS: Record<string, readonly string[]> = {
   'standard:create': LEADERS,
   'standard:changeStatus': LEADERS,
   'standard:editMeta': STAFF,
+  // Direct (no-approval) WYSIWYG editing of the document body. Default to
+  // the same trio as editMeta; adjustable in /admin/permissions.
+  'standard:editBody': STAFF,
   'standard:delete': [], // ADMIN only via globalRole check
   'document:upload': STAFF,
   'document:setCurrent': LEADERS,
