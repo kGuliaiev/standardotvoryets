@@ -14,6 +14,26 @@
 
 const PLAIN_TEXT_HINT = /^\s*(?!<)[\s\S]/;
 
+// HTML void elements — never closed, so they must not bump nesting depth
+// in the SSR-fallback block scanner (keeps it consistent with the browser
+// DOMParser path and with the server's splitParagraphs).
+const VOID_HTML_TAGS = new Set([
+  'area',
+  'base',
+  'br',
+  'col',
+  'embed',
+  'hr',
+  'img',
+  'input',
+  'link',
+  'meta',
+  'param',
+  'source',
+  'track',
+  'wbr',
+]);
+
 /** Returns true when the stored body looks like plain text, not HTML. */
 export function isPlainTextBody(body: string | null | undefined): boolean {
   if (!body) return false;
@@ -88,11 +108,11 @@ export function splitHtmlBlocks(html: string): string[] {
         blocks.push(buffer);
         buffer = '';
       }
-    } else if (!m[0].endsWith('/>')) {
-      // self-closing tags (<br/>, <img/>) don't change depth
+    } else if (!m[0].endsWith('/>') && !VOID_HTML_TAGS.has(tag)) {
+      // Only real (non-void) opening tags increase nesting depth. Void
+      // elements (<br>, <img>, <col> inside tables, …) never close, so
+      // counting them would lock depth above 0 and merge blocks.
       depth++;
-      // unwrap top-level void tags so they don't lock depth
-      if (tag === 'br' || tag === 'img' || tag === 'hr') depth--;
     }
   }
   if (buffer.trim()) blocks.push(buffer);

@@ -56,6 +56,26 @@ function userCtx(session: {
  * allow. For more complex HTML we'd reach for `cheerio`; for now this
  * is intentionally minimal.
  */
+// HTML void elements — they never have a closing tag, so they must NOT
+// bump the nesting depth in the block scanner below. Missing `col` here was
+// the cause of accept-suggestion conflicts on documents containing tables.
+const VOID_HTML_TAGS = new Set([
+  'area',
+  'base',
+  'br',
+  'col',
+  'embed',
+  'hr',
+  'img',
+  'input',
+  'link',
+  'meta',
+  'param',
+  'source',
+  'track',
+  'wbr',
+]);
+
 function splitParagraphs(body: string | null | undefined): string[] {
   if (!body) return [];
   const trimmed = body.trim();
@@ -94,9 +114,13 @@ function splitParagraphs(body: string | null | undefined): string[] {
         blocks.push(buffer);
         buffer = '';
       }
-    } else if (!m[0].endsWith('/>')) {
+    } else if (!m[0].endsWith('/>') && !VOID_HTML_TAGS.has(tag)) {
+      // Only real (non-void) opening tags increase nesting depth. Void
+      // elements like <col> (inside TipTap tables), <br>, <img> never get
+      // a closing tag — counting them would inflate depth so it never
+      // returns to 0, swallowing the rest of the document into one block
+      // and shifting every paragraph index after the first table.
       depth++;
-      if (tag === 'br' || tag === 'img' || tag === 'hr') depth--;
     }
   }
   if (buffer.trim()) blocks.push(buffer);

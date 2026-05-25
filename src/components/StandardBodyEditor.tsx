@@ -205,6 +205,8 @@ export function StandardBodyEditor({ target, bodyText, bodyUpdatedAt, bodyUpdate
     if (m !== 'edit') setEditorSeedHtml(null);
     setPickedMode(m);
   };
+  // Suggestion queued for the accept-confirmation modal (диф перед застосуванням).
+  const [acceptPreview, setAcceptPreview] = useState<SuggestionListItem | null>(null);
 
   const pendingSuggestionCount = useMemo(
     () => (suggestions ?? []).filter((s) => s.status === 'PENDING').length,
@@ -233,6 +235,7 @@ export function StandardBodyEditor({ target, bodyText, bodyUpdatedAt, bodyUpdate
     onSuccess: () => {
       invalidateSuggestions();
       invalidateBody();
+      setAcceptPreview(null);
     },
     onError: (e) => alert(e.message),
   });
@@ -550,7 +553,7 @@ export function StandardBodyEditor({ target, bodyText, bodyUpdatedAt, bodyUpdate
                 onSuggestDelete={() => openSuggest(idx, 'DELETE')}
                 onSuggestInsert={() => openInsertAfter(idx)}
                 onReact={(sid, current, type) => toggleReaction(sid, current, type)}
-                onAccept={(sid) => acceptMutation.mutate({ id: sid })}
+                onAccept={(s) => setAcceptPreview(s)}
                 onReject={(sid) => rejectMutation.mutate({ id: sid })}
               />
             );
@@ -597,6 +600,14 @@ export function StandardBodyEditor({ target, bodyText, bodyUpdatedAt, bodyUpdate
         onChange={setDraft}
         onSubmit={submitDraft}
         isPending={createMutation.isPending}
+      />
+
+      {/* Accept-confirmation modal — shows the diff before applying. */}
+      <AcceptPreviewModal
+        suggestion={acceptPreview}
+        onClose={() => setAcceptPreview(null)}
+        onConfirm={() => acceptPreview && acceptMutation.mutate({ id: acceptPreview.id })}
+        isPending={acceptMutation.isPending}
       />
 
       {/* Bulk-edit modal (leader-only) */}
@@ -872,6 +883,122 @@ function BodyRail({
   );
 }
 
+/** Visual diff of a single suggestion — REPLACE renders a word-level
+ *  inline diff (grey original + red/green changes), INSERT_AFTER the new
+ *  block (green), DELETE the removed block (red strike-through). Shared by
+ *  the suggestion card and the accept-confirmation modal. */
+function SuggestionDiff({ s }: { s: SuggestionListItem }) {
+  if (s.operation === 'REPLACE') {
+    return (
+      <div className="text-[13px] leading-relaxed space-y-1.5">
+        <p className="text-[12px] text-light italic">{htmlToPlainText(s.originalText) || '—'}</p>
+        <p className="leading-relaxed">
+          {wordDiff(htmlToPlainText(s.originalText), htmlToPlainText(s.proposedText)).map(
+            (part, i) => {
+              if (part.type === 'eq') return <span key={i}>{part.text}</span>;
+              if (part.type === 'del')
+                return (
+                  <span
+                    key={i}
+                    className="line-through text-red-600 dark:text-red-400 bg-red-50/60 dark:bg-red-900/20 rounded px-0.5"
+                  >
+                    {part.text}
+                  </span>
+                );
+              return (
+                <span
+                  key={i}
+                  className="text-emerald-700 dark:text-emerald-300 bg-emerald-50/70 dark:bg-emerald-900/20 rounded px-0.5 font-medium"
+                >
+                  {part.text}
+                </span>
+              );
+            },
+          )}
+        </p>
+      </div>
+    );
+  }
+  if (s.operation === 'INSERT_AFTER') {
+    return (
+      <div
+        className={`${READONLY_PROSE_CLASSES} text-[13px] leading-relaxed rounded border border-emerald-200 dark:border-emerald-800/40 bg-emerald-50/40 dark:bg-emerald-900/10 px-2.5 py-1.5 [&_*]:!text-emerald-800 dark:[&_*]:!text-emerald-200`}
+        dangerouslySetInnerHTML={{ __html: s.proposedText || '<p>—</p>' }}
+      />
+    );
+  }
+  return (
+    <div
+      className={`${READONLY_PROSE_CLASSES} text-[13px] leading-relaxed rounded border border-red-200 dark:border-red-800/40 bg-red-50/40 dark:bg-red-900/10 px-2.5 py-1.5 [&_*]:line-through [&_*]:!text-red-700 dark:[&_*]:!text-red-300`}
+      dangerouslySetInnerHTML={{ __html: s.originalText || '<p>—</p>' }}
+    />
+  );
+}
+
+/** Confirmation modal shown before accepting a suggestion — surfaces the
+ *  operation, author, full diff and rationale so the resolver reviews
+ *  exactly what will land in the document before it's applied. */
+function AcceptPreviewModal({
+  suggestion,
+  onClose,
+  onConfirm,
+  isPending,
+}: {
+  suggestion: SuggestionListItem | null;
+  onClose: () => void;
+  onConfirm: () => void;
+  isPending: boolean;
+}) {
+  const opLabel =
+    suggestion?.operation === 'DELETE'
+      ? 'Видалити параграф'
+      : suggestion?.operation === 'INSERT_AFTER'
+        ? 'Додати новий параграф'
+        : 'Замінити текст параграфа';
+  return (
+    <Modal
+      open={!!suggestion}
+      onClose={onClose}
+      title="Підтвердити зміну"
+      subtitle={suggestion ? `${opLabel} · параграф №${suggestion.paragraphIndex + 1}` : undefined}
+    >
+      {suggestion && (
+        <div className="space-y-4">
+          <div className="flex items-center gap-2">
+            <Avatar
+              name={suggestion.author.name}
+              avatarUrl={suggestion.author.avatarUrl ?? undefined}
+              size="xs"
+            />
+            <span className="text-xs font-semibold text-ink">{suggestion.author.name}</span>
+            <span className="text-[10px] text-light">
+              · {new Date(suggestion.createdAt).toLocaleDateString('uk-UA')}
+            </span>
+          </div>
+          <div className="rounded-lg border border-hairline bg-pill/30 p-3">
+            <SuggestionDiff s={suggestion} />
+          </div>
+          {suggestion.rationale && (
+            <p className="text-[12px] text-mid italic">
+              <span className="text-light">Обґрунтування: </span>
+              {suggestion.rationale}
+            </p>
+          )}
+          <div className="flex justify-end gap-2 pt-2 border-t border-hairline">
+            <button onClick={onClose} className="btn-secondary">
+              Скасувати
+            </button>
+            <button onClick={onConfirm} disabled={isPending} className="btn-primary">
+              {isPending && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+              Прийняти зміну
+            </button>
+          </div>
+        </div>
+      )}
+    </Modal>
+  );
+}
+
 interface ParagraphBlockProps {
   idx: number;
   html: string;
@@ -883,7 +1010,7 @@ interface ParagraphBlockProps {
   onSuggestDelete: () => void;
   onSuggestInsert: () => void;
   onReact: (sid: string, current: 'LIKE' | 'DISLIKE' | null, type: 'LIKE' | 'DISLIKE') => void;
-  onAccept: (sid: string) => void;
+  onAccept: (s: SuggestionListItem) => void;
   onReject: (sid: string) => void;
 }
 
@@ -989,54 +1116,9 @@ function ParagraphBlock({
                   </span>
                 </div>
 
-                {/* For REPLACE: show the original as a quiet grey
-                    reference, then a word-level diff line with red
-                    strike-through removals + green additions. Much
-                    easier to scan than two redundant blocks. */}
-                {s.operation === 'REPLACE' && (
-                  <div className="text-[13px] leading-relaxed space-y-1.5">
-                    <p className="text-[12px] text-light italic line-clamp-2">
-                      {htmlToPlainText(s.originalText) || '—'}
-                    </p>
-                    <p className="leading-relaxed">
-                      {wordDiff(
-                        htmlToPlainText(s.originalText),
-                        htmlToPlainText(s.proposedText),
-                      ).map((part, i) => {
-                        if (part.type === 'eq') return <span key={i}>{part.text}</span>;
-                        if (part.type === 'del')
-                          return (
-                            <span
-                              key={i}
-                              className="line-through text-red-600 dark:text-red-400 bg-red-50/60 dark:bg-red-900/20 rounded px-0.5"
-                            >
-                              {part.text}
-                            </span>
-                          );
-                        return (
-                          <span
-                            key={i}
-                            className="text-emerald-700 dark:text-emerald-300 bg-emerald-50/70 dark:bg-emerald-900/20 rounded px-0.5 font-medium"
-                          >
-                            {part.text}
-                          </span>
-                        );
-                      })}
-                    </p>
-                  </div>
-                )}
-                {s.operation === 'INSERT_AFTER' && (
-                  <div
-                    className={`${READONLY_PROSE_CLASSES} text-[13px] leading-relaxed rounded border border-emerald-200 dark:border-emerald-800/40 bg-emerald-50/40 dark:bg-emerald-900/10 px-2.5 py-1.5 [&_*]:!text-emerald-800 dark:[&_*]:!text-emerald-200`}
-                    dangerouslySetInnerHTML={{ __html: s.proposedText || '<p>—</p>' }}
-                  />
-                )}
-                {s.operation === 'DELETE' && (
-                  <div
-                    className={`${READONLY_PROSE_CLASSES} text-[13px] leading-relaxed rounded border border-red-200 dark:border-red-800/40 bg-red-50/40 dark:bg-red-900/10 px-2.5 py-1.5 [&_*]:line-through [&_*]:!text-red-700 dark:[&_*]:!text-red-300`}
-                    dangerouslySetInnerHTML={{ __html: s.originalText || '<p>—</p>' }}
-                  />
-                )}
+                {/* Diff of what this suggestion changes — shared with the
+                    accept-confirmation modal via <SuggestionDiff>. */}
+                <SuggestionDiff s={s} />
 
                 {s.rationale && (
                   <p className="mt-2 text-[12px] text-mid italic">
@@ -1075,7 +1157,7 @@ function ParagraphBlock({
                     <>
                       <span className="w-px h-5 bg-hairline mx-1" />
                       <button
-                        onClick={() => onAccept(s.id)}
+                        onClick={() => onAccept(s)}
                         className="inline-flex items-center gap-1 text-xs px-2.5 py-1 rounded bg-emerald-600 text-white hover:bg-emerald-700 font-semibold"
                       >
                         <Check className="w-3 h-3" />
