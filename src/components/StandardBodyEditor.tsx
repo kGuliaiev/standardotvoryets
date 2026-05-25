@@ -380,10 +380,11 @@ export function StandardBodyEditor({ target, bodyText, bodyUpdatedAt, bodyUpdate
     const savingNow = updateBodyMutation.isPending || replaceBodyMutation.isPending;
     return (
       <div className="space-y-3">
-        {/* Action strip — metadata + export/import. Deliberately NOT
-            sticky here: only the editor's own formatting toolbar is
-            pinned, so the two never stack/overlap. */}
-        <div className="flex items-center justify-between flex-wrap gap-2">
+        {/* Action strip — mode toggle + autosave status + export/import.
+            Pinned to the top (sticky, z-20) so it's always reachable; the
+            editor's own formatting toolbar sticks just BELOW it (see the
+            stickyOffset below), so the two stack instead of overlapping. */}
+        <div className={`${toolbarSticky} z-20 flex items-center justify-between flex-wrap gap-2`}>
           <div className="flex items-center gap-3 flex-wrap">
             <BodyModeToggle
               mode={mode}
@@ -433,7 +434,10 @@ export function StandardBodyEditor({ target, bodyText, bodyUpdatedAt, bodyUpdate
           <InlineBodyEditor
             seedHtml={editorSeedHtml ?? normalizedBody}
             seedKey={editorSeedKey}
-            stickyOffset={isInModal ? 71 : 0}
+            // Format toolbar sticks just BELOW the pinned action strip:
+            //   modal    → 71px (modal title) + ~46px (action strip)
+            //   standalone → ~46px (action strip), page top is 0
+            stickyOffset={isInModal ? 117 : 46}
             onAutosave={(html) => updateBodyMutation.mutate({ ...targetInput, bodyText: html })}
           />
           <BodyRail
