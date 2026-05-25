@@ -20,10 +20,11 @@ const SIZE_CLASSES: Record<NonNullable<ModalProps['size']>, string> = {
   md: 'md:max-w-lg',
   lg: 'md:max-w-2xl',
   xl: 'md:max-w-4xl',
-  // `full` reserves the viewport for fullscreen editor-style content
-  // (kept under the 7xl Tailwind cap so the panel still has breathing
-  // room on ultrawide displays).
-  full: 'md:max-w-7xl',
+  // `full` reserves almost the entire viewport for fullscreen editor-style
+  // content (e.g. the document body editor) — the panel already has w-full
+  // and the container adds ~16px gutters, so 96vw leaves a thin margin and
+  // uses the rest of the screen instead of wasting it on side whitespace.
+  full: 'md:max-w-[96vw]',
 };
 
 export function Modal({
