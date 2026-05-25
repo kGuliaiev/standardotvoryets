@@ -25,6 +25,8 @@ import {
   AlertCircle,
   FileUp,
   FileDown,
+  Eye,
+  MessageSquarePlus,
 } from 'lucide-react';
 import { can } from '@/lib/rbac';
 import type { GlobalRole, WorkingGroupRole } from '@prisma/client';
@@ -182,18 +184,26 @@ export function StandardBodyEditor({ target, bodyText, bodyUpdatedAt, bodyUpdate
   // forces a clean remount.
   const [editorSeedHtml, setEditorSeedHtml] = useState<string | null>(null);
   const [editorSeedKey, setEditorSeedKey] = useState(0);
-  // editBody users get two views: the always-on inline editor (default)
-  // and a "Правки" review view (the read-only article + suggestion rail)
-  // so they can still accept/reject proposals submitted by suggest-only
-  // members. Non-editBody users only ever see the review/suggestion view.
-  const [bodyViewMode, setBodyViewMode] = useState<'edit' | 'review'>('edit');
+  // Three view modes (TASKS.md #3):
+  //  • 'view'    — read-only, just the text;
+  //  • 'suggest' — read-only article + пропозиції + inline comments
+  //                (selection overlay only works on the read-only article,
+  //                 which is why comments live here, not in the editor);
+  //  • 'edit'    — always-on WYSIWYG, direct no-approval edits.
+  // `pickedMode` is null until the user explicitly switches, so the default
+  // can track permissions as the session resolves (avoids landing on the
+  // wrong mode during the brief window before `me` loads).
+  type BodyMode = 'view' | 'suggest' | 'edit';
+  const [pickedMode, setPickedMode] = useState<BodyMode | null>(null);
+  const defaultMode: BodyMode = canEditBody ? 'edit' : canSuggest ? 'suggest' : 'view';
+  const mode: BodyMode = pickedMode ?? defaultMode;
   // Switching AWAY from the editor clears any import-seed override so that
   // re-entering the editor seeds from the latest saved body — not the
   // pre-edit imported snapshot, which would visually drop (and then risk
   // overwriting) edits made after the import.
-  const handleBodyModeChange = (m: 'edit' | 'review') => {
-    if (m === 'review') setEditorSeedHtml(null);
-    setBodyViewMode(m);
+  const handleBodyModeChange = (m: BodyMode) => {
+    if (m !== 'edit') setEditorSeedHtml(null);
+    setPickedMode(m);
   };
 
   const pendingSuggestionCount = useMemo(
@@ -366,7 +376,7 @@ export function StandardBodyEditor({ target, bodyText, bodyUpdatedAt, bodyUpdate
   // (sticky) so it never scrolls away. No "Редагувати все" button, no
   // per-paragraph suggestion overlay (that combo hung the renderer on real
   // docs) — direct edits land straight in the body.
-  if (canEditBody && bodyViewMode === 'edit') {
+  if (mode === 'edit' && canEditBody) {
     const savingNow = updateBodyMutation.isPending || replaceBodyMutation.isPending;
     return (
       <div className="space-y-3">
@@ -376,9 +386,12 @@ export function StandardBodyEditor({ target, bodyText, bodyUpdatedAt, bodyUpdate
         <div className="flex items-center justify-between flex-wrap gap-2">
           <div className="flex items-center gap-3 flex-wrap">
             <BodyModeToggle
-              mode="edit"
+              mode={mode}
               onChange={handleBodyModeChange}
+              canSuggest={canSuggest}
+              canEditBody={canEditBody}
               pendingCount={pendingSuggestionCount}
+              commentsCount={inlineCommentsOpenCount}
             />
             <p className="text-[11px] text-light">
               {savingNow ? (
@@ -434,7 +447,7 @@ export function StandardBodyEditor({ target, bodyText, bodyUpdatedAt, bodyUpdate
             suggestions={suggestions ?? []}
             resolvedRecent={resolvedRecent}
             targetInput={targetInput}
-            canSuggest={canSuggest}
+            canComment={canSuggest}
             articleRef={articleRef}
             withOverlay={false}
           />
@@ -472,15 +485,14 @@ export function StandardBodyEditor({ target, bodyText, bodyUpdatedAt, bodyUpdate
           the same vertical position as the article body. */}
       <div className={`${toolbarSticky} flex items-center justify-between flex-wrap gap-2`}>
         <div className="flex items-center gap-3 flex-wrap">
-          {/* editBody users can jump back to the inline editor; suggest-only
-              users never see this toggle. */}
-          {canEditBody && (
-            <BodyModeToggle
-              mode="review"
-              onChange={handleBodyModeChange}
-              pendingCount={pendingSuggestionCount}
-            />
-          )}
+          <BodyModeToggle
+            mode={mode}
+            onChange={handleBodyModeChange}
+            canSuggest={canSuggest}
+            canEditBody={canEditBody}
+            pendingCount={pendingSuggestionCount}
+            commentsCount={inlineCommentsOpenCount}
+          />
           <p className="text-[11px] text-light">
             {bodyUpdatedAt && bodyUpdatedBy
               ? `Оновлено ${new Date(bodyUpdatedAt).toLocaleString('uk-UA')} · ${bodyUpdatedBy.name}`
@@ -506,13 +518,15 @@ export function StandardBodyEditor({ target, bodyText, bodyUpdatedAt, bodyUpdate
       </div>
 
       {/* Two columns under the sticky toolbar: body article on the
-          left, comments + decisions rail on the right. */}
+          left, comments + decisions rail on the right.
+
+          Read-only article shared by 'view' and 'suggest' modes:
+            • 'view'    — pure read; no suggest buttons, no accept/reject,
+                          comment highlights show but can't be created;
+            • 'suggest' — per-paragraph suggest buttons + accept/reject (for
+                          editBody) + inline-comment creation via the
+                          selection overlay. */}
       <div className="grid grid-cols-1 lg:grid-cols-[1fr_300px] gap-5 items-start">
-        {/* Read-only paragraph view with per-paragraph suggest buttons
-            and the InlineComments overlay. For free Word-style editing
-            the user clicks "Редагувати все" — opens the WYSIWYG in a
-            separate modal. Inline WYSIWYG inside this view was tried
-            and reverted because it hung the renderer on real docs. */}
         <article
           ref={articleRef}
           className="bg-card rounded-xl border border-hairline p-5 sm:p-8 space-y-1"
@@ -526,8 +540,8 @@ export function StandardBodyEditor({ target, bodyText, bodyUpdatedAt, bodyUpdate
                 html={html}
                 pending={pending}
                 myUserId={me?.id ?? null}
-                canSuggest={canSuggest}
-                canResolve={canEditBody}
+                canSuggest={mode === 'suggest' && canSuggest}
+                canResolve={mode === 'suggest' && canEditBody}
                 onSuggestReplace={() => openSuggest(idx, 'REPLACE')}
                 onSuggestDelete={() => openSuggest(idx, 'DELETE')}
                 onSuggestInsert={() => openInsertAfter(idx)}
@@ -537,7 +551,7 @@ export function StandardBodyEditor({ target, bodyText, bodyUpdatedAt, bodyUpdate
               />
             );
           })}
-          {canSuggest && paragraphs.length > 0 && (
+          {mode === 'suggest' && canSuggest && paragraphs.length > 0 && (
             <div className="pt-3 border-t border-hairline">
               <button
                 onClick={() => openInsertAfter(paragraphs.length - 1)}
@@ -552,8 +566,9 @@ export function StandardBodyEditor({ target, bodyText, bodyUpdatedAt, bodyUpdate
 
         {/* Right rail: Зміни (suggestions) + Коментарі (inline). Shared
             with the inline editor via <BodyRail>. The InlineComments
-            overlay is mounted here (withOverlay) because this view has the
-            read-only <article> users select text in. */}
+            selection overlay is mounted here (withOverlay) because this
+            view has the read-only <article> users select text in — but
+            comment CREATION is only enabled in 'suggest' mode. */}
         <BodyRail
           isInModal={isInModal}
           railTab={railTab}
@@ -565,7 +580,7 @@ export function StandardBodyEditor({ target, bodyText, bodyUpdatedAt, bodyUpdate
           suggestions={suggestions ?? []}
           resolvedRecent={resolvedRecent}
           targetInput={targetInput}
-          canSuggest={canSuggest}
+          canComment={mode === 'suggest' && canSuggest}
           articleRef={articleRef}
           withOverlay
         />
@@ -612,46 +627,71 @@ export function StandardBodyEditor({ target, bodyText, bodyUpdatedAt, bodyUpdate
   );
 }
 
-/** Segmented control letting editBody users flip between the inline
- *  editor and the "Правки" review view (read-only article + suggestion
- *  rail). The badge surfaces how many proposals still await a decision. */
+/** Segmented control for the three body-editor modes (TASKS.md #3):
+ *  Перегляд (read-only) · Пропозиції (suggest + comment) · Редагування
+ *  (direct WYSIWYG). «Пропозиції» appears only for users who can comment;
+ *  «Редагування» only for those with `standard:editBody`. The badges
+ *  surface how many proposals / open comments await attention. Renders
+ *  nothing when the user has just the single read-only mode. */
 function BodyModeToggle({
   mode,
   onChange,
+  canSuggest,
+  canEditBody,
   pendingCount,
+  commentsCount,
 }: {
-  mode: 'edit' | 'review';
-  onChange: (m: 'edit' | 'review') => void;
+  mode: 'view' | 'suggest' | 'edit';
+  onChange: (m: 'view' | 'suggest' | 'edit') => void;
+  canSuggest: boolean;
+  canEditBody: boolean;
   pendingCount: number;
+  commentsCount: number;
 }) {
+  // No point showing a one-button toggle.
+  if (!canSuggest && !canEditBody) return null;
   const base =
     'text-[11px] font-semibold px-2.5 py-1 rounded-md transition-colors inline-flex items-center gap-1';
   const active = 'bg-card text-ink shadow-sm';
   const inactive = 'text-mid hover:text-ink';
+  const badge =
+    'ml-0.5 text-[10px] font-bold px-1 rounded bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300 tabular-nums';
   return (
     <div className="inline-flex items-center gap-0.5 rounded-lg bg-pill p-0.5 border border-hairline">
       <button
         type="button"
-        onClick={() => onChange('edit')}
-        className={`${base} ${mode === 'edit' ? active : inactive}`}
-        title="Пряме редагування тексту з автозбереженням"
+        onClick={() => onChange('view')}
+        className={`${base} ${mode === 'view' ? active : inactive}`}
+        title="Лише перегляд тексту"
       >
-        <Pencil className="w-3 h-3" />
-        Редагування
+        <Eye className="w-3 h-3" />
+        Перегляд
       </button>
-      <button
-        type="button"
-        onClick={() => onChange('review')}
-        className={`${base} ${mode === 'review' ? active : inactive}`}
-        title="Переглянути та опрацювати запропоновані правки"
-      >
-        Правки
-        {pendingCount > 0 && (
-          <span className="ml-0.5 text-[10px] font-bold px-1 rounded bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300 tabular-nums">
-            {pendingCount}
-          </span>
-        )}
-      </button>
+      {canSuggest && (
+        <button
+          type="button"
+          onClick={() => onChange('suggest')}
+          className={`${base} ${mode === 'suggest' ? active : inactive}`}
+          title="Вносити пропозиції та коментарі"
+        >
+          <MessageSquarePlus className="w-3 h-3" />
+          Пропозиції
+          {pendingCount + commentsCount > 0 && (
+            <span className={badge}>{pendingCount + commentsCount}</span>
+          )}
+        </button>
+      )}
+      {canEditBody && (
+        <button
+          type="button"
+          onClick={() => onChange('edit')}
+          className={`${base} ${mode === 'edit' ? active : inactive}`}
+          title="Пряме редагування тексту з автозбереженням"
+        >
+          <Pencil className="w-3 h-3" />
+          Редагування
+        </button>
+      )}
     </div>
   );
 }
@@ -757,7 +797,7 @@ function BodyRail({
   suggestions,
   resolvedRecent,
   targetInput,
-  canSuggest,
+  canComment,
   articleRef,
   withOverlay = true,
 }: {
@@ -771,7 +811,7 @@ function BodyRail({
   suggestions: SuggestionListItem[];
   resolvedRecent: SuggestionListItem[];
   targetInput: InlineCommentTarget;
-  canSuggest: boolean;
+  canComment: boolean;
   articleRef: React.RefObject<HTMLElement>;
   withOverlay?: boolean;
 }) {
@@ -810,7 +850,7 @@ function BodyRail({
           ) : (
             <InlineCommentsList
               target={targetInput}
-              canComment={canSuggest}
+              canComment={canComment}
               articleRef={articleRef}
             />
           )}
@@ -819,7 +859,7 @@ function BodyRail({
       {withOverlay && (
         <InlineComments
           target={targetInput}
-          canComment={canSuggest}
+          canComment={canComment}
           articleRef={articleRef}
           showRail={false}
         />
