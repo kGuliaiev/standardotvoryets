@@ -173,6 +173,7 @@ export function StandardDetail({ id }: { id: string }) {
   });
   const [editError, setEditError] = useState<string | null>(null);
   const [taskModalOpen, setTaskModalOpen] = useState(false);
+  const [taskFilter, setTaskFilter] = useState<'all' | 'open' | 'done' | 'mine'>('all');
   const [docModalOpen, setDocModalOpen] = useState(false);
   // Pre-checks the "Дозволити правки" toggle when the upload modal
   // was opened via the "Імпортувати з Word" CTA — that flow is
@@ -838,49 +839,83 @@ export function StandardDetail({ id }: { id: string }) {
               </div>
             )}
 
-            {activeTab === 'tasks' && (
-              <div className="space-y-5">
-                {/* Matches the visual rhythm of the global /tasks list
-                    so the user moves between the two without
-                    relearning the row. The standard-code pill is
-                    suppressed since every row already lives under
-                    this one standard. */}
-                <section>
-                  <div className="flex items-baseline justify-between mb-2">
-                    <h3 className="text-[11px] font-bold uppercase tracking-[0.8px] text-light">
-                      Відкриті · {openTasks.length}
-                    </h3>
-                    <button
-                      onClick={() => setTaskModalOpen(true)}
-                      className="text-xs font-bold text-brand hover:underline"
-                    >
-                      + Додати
-                    </button>
+            {activeTab === 'tasks' &&
+              (() => {
+                // Mirrors the global /tasks list block: status filter pills,
+                // grouped Відкриті / Виконані sections, and a full-width
+                // dashed «+ Додати завдання» CTA. The standard-code pill on
+                // each row is suppressed (every row is under this standard).
+                const myId = session?.user?.id;
+                const scoped = (list: typeof openTasks) =>
+                  taskFilter === 'mine' ? list.filter((t) => t.assigneeId === myId) : list;
+                const fOpen = taskFilter === 'done' ? [] : scoped(openTasks);
+                const fDone = taskFilter === 'open' ? [] : scoped(doneTasks);
+                return (
+                  <div className="space-y-5">
+                    {/* Status filter — same pills as /tasks */}
+                    <div className="flex justify-end">
+                      <div className="inline-flex rounded-full border border-hairline p-0.5 bg-card">
+                        {(
+                          [
+                            ['all', 'Всі'],
+                            ['open', 'Відкриті'],
+                            ['done', 'Виконані'],
+                            ['mine', 'Мої'],
+                          ] as const
+                        ).map(([k, label]) => (
+                          <button
+                            key={k}
+                            onClick={() => setTaskFilter(k)}
+                            className={`text-[12px] font-semibold px-3 py-1 rounded-full transition-colors whitespace-nowrap ${
+                              taskFilter === k
+                                ? 'bg-brand-soft text-brand'
+                                : 'text-mid hover:text-ink'
+                            }`}
+                          >
+                            {label}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Відкриті */}
+                    <section>
+                      <div className="text-[11px] font-bold uppercase tracking-[0.8px] text-light mb-2">
+                        Відкриті · {fOpen.length}
+                      </div>
+                      {fOpen.length === 0 ? (
+                        <p className="text-sm text-light px-1 py-3">Завдань немає</p>
+                      ) : (
+                        <ul className="space-y-2">
+                          {fOpen.map((task) => (
+                            <StandardTaskRow key={task.id} task={task} standardId={id} />
+                          ))}
+                        </ul>
+                      )}
+                      <button
+                        onClick={() => setTaskModalOpen(true)}
+                        className="mt-2 w-full text-center text-[13px] py-2.5 rounded-[10px] border border-dashed border-hairline text-mid hover:text-brand hover:border-brand transition-colors"
+                      >
+                        + Додати завдання
+                      </button>
+                    </section>
+
+                    {/* Виконані */}
+                    {fDone.length > 0 && (
+                      <section>
+                        <div className="text-[11px] font-bold uppercase tracking-[0.8px] text-light mb-2">
+                          Виконані · {fDone.length}
+                        </div>
+                        <ul className="space-y-2">
+                          {fDone.map((task) => (
+                            <StandardTaskRow key={task.id} task={task} standardId={id} />
+                          ))}
+                        </ul>
+                      </section>
+                    )}
                   </div>
-                  {openTasks.length === 0 ? (
-                    <p className="text-sm text-light px-1 py-3">Завдань немає</p>
-                  ) : (
-                    <ul className="space-y-2">
-                      {openTasks.map((task) => (
-                        <StandardTaskRow key={task.id} task={task} standardId={id} />
-                      ))}
-                    </ul>
-                  )}
-                </section>
-                {doneTasks.length > 0 && (
-                  <section>
-                    <h3 className="text-[11px] font-bold uppercase tracking-[0.8px] text-light mb-2">
-                      Виконані · {doneTasks.length}
-                    </h3>
-                    <ul className="space-y-2">
-                      {doneTasks.map((task) => (
-                        <StandardTaskRow key={task.id} task={task} standardId={id} />
-                      ))}
-                    </ul>
-                  </section>
-                )}
-              </div>
-            )}
+                );
+              })()}
 
             {activeTab === 'comments' && <CommentsThread standardId={id} />}
 
