@@ -78,7 +78,9 @@ interface DraftSuggestion {
 // from the editor / mammoth output overrides this.
 const READONLY_PROSE_CLASSES =
   'prose prose-sm dark:prose-invert max-w-none ' +
-  "[font-family:'Times_New_Roman',Times,serif] " +
+  // Times New Roman 14pt base — matches the editor + Word export so the
+  // read-only view and the WYSIWYG render at the same size.
+  "[font-family:'Times_New_Roman',Times,serif] [font-size:14pt] " +
   'prose-blockquote:text-mid prose-blockquote:border-brand ' +
   'prose-a:text-brand prose-code:bg-pill prose-code:px-1 prose-code:rounded ' +
   'prose-p:my-0 prose-headings:my-0';
@@ -423,6 +425,11 @@ export function StandardBodyEditor({ target, bodyText, bodyUpdatedAt, bodyUpdate
             //   modal    → 71px (modal title) + ~46px (action strip)
             //   standalone → ~46px (action strip), page top is 0
             stickyOffset={isInModal ? 117 : 46}
+            // Match the right rail's height so the editor card isn't shorter
+            // than the «Зміни/Коментарі» panel (TASKS.md #10).
+            minHeightClass={
+              isInModal ? 'lg:min-h-[calc(92vh-150px)]' : 'lg:min-h-[calc(100vh-3rem)]'
+            }
             onAutosave={(html) => updateBodyMutation.mutate({ ...targetInput, bodyText: html })}
           />
           <BodyRail
@@ -696,11 +703,15 @@ function InlineBodyEditor({
   seedKey,
   stickyOffset,
   onAutosave,
+  minHeightClass = '',
 }: {
   seedHtml: string;
   seedKey: number;
   stickyOffset: number;
   onAutosave: (html: string) => void;
+  /** Extra min-height class so the editor card matches the right rail's
+   *  height (TASKS.md #10). */
+  minHeightClass?: string;
 }) {
   // Refs (not state) so the debounce timer + unmount cleanup always read
   // the freshest values without re-subscribing or forcing re-renders.
@@ -753,7 +764,7 @@ function InlineBodyEditor({
       key={`inline-body-${seedKey}`}
       initialHtml={seedHtml}
       onChange={handleChange}
-      className="rounded-xl border border-hairline bg-card min-h-[60vh]"
+      className={`rounded-xl border border-hairline bg-card min-h-[60vh] ${minHeightClass}`}
       stickyToolbar
       toolbarTopOffset={stickyOffset}
     />

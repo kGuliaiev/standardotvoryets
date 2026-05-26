@@ -126,7 +126,10 @@ export function RichTextEditor({
         // inline font choices the user makes via the toolbar.
         class:
           'prose prose-sm dark:prose-invert max-w-none focus:outline-none ' +
-          "[font-family:'Times_New_Roman',Times,serif] " +
+          // Times New Roman 14pt as the document base (matches the read-only
+          // view + Word export). The 14pt utility overrides prose-sm's size;
+          // inline font-size on imported spans still wins per-element.
+          "[font-family:'Times_New_Roman',Times,serif] [font-size:14pt] " +
           'prose-blockquote:text-mid prose-blockquote:border-brand ' +
           'prose-a:text-brand prose-code:bg-pill prose-code:px-1 prose-code:rounded ' +
           'min-h-[120px] py-2',
@@ -142,11 +145,24 @@ export function RichTextEditor({
   if (!editor) return null;
 
   return (
-    <div className={className ?? 'rounded-[10px] border border-hairline bg-card'}>
+    <div
+      className={`${className ?? 'rounded-[10px] border border-hairline bg-card'} flex flex-col`}
+    >
       {showToolbar && editable && (
         <Toolbar editor={editor} sticky={stickyToolbar} topOffset={toolbarTopOffset} />
       )}
-      <div className="px-4 py-2">
+      {/* flex-1 so the editable area fills the whole card; a click anywhere
+          in it (even in the empty space below the text) places the caret at
+          the end instead of doing nothing. */}
+      <div
+        className="px-4 py-2 flex-1"
+        onMouseDown={(e) => {
+          if (editable && !(e.target as HTMLElement).closest('.ProseMirror')) {
+            e.preventDefault();
+            editor.commands.focus('end');
+          }
+        }}
+      >
         <EditorContent editor={editor} />
       </div>
     </div>
@@ -172,10 +188,16 @@ function Toolbar({
   sticky?: boolean;
   topOffset?: number;
 }) {
-  // Read current marks so the dropdowns reflect the cursor position.
+  // Read current marks so the dropdowns reflect the cursor/selection. Fall
+  // back to the document base (Times New Roman 14pt) so unstyled text shows
+  // the real default instead of a blank "—", and the actual size/font of a
+  // styled selection is reflected.
+  const DEFAULT_FONT = "'Times New Roman', Times, serif";
+  const DEFAULT_SIZE = '14pt';
   const currentFont =
-    (editor.getAttributes('textStyle') as { fontFamily?: string }).fontFamily ?? '';
-  const currentSize = (editor.getAttributes('textStyle') as { fontSize?: string }).fontSize ?? '';
+    (editor.getAttributes('textStyle') as { fontFamily?: string }).fontFamily || DEFAULT_FONT;
+  const currentSize =
+    (editor.getAttributes('textStyle') as { fontSize?: string }).fontSize || DEFAULT_SIZE;
   const currentColor = (editor.getAttributes('textStyle') as { color?: string }).color ?? '#000000';
   return (
     <div
