@@ -154,8 +154,6 @@ export function StandardBodyEditor({ target, bodyText, bodyUpdatedAt, bodyUpdate
   );
 
   const [draft, setDraft] = useState<DraftSuggestion | null>(null);
-  const [bulkOpen, setBulkOpen] = useState(false);
-  const [bulkText, setBulkText] = useState(normalizedBody);
   /** Right rail tabs — Зміни (suggestions) or Коментарі (inline). */
   const [railTab, setRailTab] = useState<'changes' | 'comments'>('changes');
   // Shared inline-comments query so the rail tab badge can show a
@@ -245,7 +243,6 @@ export function StandardBodyEditor({ target, bodyText, bodyUpdatedAt, bodyUpdate
   const updateBodyMutation = trpc.suggestion.updateBody.useMutation({
     onSuccess: () => {
       invalidateBody();
-      setBulkOpen(false);
     },
     onError: (e) => alert(e.message),
   });
@@ -253,7 +250,6 @@ export function StandardBodyEditor({ target, bodyText, bodyUpdatedAt, bodyUpdate
     onSuccess: () => {
       invalidateBody();
       invalidateSuggestions();
-      setBulkOpen(false);
       setPendingImport(null);
     },
     onError: (e) => alert(e.message),
@@ -327,28 +323,14 @@ export function StandardBodyEditor({ target, bodyText, bodyUpdatedAt, bodyUpdate
             disabled={updateBodyMutation.isPending}
           />
           <button
-            onClick={() => {
-              setBulkText('');
-              setBulkOpen(true);
-            }}
-            className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg border border-hairline text-sm font-semibold text-ink hover:bg-pill"
+            onClick={() => updateBodyMutation.mutate({ ...targetInput, bodyText: '<p></p>' })}
+            disabled={updateBodyMutation.isPending}
+            className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg border border-hairline text-sm font-semibold text-ink hover:bg-pill disabled:opacity-50"
           >
             <Plus className="w-4 h-4" />
             Почати з нуля
           </button>
         </div>
-
-        <BulkEditModal
-          open={bulkOpen}
-          initial={bulkText}
-          standardIdForUpload={parentStandardId}
-          bodyAlreadyExists={false}
-          pendingSuggestionCount={0}
-          onClose={() => setBulkOpen(false)}
-          onSave={(text) => updateBodyMutation.mutate({ ...targetInput, bodyText: text })}
-          onReplace={(text) => updateBodyMutation.mutate({ ...targetInput, bodyText: text })}
-          isPending={updateBodyMutation.isPending}
-        />
       </div>
     );
   }
@@ -608,19 +590,6 @@ export function StandardBodyEditor({ target, bodyText, bodyUpdatedAt, bodyUpdate
         onClose={() => setAcceptPreview(null)}
         onConfirm={() => acceptPreview && acceptMutation.mutate({ id: acceptPreview.id })}
         isPending={acceptMutation.isPending}
-      />
-
-      {/* Bulk-edit modal (leader-only) */}
-      <BulkEditModal
-        open={bulkOpen}
-        initial={bulkText}
-        standardIdForUpload={parentStandardId}
-        bodyAlreadyExists={!!bodyText}
-        pendingSuggestionCount={pendingSuggestionCount}
-        onClose={() => setBulkOpen(false)}
-        onSave={(text) => updateBodyMutation.mutate({ ...targetInput, bodyText: text })}
-        onReplace={(text) => replaceBodyMutation.mutate({ ...targetInput, bodyText: text })}
-        isPending={updateBodyMutation.isPending || replaceBodyMutation.isPending}
       />
 
       {/* Top-level import confirmation: only shown when the body already
@@ -1296,113 +1265,6 @@ function SuggestionDraftModal({
           >
             {isPending && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
             Запропонувати правку
-          </button>
-        </div>
-      </div>
-    </Modal>
-  );
-}
-
-function BulkEditModal({
-  open,
-  initial,
-  standardIdForUpload,
-  bodyAlreadyExists,
-  pendingSuggestionCount,
-  onClose,
-  onSave,
-  onReplace,
-  isPending,
-}: {
-  open: boolean;
-  initial: string;
-  /** Used only to build the .docx import URL — the import endpoint just
-   *  converts the file and returns HTML, so we always hit the parent
-   *  standard route. */
-  standardIdForUpload: string;
-  bodyAlreadyExists: boolean;
-  pendingSuggestionCount: number;
-  onClose: () => void;
-  onSave: (text: string) => void;
-  onReplace: (text: string) => void;
-  isPending: boolean;
-}) {
-  const [html, setHtml] = useState(initial);
-  // The editor seeds `content` only once at mount; bumping this key
-  // forces a remount when an import replaces the buffer mid-session.
-  const [editorKey, setEditorKey] = useState(0);
-  // Tracks whether the current buffer came from a .docx import. When true,
-  // saving uses replaceBody (which wipes orphaned suggestions) instead of
-  // updateBody.
-  const [importedFromDocx, setImportedFromDocx] = useState(false);
-  // re-sync when modal (re)opens with a different initial value
-  useEffect(() => {
-    if (open) {
-      setHtml(initial);
-      setImportedFromDocx(false);
-      setEditorKey((k) => k + 1);
-    }
-  }, [initial, open]);
-
-  const handleSave = () => {
-    if (importedFromDocx && bodyAlreadyExists) {
-      onReplace(html);
-    } else {
-      onSave(html);
-    }
-  };
-
-  return (
-    <Modal open={open} onClose={onClose} title="Редагувати текст документа" size="xl">
-      <div className="space-y-4">
-        <div className="flex items-start justify-between gap-3 flex-wrap">
-          <p className="text-xs text-mid flex-1 min-w-[280px]">
-            Повноцінне форматування як у Word — заголовки, списки, таблиці, посилання. Кожен блок
-            (параграф, заголовок, пункт списку, таблиця) — окрема секція для запитів на правку.
-            Зміна тут не створює запитів на голосування.
-          </p>
-          <DocxImportButton
-            standardIdForUpload={standardIdForUpload}
-            variant="secondary"
-            onImported={(imported) => {
-              setHtml(imported);
-              setImportedFromDocx(true);
-              setEditorKey((k) => k + 1);
-            }}
-          />
-        </div>
-        {importedFromDocx && bodyAlreadyExists && pendingSuggestionCount > 0 && (
-          <p className="text-xs text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-700 rounded px-2.5 py-1.5 inline-flex items-center gap-1.5">
-            <AlertCircle className="w-3.5 h-3.5 shrink-0" />
-            При збереженні буде видалено {pendingSuggestionCount}{' '}
-            {pluralizeUk(
-              pendingSuggestionCount,
-              'відкриту правку',
-              'відкриті правки',
-              'відкритих правок',
-            )}
-            , оскільки вони відносяться до попереднього тексту.
-          </p>
-        )}
-        {/* Force a fresh editor instance whenever the modal reopens or an
-            import replaces the buffer — TipTap ignores `content` updates
-            after init. */}
-        <RichTextEditor
-          key={`bulk-${editorKey}`}
-          initialHtml={html}
-          onChange={setHtml}
-          className="rounded-[10px] border border-hairline bg-card min-h-[400px]"
-          autoFocus
-          stickyToolbar
-          toolbarTopOffset={71}
-        />
-        <div className="flex justify-end gap-2 pt-2 border-t border-hairline">
-          <button onClick={onClose} className="btn-secondary">
-            Скасувати
-          </button>
-          <button onClick={handleSave} disabled={isPending} className="btn-primary">
-            {isPending && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
-            Зберегти
           </button>
         </div>
       </div>
