@@ -1,5 +1,6 @@
 'use client';
 
+import { useEffect, useReducer } from 'react';
 import { useEditor, EditorContent, type Editor } from '@tiptap/react';
 import { StarterKit } from '@tiptap/starter-kit';
 import { Underline } from '@tiptap/extension-underline';
@@ -188,6 +189,22 @@ function Toolbar({
   sticky?: boolean;
   topOffset?: number;
 }) {
+  // Re-render the toolbar on every selection change / transaction so the
+  // active-state buttons and the font/size dropdowns reflect the cursor
+  // immediately. Without this, useEditor doesn't re-render on a pure
+  // selection change in this TipTap version, so the toolbar lags until the
+  // next edit (the "big delay" on selecting text).
+  const [, forceUpdate] = useReducer((n: number) => n + 1, 0);
+  useEffect(() => {
+    const onChange = () => forceUpdate();
+    editor.on('selectionUpdate', onChange);
+    editor.on('transaction', onChange);
+    return () => {
+      editor.off('selectionUpdate', onChange);
+      editor.off('transaction', onChange);
+    };
+  }, [editor]);
+
   // Read current marks so the dropdowns reflect the cursor/selection. Fall
   // back to the document base (Times New Roman 14pt) so unstyled text shows
   // the real default instead of a blank "—", and the actual size/font of a
