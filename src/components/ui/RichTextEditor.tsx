@@ -195,9 +195,9 @@ function Toolbar({
   const DEFAULT_FONT = "'Times New Roman', Times, serif";
   const DEFAULT_SIZE = '14pt';
   const currentFont =
-    (editor.getAttributes('textStyle') as { fontFamily?: string }).fontFamily || DEFAULT_FONT;
+    (editor.getAttributes('textStyle') as { fontFamily?: string }).fontFamily ?? DEFAULT_FONT;
   const currentSize =
-    (editor.getAttributes('textStyle') as { fontSize?: string }).fontSize || DEFAULT_SIZE;
+    (editor.getAttributes('textStyle') as { fontSize?: string }).fontSize ?? DEFAULT_SIZE;
   const currentColor = (editor.getAttributes('textStyle') as { color?: string }).color ?? '#000000';
   return (
     <div
