@@ -342,7 +342,10 @@ export function InlineComments({
           <div
             style={{
               position: 'fixed',
-              left: pending.anchorX,
+              // Pill is centred on the anchor; clamp so it doesn't run off
+              // either edge on short lines near the viewport border
+              // (≈240px max wide → half ≈120 + 8px margin).
+              left: Math.min(Math.max(pending.anchorX, 128), window.innerWidth - 128),
               top: pending.anchorY,
               transform: 'translate(-50%, -100%)',
               zIndex: 1000,
@@ -399,7 +402,11 @@ export function InlineComments({
           <div
             style={{
               position: 'fixed',
-              left: Math.min(pending.anchorX, window.innerWidth - 340),
+              // Box is 320px wide and centred on the anchor (translateX -50%),
+              // so its half-width is 160. Clamp the centre to [168, vw-168]
+              // (160 + 8px margin) so neither edge runs off-screen on short
+              // lines near the viewport border.
+              left: Math.min(Math.max(pending.anchorX, 168), window.innerWidth - 168),
               top: pending.anchorY,
               transform: 'translate(-50%, -100%)',
               zIndex: 1000,
