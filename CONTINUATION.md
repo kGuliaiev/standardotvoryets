@@ -13,6 +13,12 @@ This document is the handoff for a new Claude session to pick up the project mid
 
 ---
 
+## 0. Local environment (read before running locally)
+
+- **Local path**: `~/Private/claude/standardotvoryets` (macOS case-insensitive — may display as `Private/Claude`).
+- **⚠️ Never keep this project under iCloud (`~/Documents`, `~/Desktop`).** iCloud sync makes reading `node_modules` block `read()` indefinitely → `tsc`/`eslint`/`next build` hang at 0% CPU; a reboot does not help. Moved out of `~/Documents/Claude/Projects/8 центр/` on 2026-05-26 for this reason.
+- **After a fresh clone**: `pnpm install && pnpm exec prisma generate` BEFORE `pnpm typecheck`/`lint` (without the generated Prisma client, tsc shows implicit-any and eslint floods with no-unsafe errors). `.env` is not in git — restore it from Railway → Variables before running the app.
+
 ## 1. Live system
 
 - **App**: <https://terrific-imagination-production.up.railway.app>
