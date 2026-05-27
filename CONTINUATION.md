@@ -9,8 +9,9 @@
 ## ▶ ПОТОЧНИЙ СТАН (оновлювати щоразу)
 
 - **Гілка:** `main`
-- **Останній коміт:** `c82914a` — merge `fix/meetings-week-nav` (тижневий тулбар календаря)
-- **Зараз у роботі:** security + admin-delete + week-nav зроблено. Далі — Designer release-blockers (`fix/qa-designer-2026-05-26`).
+- **Останній коміт:** `7cec54f` — merge `fix/inline-comment-delete-modal`
+- **Зараз у роботі:** security + admin-delete + week-nav + inline-comment-delete-modal зроблено. Далі — Designer release-blockers (`fix/qa-designer-2026-05-26`).
+- **Спостереження (backlog F-4):** ще лишилися нативні `confirm()`/`alert()` — StandardsList bulk-archive (рядки 55/58/578), UsersAdmin removeMember (700), WorkingGroupDetail archive (217). Замінити на ConfirmModal/тости.
 - **Закрито за останній цикл:** Part 1 (`3429dba`); **Security hotfix B-1…B-9** (merge `29208de`); **адмін-видалення стандарту** з type-to-confirm + S3-cleanup та перенос `standard:editBody` у групу «Документи» (merge `bff4612`). Build/lint/typecheck — зелені.
 - **Останній QA-цикл:** `QA-tests/2026-05-26/` (34 backend / 20 designer / 11 frontend багів). Зведення — `QA-tests/2026-05-26/summary.md`.
 
