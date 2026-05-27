@@ -28,6 +28,7 @@
 import { z } from 'zod';
 import { TRPCError } from '@trpc/server';
 import { createTRPCRouter, protectedProcedure } from '@/server/trpc';
+import { sanitizeRichHtml } from '@/lib/sanitizeHtml';
 import { can } from '@/lib/rbac';
 import { logActivity } from '@/server/audit';
 import { notifySuggestionNew, notifySuggestionResolved } from '@/server/notify';
@@ -249,8 +250,8 @@ export const suggestionRouter = createTRPCRouter({
             : { documentId: target.documentId }),
           authorId: ctx.session.user.id,
           paragraphIndex: input.paragraphIndex,
-          originalText: input.originalText,
-          proposedText: input.operation === 'DELETE' ? '' : input.proposedText,
+          originalText: sanitizeRichHtml(input.originalText),
+          proposedText: input.operation === 'DELETE' ? '' : sanitizeRichHtml(input.proposedText),
           operation: input.operation,
           rationale: input.rationale,
         },
@@ -529,7 +530,7 @@ export const suggestionRouter = createTRPCRouter({
         const updated = await ctx.db.standard.update({
           where: { id: target.standardId },
           data: {
-            bodyText: input.bodyText,
+            bodyText: sanitizeRichHtml(input.bodyText),
             bodyUpdatedAt: new Date(),
             bodyUpdatedById: ctx.session.user.id,
           },
@@ -548,7 +549,7 @@ export const suggestionRouter = createTRPCRouter({
       const updated = await ctx.db.document.update({
         where: { id: target.documentId },
         data: {
-          bodyHtml: input.bodyText,
+          bodyHtml: sanitizeRichHtml(input.bodyText),
           bodyUpdatedAt: new Date(),
           bodyUpdatedById: ctx.session.user.id,
         },
@@ -592,7 +593,7 @@ export const suggestionRouter = createTRPCRouter({
           ctx.db.standard.update({
             where: { id: target.standardId },
             data: {
-              bodyText: input.bodyText,
+              bodyText: sanitizeRichHtml(input.bodyText),
               bodyUpdatedAt: new Date(),
               bodyUpdatedById: ctx.session.user.id,
             },
@@ -622,7 +623,7 @@ export const suggestionRouter = createTRPCRouter({
         ctx.db.document.update({
           where: { id: target.documentId },
           data: {
-            bodyHtml: input.bodyText,
+            bodyHtml: sanitizeRichHtml(input.bodyText),
             bodyUpdatedAt: new Date(),
             bodyUpdatedById: ctx.session.user.id,
           },
