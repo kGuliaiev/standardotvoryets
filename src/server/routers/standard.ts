@@ -487,6 +487,18 @@ export const standardRouter = createTRPCRouter({
           skipped.push({ id: t.id, reason: 'no permission on source WG' });
           continue;
         }
+        // Permission: changing status is a stricter right (LEADERS only by
+        // default) than editing meta (STAFF). Without this, a SECRETARY could
+        // bulk-flip statuses they cannot change one-by-one (B-2).
+        if (
+          input.patch.status &&
+          input.patch.status !== t.status &&
+          !isAdmin &&
+          !can(uctx, 'standard:changeStatus', t.workingGroupId)
+        ) {
+          skipped.push({ id: t.id, reason: 'no permission to change status' });
+          continue;
+        }
         // Permission: also editing meta on the *target* WG when moving
         if (
           input.patch.workingGroupId &&
