@@ -97,6 +97,7 @@ interface Props {
 export function WorkingGroupDetail({ id }: Props) {
   const { data: session } = useSession();
   const [tab, setTab] = useState<TabId>('info');
+  const [confirmArchiveOpen, setConfirmArchiveOpen] = useState(false);
   const [showAddMember, setShowAddMember] = useState(false);
   const [showEditName, setShowEditName] = useState(false);
   const [addForm, setAddForm] = useState({ email: '', role: 'MEMBER' as WorkingGroupRole });
@@ -193,6 +194,19 @@ export function WorkingGroupDetail({ id }: Props) {
 
   return (
     <div className="space-y-5">
+      <ConfirmModal
+        open={confirmArchiveOpen}
+        title={group.isArchived ? 'Відновити групу?' : 'Архівувати групу?'}
+        destructive={!group.isArchived}
+        message={`Групу "${group.name}" буде ${group.isArchived ? 'відновлено' : 'заархівовано'}.`}
+        confirmLabel={group.isArchived ? 'Відновити' : 'Архівувати'}
+        isPending={archiveMutation.isPending}
+        onConfirm={() => {
+          archiveMutation.mutate({ id, isArchived: !group.isArchived });
+          setConfirmArchiveOpen(false);
+        }}
+        onClose={() => setConfirmArchiveOpen(false)}
+      />
       {/* Header */}
       <div className="flex items-start justify-between">
         <div className="flex items-center gap-3">
@@ -212,13 +226,7 @@ export function WorkingGroupDetail({ id }: Props) {
         <div className="flex gap-2">
           {isAdmin && (
             <button
-              onClick={() => {
-                if (
-                  confirm(`${group.isArchived ? 'Відновити' : 'Архівувати'} групу "${group.name}"?`)
-                ) {
-                  archiveMutation.mutate({ id, isArchived: !group.isArchived });
-                }
-              }}
+              onClick={() => setConfirmArchiveOpen(true)}
               disabled={archiveMutation.isPending}
               className="text-xs text-mid hover:text-ink border border-hairline rounded-lg px-3 py-1.5 hover:bg-page transition-colors inline-flex items-center gap-1.5 disabled:opacity-50"
             >

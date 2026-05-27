@@ -11,6 +11,7 @@ import { StatusBadge, type StandardStatus } from '@/components/ui/StatusBadge';
 import { Avatar } from '@/components/ui/Avatar';
 import { Modal } from '@/components/ui/Modal';
 import { ConfirmModal } from '@/components/ui/ConfirmModal';
+import { toast } from '@/lib/toast';
 import { ActivityFeed } from '@/components/ActivityFeed';
 import { TaskFormModal } from '@/components/TaskFormModal';
 import { DocumentUploadModal } from '@/components/DocumentUploadModal';
@@ -239,7 +240,7 @@ export function StandardDetail({ id }: { id: string }) {
       setDeleteDocConfirmText('');
       void refetch();
     },
-    onError: (e) => alert(e.message),
+    onError: (e) => toast.error(e.message),
   });
 
   const updateMutation = trpc.standard.update.useMutation({
