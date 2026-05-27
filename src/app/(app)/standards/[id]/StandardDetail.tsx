@@ -3,13 +3,14 @@
 import { useState, useEffect, useRef } from 'react';
 import { trpc } from '@/lib/trpc/client';
 import { useSession } from 'next-auth/react';
-import { useSearchParams } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
-import { Pencil, ChevronDown, FileText } from 'lucide-react';
+import { Pencil, ChevronDown, FileText, Trash2 } from 'lucide-react';
 import { DueDateChip } from '@/lib/dueDate';
 import { StatusBadge, type StandardStatus } from '@/components/ui/StatusBadge';
 import { Avatar } from '@/components/ui/Avatar';
 import { Modal } from '@/components/ui/Modal';
+import { ConfirmModal } from '@/components/ui/ConfirmModal';
 import { ActivityFeed } from '@/components/ActivityFeed';
 import { TaskFormModal } from '@/components/TaskFormModal';
 import { DocumentUploadModal } from '@/components/DocumentUploadModal';
@@ -180,6 +181,19 @@ export function StandardDetail({ id }: { id: string }) {
   }, [currentVoting?.id, currentVoting?.deadline, id, closeOverdueVote]);
 
   const [editOpen, setEditOpen] = useState(false);
+  const router = useRouter();
+  const isAdmin = session?.user.globalRole === 'ADMIN';
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+  const deleteStandard = trpc.standard.delete.useMutation({
+    onSuccess: () => {
+      void utils.standard.list.invalidate();
+      void utils.dashboard.kpis.invalidate();
+      void utils.dashboard.navCounts.invalidate();
+      router.push('/standards');
+    },
+    onError: (e) => setDeleteError(e.message),
+  });
   const [editForm, setEditForm] = useState({
     title: '',
     description: '',
@@ -270,6 +284,40 @@ export function StandardDetail({ id }: { id: string }) {
 
   return (
     <div className="space-y-6">
+      {/* Admin-only hard delete: removes the standard + all related data
+          (documents, tasks, votes, comments, journal) and its S3 files.
+          Guarded by type-to-confirm (must type the standard code). */}
+      <ConfirmModal
+        open={deleteOpen}
+        title="Видалити стандарт?"
+        destructive
+        message={
+          <>
+            Стандарт <span className="font-mono font-semibold">{standard.code}</span> «
+            {standard.title}» та <b>усі пов&apos;язані дані</b> (документи, завдання, голосування,
+            коментарі, журнал змін, файли у сховищі) будуть видалені <b>безповоротно</b>. Цю дію
+            неможливо скасувати.
+          </>
+        }
+        confirmText={standard.code}
+        confirmTextLabel={
+          <>
+            Введіть код <span className="font-mono font-semibold">{standard.code}</span> для
+            підтвердження:
+          </>
+        }
+        confirmLabel="Видалити назавжди"
+        isPending={deleteStandard.isPending}
+        error={deleteError}
+        onConfirm={() => {
+          setDeleteError(null);
+          deleteStandard.mutate({ id, confirmCode: standard.code });
+        }}
+        onClose={() => {
+          setDeleteOpen(false);
+          setDeleteError(null);
+        }}
+      />
       {/* Breadcrumb */}
       <nav className="flex items-center gap-2 text-sm text-mid">
         <Link href="/standards" className="hover:text-blue-600">
@@ -330,6 +378,20 @@ export function StandardDetail({ id }: { id: string }) {
                 >
                   <Pencil className="w-3.5 h-3.5" />
                   Редагувати
+                </button>
+              )}
+              {isAdmin && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setDeleteError(null);
+                    setDeleteOpen(true);
+                  }}
+                  className="px-3 py-1.5 text-xs font-semibold rounded-[10px] border-[1.5px] border-red-300 dark:border-red-800 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/30 transition-colors inline-flex items-center gap-1.5"
+                  title="Видалити стандарт та всі пов'язані дані"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                  Видалити
                 </button>
               )}
               {canChangeStatus &&

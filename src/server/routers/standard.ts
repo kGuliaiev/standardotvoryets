@@ -5,6 +5,9 @@ import { can } from '@/lib/rbac';
 import { logActivity } from '@/server/audit';
 import { seesAllWorkingGroups } from '@/server/permissions';
 import { notifyStandardStatusChanged, notifyStageCompleted, type StageKey } from '@/server/notify';
+import { s3 } from '@/server/s3';
+import { DeleteObjectCommand } from '@aws-sdk/client-s3';
+import { env } from '@/lib/env';
 import type { GlobalRole, WorkingGroupRole } from '@prisma/client';
 
 function userCtx(session: {
@@ -429,20 +432,55 @@ export const standardRouter = createTRPCRouter({
     }),
 
   // ── delete (ADMIN only) ───────────────────────────────────────────────
+  // Hard-deletes the standard and EVERY related record. The DB cascade
+  // (onDelete: Cascade in schema) removes documents, tasks, votings/votes,
+  // comments, inline comments + replies, suggestions and status history. On
+  // top of that we best-effort delete the documents' files from S3 (the DB
+  // cascade can't reach object storage — they'd otherwise orphan, B-11).
+  // Guarded by a server-enforced type-to-confirm: the caller must echo the
+  // standard's code, so a stray/automated call can't wipe a standard.
   delete: protectedProcedure
-    .input(z.object({ id: z.string().cuid() }))
+    .input(z.object({ id: z.string().cuid(), confirmCode: z.string().min(1) }))
     .mutation(async ({ ctx, input }) => {
       if (ctx.session.user.globalRole !== 'ADMIN') {
         throw new TRPCError({ code: 'FORBIDDEN' });
       }
       const before = await ctx.db.standard.findUniqueOrThrow({ where: { id: input.id } });
+
+      if (input.confirmCode.trim() !== before.code) {
+        throw new TRPCError({
+          code: 'BAD_REQUEST',
+          message: 'Код підтвердження не збігається з кодом стандарту',
+        });
+      }
+
+      // Collect S3 keys before the cascade removes the Document rows.
+      const docs = await ctx.db.document.findMany({
+        where: { standardId: input.id, s3Key: { not: null } },
+        select: { s3Key: true },
+      });
+
       const deleted = await ctx.db.standard.delete({ where: { id: input.id } });
+
+      // Best-effort object-storage cleanup (don't fail the delete on S3 errors).
+      let s3Deleted = 0;
+      for (const d of docs) {
+        if (!d.s3Key) continue;
+        try {
+          await s3.send(new DeleteObjectCommand({ Bucket: env.S3_BUCKET, Key: d.s3Key }));
+          s3Deleted += 1;
+        } catch (e) {
+          console.warn('[standard.delete] S3 delete failed (continuing)', e);
+        }
+      }
+
       await logActivity(ctx.db, {
         userId: ctx.session.user.id,
         action: 'DELETE',
         entity: 'Standard',
         entityId: input.id,
         before,
+        note: `Видалено стандарт ${before.code} та всі пов'язані дані (файлів у сховищі: ${s3Deleted}/${docs.length})`,
       });
       return deleted;
     }),

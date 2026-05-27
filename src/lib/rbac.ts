@@ -114,7 +114,9 @@ export const ACTION_LABELS: Record<string, { feature: string; label: string }> =
   'standard:create': { feature: 'Стандарти', label: 'Створити стандарт' },
   'standard:changeStatus': { feature: 'Стандарти', label: 'Змінити статус' },
   'standard:editMeta': { feature: 'Стандарти', label: 'Редагувати картку' },
-  'standard:editBody': { feature: 'Стандарти', label: 'Редагувати текст документа' },
+  // Grouped under "Документи" — this governs editing the document/standard
+  // *body text*, alongside the other document permissions.
+  'standard:editBody': { feature: 'Документи', label: 'Редагувати текст документа' },
   'document:upload': { feature: 'Документи', label: 'Завантажити / редагувати' },
   'document:setCurrent': { feature: 'Документи', label: 'Позначити актуальним' },
   'document:delete': { feature: 'Документи', label: 'Видалити документ' },
