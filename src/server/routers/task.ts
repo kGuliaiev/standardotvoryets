@@ -83,6 +83,16 @@ export const taskRouter = createTRPCRouter({
         },
       });
       if (!task) throw new TRPCError({ code: 'NOT_FOUND' });
+
+      // RBAC: byId exposes the task with its standard + working group.
+      // Restrict to members (admins/director/secretaries see all) — previously
+      // any authed user could read any task by cuid (B-7).
+      const isMember = ctx.session.user.memberships?.some(
+        (m) => m.workingGroupId === task.standard.workingGroupId,
+      );
+      if (!seesAllWorkingGroups(ctx.session.user) && !isMember) {
+        throw new TRPCError({ code: 'FORBIDDEN' });
+      }
       return task;
     }),
 

@@ -42,15 +42,28 @@ export const standardRouter = createTRPCRouter({
       const seesAll = seesAllWorkingGroups(ctx.session.user);
       const memberGroupIds = ctx.session.user.memberships?.map((m) => m.workingGroupId) ?? [];
 
-      // Resolve WG filter — multi (workingGroupIds) takes precedence over single
-      const wgFilter =
+      // Client-supplied WG filter — multi (workingGroupIds) takes precedence
+      // over single. Both must be intersected with the groups the user may
+      // see; otherwise passing a foreign WG id leaks that group's standards
+      // (B-1). An empty allow-list resolves to `{ in: [] }`, which matches no
+      // rows, so the result is an empty page rather than a bypass.
+      const requestedIds =
         input.workingGroupIds && input.workingGroupIds.length > 0
-          ? { workingGroupId: { in: input.workingGroupIds } }
+          ? input.workingGroupIds
           : input.workingGroupId
-            ? { workingGroupId: input.workingGroupId }
-            : seesAll
-              ? {}
-              : { workingGroupId: { in: memberGroupIds } };
+            ? [input.workingGroupId]
+            : null;
+      const allowedIds = requestedIds
+        ? seesAll
+          ? requestedIds
+          : requestedIds.filter((id) => memberGroupIds.includes(id))
+        : null;
+
+      const wgFilter = allowedIds
+        ? { workingGroupId: { in: allowedIds } }
+        : seesAll
+          ? {}
+          : { workingGroupId: { in: memberGroupIds } };
 
       const statusFilter =
         input.statuses && input.statuses.length > 0
@@ -472,6 +485,18 @@ export const standardRouter = createTRPCRouter({
         // Permission: editing meta on the *source* WG
         if (!isAdmin && !can(uctx, 'standard:editMeta', t.workingGroupId)) {
           skipped.push({ id: t.id, reason: 'no permission on source WG' });
+          continue;
+        }
+        // Permission: changing status is a stricter right (LEADERS only by
+        // default) than editing meta (STAFF). Without this, a SECRETARY could
+        // bulk-flip statuses they cannot change one-by-one (B-2).
+        if (
+          input.patch.status &&
+          input.patch.status !== t.status &&
+          !isAdmin &&
+          !can(uctx, 'standard:changeStatus', t.workingGroupId)
+        ) {
+          skipped.push({ id: t.id, reason: 'no permission to change status' });
           continue;
         }
         // Permission: also editing meta on the *target* WG when moving

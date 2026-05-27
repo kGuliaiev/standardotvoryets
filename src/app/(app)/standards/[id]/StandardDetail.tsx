@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { trpc } from '@/lib/trpc/client';
 import { useSession } from 'next-auth/react';
 import { useSearchParams } from 'next/navigation';
@@ -160,6 +160,24 @@ export function StandardDetail({ id }: { id: string }) {
   });
   const castVote = trpc.vote.cast.useMutation({ onSuccess: () => void refetch() });
   const closeVoting = trpc.vote.closeVoting.useMutation({ onSuccess: invalidateStandardLists });
+  // Overdue votes used to auto-close inside the vote.current GET (B-9). Now the
+  // page asks the server to close it once, via a privileged + race-safe
+  // mutation. Non-leaders get FORBIDDEN here (harmless, swallowed); a leader's
+  // visit closes it. `mutate` is referentially stable, so it's a safe dep.
+  const { mutate: closeOverdueVote } = trpc.vote.closeOverdue.useMutation({
+    onSuccess: invalidateStandardLists,
+    onError: () => {
+      /* not permitted to close — ignore */
+    },
+  });
+  const closeAttemptedRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!currentVoting?.id || !currentVoting.deadline) return;
+    if (new Date(currentVoting.deadline) > new Date()) return;
+    if (closeAttemptedRef.current === currentVoting.id) return;
+    closeAttemptedRef.current = currentVoting.id;
+    closeOverdueVote({ standardId: id });
+  }, [currentVoting?.id, currentVoting?.deadline, id, closeOverdueVote]);
 
   const [editOpen, setEditOpen] = useState(false);
   const [editForm, setEditForm] = useState({

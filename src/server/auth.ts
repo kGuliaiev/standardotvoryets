@@ -63,6 +63,11 @@ export const authOptions: NextAuthOptions = {
 
         if (!user) return null;
 
+        // Deactivated accounts must not be able to (re-)authenticate. Without
+        // this, admin.setActive(false) only hides the user in the UI — they
+        // could still log in again with valid credentials (B-8).
+        if (!user.isActive) return null;
+
         const isPasswordValid = await bcrypt.compare(credentials.password, user.passwordHash);
         if (!isPasswordValid) return null;
 
