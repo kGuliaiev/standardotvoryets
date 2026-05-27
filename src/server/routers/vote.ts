@@ -234,33 +234,64 @@ export const voteRouter = createTRPCRouter({
       };
     }),
 
-  // ── current ───────────────────────────────────────────────────────────
+  // ── current (read-only) ────────────────────────────────────────────────
+  // Pure read. The previous implementation lazily auto-closed an overdue vote
+  // *inside this GET* — performing writes attributed to whichever user happened
+  // to load the page, with no RBAC and a race that produced duplicate
+  // status-history rows under polling (B-9). The close now lives in the
+  // closeOverdue mutation below; this query just returns the open vote (even if
+  // past deadline, so the client can offer to close it).
   current: protectedProcedure
     .input(z.object({ standardId: z.string().cuid() }))
     .query(async ({ ctx, input }) => {
+      return ctx.db.voting.findFirst({
+        where: { standardId: input.standardId, status: 'OPEN' },
+        include: { votes: true, standard: { select: { id: true, workingGroupId: true } } },
+      });
+    }),
+
+  // ── closeOverdue ─────────────────────────────────────────────────────────
+  // Auto-close an OPEN vote whose deadline has passed. Privileged (vote:open),
+  // idempotent and race-safe: the close runs in a Serializable transaction that
+  // re-checks status === 'OPEN' inside, so concurrent triggers can't double-close
+  // or duplicate status history (B-9).
+  closeOverdue: protectedProcedure
+    .input(z.object({ standardId: z.string().cuid() }))
+    .mutation(async ({ ctx, input }) => {
       const open = await ctx.db.voting.findFirst({
         where: { standardId: input.standardId, status: 'OPEN' },
         include: { votes: true, standard: { select: { id: true, workingGroupId: true } } },
       });
+      if (!open) return null;
+      // Only past-deadline votes auto-close here; live ones use closeVoting.
+      if (!open.deadline || new Date(open.deadline) > new Date()) return null;
 
-      // Lazy auto-close: if deadline has passed, close + transition standard status
-      if (open?.deadline && new Date(open.deadline) <= new Date()) {
-        const forVotes = open.votes.filter((v) => v.choice === 'FOR').length;
-        const againstVotes = open.votes.filter((v) => v.choice === 'AGAINST').length;
-        const total = forVotes + againstVotes;
-        const adopted = total > 0 ? forVotes / total > 0.5 : false;
-        const newStatus = adopted ? 'ADOPTED' : 'REJECTED';
+      if (!can(userCtx(ctx.session), 'vote:open', open.standard.workingGroupId)) {
+        throw new TRPCError({ code: 'FORBIDDEN' });
+      }
 
-        await ctx.db.$transaction([
-          ctx.db.voting.update({
+      const forVotes = open.votes.filter((v) => v.choice === 'FOR').length;
+      const againstVotes = open.votes.filter((v) => v.choice === 'AGAINST').length;
+      const total = forVotes + againstVotes;
+      const adopted = total > 0 ? forVotes / total > 0.5 : false;
+      const newStatus = adopted ? 'ADOPTED' : 'REJECTED';
+
+      const didClose = await ctx.db.$transaction(
+        async (tx) => {
+          const fresh = await tx.voting.findFirst({
+            where: { id: open.id, status: 'OPEN' },
+            select: { id: true },
+          });
+          if (!fresh) return false; // already closed by a concurrent request
+          await tx.voting.update({
             where: { id: open.id },
             data: { status: 'CLOSED', closedAt: new Date() },
-          }),
-          ctx.db.standard.update({
+          });
+          await tx.standard.update({
             where: { id: open.standard.id },
             data: { status: newStatus },
-          }),
-          ctx.db.standardStatusHistory.create({
+          });
+          await tx.standardStatusHistory.create({
             data: {
               standardId: open.standard.id,
               fromStatus: 'VOTING',
@@ -268,12 +299,31 @@ export const voteRouter = createTRPCRouter({
               changedById: ctx.session.user.id,
               note: `Автоматичне завершення за дедлайном. За: ${forVotes}, Проти: ${againstVotes}`,
             },
-          }),
-        ]);
-        return null;
-      }
+          });
+          return true;
+        },
+        { isolationLevel: 'Serializable' },
+      );
 
-      return open;
+      if (!didClose) return null;
+
+      await logActivity(ctx.db, {
+        userId: ctx.session.user.id,
+        action: 'STATUS_CHANGE',
+        entity: 'Vote',
+        entityId: open.id,
+        before: { status: 'OPEN' },
+        after: { status: 'CLOSED' },
+        note: `Авто-завершення за дедлайном. За: ${forVotes}, проти: ${againstVotes}. Результат: ${newStatus}`,
+      });
+      await notifyVoteClosed(
+        ctx.db,
+        open.id,
+        adopted ? 'прийнято' : 'відхилено',
+        ctx.session.user.id,
+      );
+
+      return { status: newStatus, forVotes, againstVotes, total };
     }),
 
   // ── history ───────────────────────────────────────────────────────────
