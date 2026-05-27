@@ -5,6 +5,7 @@ import { createPortal } from 'react-dom';
 import { useSession } from 'next-auth/react';
 import { trpc } from '@/lib/trpc/client';
 import { Avatar } from '@/components/ui/Avatar';
+import { ConfirmModal } from '@/components/ui/ConfirmModal';
 import { Check, X as XIcon, Loader2, MessageCirclePlus, Pencil, Reply } from 'lucide-react';
 import type { RouterOutputs } from '@/lib/trpc/client';
 
@@ -555,7 +556,18 @@ export function InlineCommentsList({
   const setResolvedMutation = trpc.inlineComment.setResolved.useMutation({
     onSuccess: () => invalidate(),
   });
-  const deleteMutation = trpc.inlineComment.delete.useMutation({ onSuccess: () => invalidate() });
+  // Delete confirmation now uses the in-app ConfirmModal instead of the
+  // browser's native confirm() dialog.
+  const [pendingDelete, setPendingDelete] = useState<string | null>(null);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+  const deleteMutation = trpc.inlineComment.delete.useMutation({
+    onSuccess: () => {
+      invalidate();
+      setPendingDelete(null);
+      setDeleteError(null);
+    },
+    onError: (e) => setDeleteError(e.message),
+  });
 
   const grouped = useMemo(() => {
     const map = new Map<number, InlineCommentItem[]>();
@@ -598,98 +610,115 @@ export function InlineCommentsList({
   }
 
   return (
-    <ul className="divide-y divide-hairline">
-      {grouped.map(([paraIdx, items]) => (
-        <li key={paraIdx} className="px-3 py-2.5">
-          <button
-            className="text-[10px] text-light font-mono uppercase tracking-wide mb-1 hover:text-brand"
-            onClick={() => {
-              const first = items[0];
-              if (first) focusComment(first.id, paraIdx);
-            }}
-          >
-            Параграф {paraIdx + 1}
-          </button>
-          <ul className="space-y-2">
-            {items.map((c) => {
-              const isResolved = c.status === 'RESOLVED';
-              const isMine = me?.id === c.author.id;
-              return (
-                <li
-                  key={c.id}
-                  data-rail-comment-id={c.id}
-                  onClick={() => focusComment(c.id, paraIdx)}
-                  className={`rounded-md border px-2.5 py-2 text-[11px] cursor-pointer ${
-                    isResolved
-                      ? 'border-hairline bg-pill/40 opacity-70'
-                      : 'border-amber-200 dark:border-amber-700/60 bg-amber-50/40 dark:bg-amber-900/10 hover:bg-amber-50 dark:hover:bg-amber-900/20'
-                  }`}
-                >
-                  <div className="flex items-center gap-1.5 mb-1">
-                    <Avatar
-                      name={c.author.name}
-                      avatarUrl={c.author.avatarUrl ?? undefined}
-                      size="xs"
-                    />
-                    <span className="font-semibold text-ink">{c.author.name}</span>
-                    <span className="text-[10px] text-light ml-auto">
-                      {new Date(c.createdAt).toLocaleDateString('uk-UA')}
-                    </span>
-                  </div>
-                  <p className="italic text-mid line-clamp-2 mb-1.5">
-                    «{c.selectionText.slice(0, 120)}
-                    {c.selectionText.length > 120 ? '…' : ''}»
-                  </p>
-                  <p className="text-ink whitespace-pre-wrap leading-snug">{c.body}</p>
-                  {c.replies.length > 0 && (
-                    <ul className="mt-1.5 pl-2 border-l-2 border-hairline space-y-1">
-                      {c.replies.map((r) => (
-                        <li key={r.id} className="text-[10.5px]">
-                          <span className="font-semibold text-ink">{r.author.name}:</span>{' '}
-                          <span className="text-mid">{r.body}</span>
-                        </li>
-                      ))}
-                    </ul>
-                  )}
-                  <div
-                    className="mt-1.5 flex items-center gap-1 flex-wrap"
-                    onClick={(e) => e.stopPropagation()}
+    <>
+      <ul className="divide-y divide-hairline">
+        {grouped.map(([paraIdx, items]) => (
+          <li key={paraIdx} className="px-3 py-2.5">
+            <button
+              className="text-[10px] text-light font-mono uppercase tracking-wide mb-1 hover:text-brand"
+              onClick={() => {
+                const first = items[0];
+                if (first) focusComment(first.id, paraIdx);
+              }}
+            >
+              Параграф {paraIdx + 1}
+            </button>
+            <ul className="space-y-2">
+              {items.map((c) => {
+                const isResolved = c.status === 'RESOLVED';
+                const isMine = me?.id === c.author.id;
+                return (
+                  <li
+                    key={c.id}
+                    data-rail-comment-id={c.id}
+                    onClick={() => focusComment(c.id, paraIdx)}
+                    className={`rounded-md border px-2.5 py-2 text-[11px] cursor-pointer ${
+                      isResolved
+                        ? 'border-hairline bg-pill/40 opacity-70'
+                        : 'border-amber-200 dark:border-amber-700/60 bg-amber-50/40 dark:bg-amber-900/10 hover:bg-amber-50 dark:hover:bg-amber-900/20'
+                    }`}
                   >
-                    {canComment && !isResolved && (
-                      <ReplyButton commentId={c.id} replyMutation={replyMutation} />
+                    <div className="flex items-center gap-1.5 mb-1">
+                      <Avatar
+                        name={c.author.name}
+                        avatarUrl={c.author.avatarUrl ?? undefined}
+                        size="xs"
+                      />
+                      <span className="font-semibold text-ink">{c.author.name}</span>
+                      <span className="text-[10px] text-light ml-auto">
+                        {new Date(c.createdAt).toLocaleDateString('uk-UA')}
+                      </span>
+                    </div>
+                    <p className="italic text-mid line-clamp-2 mb-1.5">
+                      «{c.selectionText.slice(0, 120)}
+                      {c.selectionText.length > 120 ? '…' : ''}»
+                    </p>
+                    <p className="text-ink whitespace-pre-wrap leading-snug">{c.body}</p>
+                    {c.replies.length > 0 && (
+                      <ul className="mt-1.5 pl-2 border-l-2 border-hairline space-y-1">
+                        {c.replies.map((r) => (
+                          <li key={r.id} className="text-[10.5px]">
+                            <span className="font-semibold text-ink">{r.author.name}:</span>{' '}
+                            <span className="text-mid">{r.body}</span>
+                          </li>
+                        ))}
+                      </ul>
                     )}
-                    {canComment && (
-                      <button
-                        onClick={() =>
-                          setResolvedMutation.mutate({ id: c.id, resolved: !isResolved })
-                        }
-                        className="text-[10px] text-mid hover:text-brand inline-flex items-center gap-0.5"
-                        title={isResolved ? 'Знову відкрити' : 'Позначити вирішеним'}
-                      >
-                        <Check className="w-3 h-3" />
-                        {isResolved ? 'Відкрити' : 'Вирішено'}
-                      </button>
-                    )}
-                    {(isMine || canComment) && (
-                      <button
-                        onClick={() => {
-                          if (confirm('Видалити цей коментар?')) {
-                            deleteMutation.mutate({ id: c.id });
+                    <div
+                      className="mt-1.5 flex items-center gap-1 flex-wrap"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      {canComment && !isResolved && (
+                        <ReplyButton commentId={c.id} replyMutation={replyMutation} />
+                      )}
+                      {canComment && (
+                        <button
+                          onClick={() =>
+                            setResolvedMutation.mutate({ id: c.id, resolved: !isResolved })
                           }
-                        }}
-                        className="text-[10px] text-mid hover:text-red-600 inline-flex items-center gap-0.5"
-                      >
-                        <XIcon className="w-3 h-3" />
-                        Видалити
-                      </button>
-                    )}
-                  </div>
-                </li>
-              );
-            })}
-          </ul>
-        </li>
-      ))}
-    </ul>
+                          className="text-[10px] text-mid hover:text-brand inline-flex items-center gap-0.5"
+                          title={isResolved ? 'Знову відкрити' : 'Позначити вирішеним'}
+                        >
+                          <Check className="w-3 h-3" />
+                          {isResolved ? 'Відкрити' : 'Вирішено'}
+                        </button>
+                      )}
+                      {(isMine || canComment) && (
+                        <button
+                          onClick={() => {
+                            setDeleteError(null);
+                            setPendingDelete(c.id);
+                          }}
+                          className="text-[10px] text-mid hover:text-red-600 inline-flex items-center gap-0.5"
+                        >
+                          <XIcon className="w-3 h-3" />
+                          Видалити
+                        </button>
+                      )}
+                    </div>
+                  </li>
+                );
+              })}
+            </ul>
+          </li>
+        ))}
+      </ul>
+      <ConfirmModal
+        open={pendingDelete !== null}
+        title="Видалити коментар?"
+        destructive
+        message="Цей коментар буде видалено остаточно."
+        confirmLabel="Видалити"
+        isPending={deleteMutation.isPending}
+        error={deleteError}
+        onConfirm={() => {
+          if (pendingDelete) deleteMutation.mutate({ id: pendingDelete });
+        }}
+        onClose={() => {
+          setPendingDelete(null);
+          setDeleteError(null);
+        }}
+      />
+    </>
   );
 }
