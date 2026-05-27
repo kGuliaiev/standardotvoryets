@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { Modal } from '@/components/ui/Modal';
 import { Loader2, AlertTriangle } from 'lucide-react';
 
@@ -49,6 +49,12 @@ interface Props {
   /** When set, displayed inline above the buttons. The modal stays
    *  open so the user can retry. */
   error?: string | null;
+  /** Type-to-confirm: when set, the confirm button stays disabled until the
+   *  user types this exact string (trimmed). Use for high-stakes irreversible
+   *  actions (e.g. deleting a standard + all its data). */
+  confirmText?: string;
+  /** Label/hint rendered above the type-to-confirm input. */
+  confirmTextLabel?: React.ReactNode;
   onConfirm: () => void;
   onClose: () => void;
 }
@@ -62,22 +68,33 @@ export function ConfirmModal({
   destructive = false,
   isPending = false,
   error,
+  confirmText,
+  confirmTextLabel,
   onConfirm,
   onClose,
 }: Props) {
-  // Enter to confirm (when not pending). Esc is already handled by
-  // Modal itself.
+  const [typed, setTyped] = useState('');
+  // Clear the type-to-confirm field whenever the modal closes.
+  useEffect(() => {
+    if (!open) setTyped('');
+  }, [open]);
+
+  const requiresText = Boolean(confirmText);
+  const textMatches = !requiresText || typed.trim() === confirmText;
+  const confirmDisabled = isPending || !textMatches;
+
+  // Enter to confirm (when allowed). Esc is already handled by Modal itself.
   useEffect(() => {
     if (!open) return;
     function onKey(e: KeyboardEvent) {
-      if (e.key === 'Enter' && !isPending) {
+      if (e.key === 'Enter' && !confirmDisabled) {
         e.preventDefault();
         onConfirm();
       }
     }
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [open, isPending, onConfirm]);
+  }, [open, confirmDisabled, onConfirm]);
 
   return (
     <Modal open={open} onClose={onClose} title={title} size="sm">
@@ -88,6 +105,21 @@ export function ConfirmModal({
           )}
           <div className="text-sm text-mid flex-1">{message}</div>
         </div>
+        {requiresText && (
+          <div className="space-y-1.5">
+            {confirmTextLabel && (
+              <label className="block text-xs text-mid">{confirmTextLabel}</label>
+            )}
+            <input
+              type="text"
+              autoFocus
+              value={typed}
+              onChange={(e) => setTyped(e.target.value)}
+              placeholder={confirmText}
+              className="w-full rounded-lg border border-hairline bg-page px-3 py-2 text-sm text-ink font-mono outline-none focus:border-brand"
+            />
+          </div>
+        )}
         {error && (
           <p className="text-xs text-red-600 bg-red-50 dark:bg-red-900/30 rounded-md px-3 py-2">
             {error}
@@ -100,7 +132,7 @@ export function ConfirmModal({
           <button
             type="button"
             onClick={onConfirm}
-            disabled={isPending}
+            disabled={confirmDisabled}
             className={
               destructive
                 ? 'inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-red-600 hover:bg-red-700 text-white text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed transition-colors'

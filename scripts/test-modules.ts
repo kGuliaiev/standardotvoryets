@@ -552,7 +552,12 @@ async function runTests() {
 
   console.log('\n┌─ Standard delete (admin only, cleanup phase)');
   await step('standard.delete', async () => {
-    await makeCaller(f.admin).standard.delete({ id: standardId });
+    // delete now requires a type-to-confirm code matching the standard's code
+    const std = await db.standard.findUniqueOrThrow({
+      where: { id: standardId },
+      select: { code: true },
+    });
+    await makeCaller(f.admin).standard.delete({ id: standardId, confirmCode: std.code });
     await expectAuditLog('Standard', standardId, 'DELETE');
   });
 
