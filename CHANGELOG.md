@@ -5,6 +5,17 @@
 
 ## [Unreleased]
 
+### Security — QA-cycle 2026-05-26 hotfix (`fix/security-hotfix-2026-05-26`)
+
+- **B-1** `standard.list` now intersects client `workingGroupId(s)` with the user's visible groups (no foreign-WG enumeration).
+- **B-2** `standard.bulkUpdate` requires `standard:changeStatus` (not just `editMeta`) to patch status.
+- **B-3** Server-side DOMPurify sanitization (`src/lib/sanitizeHtml.ts`) of `suggestion.updateBody`/`replaceBody`/`create` HTML before persistence; `isomorphic-dompurify` marked `serverComponentsExternalPackages`.
+- **B-4** `user.acceptInvite` rejects when session email ≠ invite email; membership + token consumption made atomic.
+- **B-5** RBAC added to `document.confirmUpload` (`document:upload`) and `document.list` (membership).
+- **B-6 / B-7** RBAC (membership) added to `meeting.byId` and `task.byId`.
+- **B-8** `auth.authorize` blocks login for deactivated (`!isActive`) users.
+- **B-9** `vote.current` is now read-only; overdue auto-close moved to a privileged, Serializable, idempotent `vote.closeOverdue` mutation.
+
 ### Added
 
 - Інфраструктура «вічного контексту»: `QA-tests/` (архів QA-прогонів + шаблон), `HANDOFF.md` (знімок стану для нового агента), `docs/DECISIONS.md` (ADR). `CONTINUATION.md` приведено до структури живого документа.

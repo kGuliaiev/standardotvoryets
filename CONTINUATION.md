@@ -9,14 +9,14 @@
 ## ▶ ПОТОЧНИЙ СТАН (оновлювати щоразу)
 
 - **Гілка:** `main`
-- **Останній коміт:** `910f5f8` — `docs: note local path + iCloud gotcha (moved out of ~/Documents)`
-- **Зараз у роботі:** Part 1 — інфраструктура «вічного контексту» (`QA-tests/`, `HANDOFF.md`, `docs/DECISIONS.md`, цей файл). Далі — security-хотфікс QA-циклу 2026-05-26.
-- **Закрито за останній цикл:** редактор тіла документа (#6–#11): дефолт TNR 14pt, актуальний шрифт при виділенні, інлайн-коментарі, тулбар без лагу (`6fb3cfa`, `c60329b`, `f8a4709`, `2f022f9`). Перенос репо з iCloud (`910f5f8`).
+- **Останній коміт:** `29208de` — merge `fix/security-hotfix-2026-05-26` (B-1…B-9)
+- **Зараз у роботі:** Part 2 завершено для security. Далі — Designer release-blockers (`fix/qa-designer-2026-05-26`).
+- **Закрито за останній цикл:** Part 1 — інфраструктура «вічного контексту» (`3429dba`). **Security hotfix B-1…B-9** (merge `29208de`): membership-фільтр standard.list, bulkUpdate changeStatus, DOMPurify-санітизація, acceptInvite email-check, RBAC на document/meeting/task, блок логіну деактивованих, vote.current read-only + closeOverdue. Build/lint/typecheck — зелені.
 - **Останній QA-цикл:** `QA-tests/2026-05-26/` (34 backend / 20 designer / 11 frontend багів). Зведення — `QA-tests/2026-05-26/summary.md`.
 
 ### Відкриті задачі (за пріоритетом)
 
-**🔴 P0 — Security hotfix** (гілка `fix/security-hotfix-2026-05-26`): B-1 (workingGroupIds bypass), B-2 (bulkUpdate status RBAC), B-3 (stored XSS у suggestion body → DOMPurify), B-4 (acceptInvite email-mismatch), B-5 (document confirmUpload/list/registerMetadata без RBAC), B-6 (meeting.byId), B-7 (task.byId), B-8 (auth.authorize isActive), B-9 (vote.current мутує без RBAC/ізоляції).
+**✅ P0 — Security hotfix** — ЗРОБЛЕНО (merge `29208de`). Залишковий follow-up: B-8 (інвалідація активних JWT + maxAge), meeting.list/task.list мають той самий single-WG bypass що й B-1 (не в explicit-скоупі — у backlog), B-15…B-34.
 
 **🔴 P0 — Designer release-blockers** (`fix/qa-designer-2026-05-26`): D-1 (login завжди темна), D-2 (dashboard overdue ≠ /tasks), D-3 (sidebar count рассинхрон), D-4 (filter-active індикатор), D-9 (hex-колір як code-блок).
 
