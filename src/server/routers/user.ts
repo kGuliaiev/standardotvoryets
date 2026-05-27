@@ -273,6 +273,20 @@ export const userRouter = createTRPCRouter({
         throw new TRPCError({ code: 'BAD_REQUEST', message: 'Термін дії запрошення вичерпано' });
       }
 
+      // This is a protected procedure — the caller is already authenticated, so
+      // they may only redeem an invite addressed to their *own* email. Without
+      // this, any logged-in user could claim a token issued for someone else
+      // (taking that WG membership/role), and the name+password branch below
+      // could mint a brand-new account under the invitee's email with an
+      // attacker-chosen password (B-4). With the check, that branch is also
+      // unreachable (an authenticated caller already has an account).
+      if (ctx.session.user.email !== inviteToken.email) {
+        throw new TRPCError({
+          code: 'FORBIDDEN',
+          message: 'Це запрошення призначене для іншого користувача',
+        });
+      }
+
       // Create or find user
       let userId = ctx.session.user.id;
 
@@ -297,27 +311,29 @@ export const userRouter = createTRPCRouter({
         }
       }
 
-      // Create membership
-      await ctx.db.workingGroupMember.upsert({
-        where: {
-          workingGroupId_userId: {
+      // Apply membership + consume the token atomically (B-4): a partial
+      // failure must not leave a half-redeemed invite (membership without the
+      // token marked used, or vice-versa).
+      await ctx.db.$transaction([
+        ctx.db.workingGroupMember.upsert({
+          where: {
+            workingGroupId_userId: {
+              workingGroupId: inviteToken.workingGroupId,
+              userId,
+            },
+          },
+          create: {
             workingGroupId: inviteToken.workingGroupId,
             userId,
+            role: inviteToken.role,
           },
-        },
-        create: {
-          workingGroupId: inviteToken.workingGroupId,
-          userId,
-          role: inviteToken.role,
-        },
-        update: { role: inviteToken.role },
-      });
-
-      // Mark token as used
-      await ctx.db.inviteToken.update({
-        where: { id: inviteToken.id },
-        data: { usedAt: new Date() },
-      });
+          update: { role: inviteToken.role },
+        }),
+        ctx.db.inviteToken.update({
+          where: { id: inviteToken.id },
+          data: { usedAt: new Date() },
+        }),
+      ]);
 
       await logActivity(ctx.db, {
         userId,
