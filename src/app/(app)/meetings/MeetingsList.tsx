@@ -118,6 +118,29 @@ const WV_SLOT_PX = 28;
 const WV_TOTAL_SLOTS = ((WV_END_HOUR - WV_START_HOUR) * 60) / WV_SLOT_MIN;
 const WV_GRID_HEIGHT = WV_TOTAL_SLOTS * WV_SLOT_PX;
 
+/** Monday (00:00) of the week containing `d`. */
+function startOfWeekMonday(d: Date): Date {
+  const dow = (d.getDay() + 6) % 7; // Mon=0 … Sun=6
+  return new Date(d.getFullYear(), d.getMonth(), d.getDate() - dow);
+}
+
+/** Human label for the Mon–Sun week containing `d`, e.g. "25–31 трав. 2026",
+ *  "28 квіт. – 4 трав. 2026", or "29 груд. 2025 – 4 січ. 2026". */
+function formatWeekRange(d: Date): string {
+  const mon = startOfWeekMonday(d);
+  const sun = new Date(mon.getFullYear(), mon.getMonth(), mon.getDate() + 6);
+  const dm = (x: Date) => x.toLocaleDateString('uk-UA', { day: 'numeric', month: 'short' });
+  const dmy = (x: Date) =>
+    x.toLocaleDateString('uk-UA', { day: 'numeric', month: 'short', year: 'numeric' });
+  if (mon.getMonth() === sun.getMonth() && mon.getFullYear() === sun.getFullYear()) {
+    return `${mon.getDate()}–${sun.getDate()} ${sun.toLocaleDateString('uk-UA', { month: 'short' })} ${sun.getFullYear()}`;
+  }
+  if (mon.getFullYear() === sun.getFullYear()) {
+    return `${dm(mon)} – ${dm(sun)} ${sun.getFullYear()}`;
+  }
+  return `${dmy(mon)} – ${dmy(sun)}`;
+}
+
 export function MeetingsList() {
   const { data: session } = useSession();
   const router = useRouter();
@@ -210,6 +233,32 @@ export function MeetingsList() {
       setYear((y) => y - 1);
     } else setMonth((m) => m - 1);
   }
+  // Week navigation: shift the visible week by ±7 days. Keep month/year (used by
+  // the meeting.list query + RG summary) synced to the new week's Thursday — the
+  // month an ISO week mostly belongs to — so the data follows the week.
+  function shiftWeek(dir: number) {
+    const base = new Date(
+      selectedDate.getFullYear(),
+      selectedDate.getMonth(),
+      selectedDate.getDate() + dir * 7,
+    );
+    setSelectedDayKey(keyForDate(base));
+    const mon = startOfWeekMonday(base);
+    const thursday = new Date(mon.getFullYear(), mon.getMonth(), mon.getDate() + 3);
+    setMonth(thursday.getMonth());
+    setYear(thursday.getFullYear());
+  }
+  function goPrev() {
+    if (view === 'week') shiftWeek(-1);
+    else prevMonth();
+  }
+  function goNext() {
+    if (view === 'week') shiftWeek(1);
+    else nextMonth();
+  }
+  const periodLabel =
+    view === 'week' ? formatWeekRange(selectedDate) : `${MONTHS_UA_NOM[month]} ${year}`;
+
   function nextMonth() {
     if (month === 11) {
       setMonth(0);
@@ -255,17 +304,19 @@ export function MeetingsList() {
       <div className="card p-3 flex items-center justify-between">
         <div className="flex items-center gap-1">
           <button
-            onClick={prevMonth}
+            onClick={goPrev}
             className="w-8 h-8 rounded-[10px] inline-flex items-center justify-center text-mid hover:bg-pill"
+            aria-label={view === 'week' ? 'Попередній тиждень' : 'Попередній місяць'}
           >
             <ChevronLeft className="w-4 h-4" />
           </button>
-          <span className="text-[15px] font-bold text-navy min-w-[150px] text-center">
-            {MONTHS_UA_NOM[month]} {year}
+          <span className="text-[15px] font-bold text-navy min-w-[190px] text-center">
+            {periodLabel}
           </span>
           <button
-            onClick={nextMonth}
+            onClick={goNext}
             className="w-8 h-8 rounded-[10px] inline-flex items-center justify-center text-mid hover:bg-pill"
+            aria-label={view === 'week' ? 'Наступний тиждень' : 'Наступний місяць'}
           >
             <ChevronRight className="w-4 h-4" />
           </button>
@@ -292,7 +343,18 @@ export function MeetingsList() {
           ).map(([v, label]) => (
             <button
               key={v}
-              onClick={() => setView(v)}
+              onClick={() => {
+                // When entering week view, make sure the visible week sits in the
+                // month being browsed (otherwise today's week could show while the
+                // toolbar/data point at a different month).
+                if (
+                  v === 'week' &&
+                  (selectedDate.getMonth() !== month || selectedDate.getFullYear() !== year)
+                ) {
+                  setSelectedDayKey(keyForDate(new Date(year, month, 15)));
+                }
+                setView(v);
+              }}
               className={`px-3 py-1 text-xs font-semibold rounded-[8px] transition-colors ${
                 view === v ? 'bg-card text-ink shadow-sm' : 'text-mid hover:text-ink'
               }`}
