@@ -1,10 +1,11 @@
 'use client';
 
-import { useEffect, useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useSession } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
 import { trpc } from '@/lib/trpc/client';
 import { PageHeader } from '@/components/ui/PageHeader';
+import { ConfirmModal } from '@/components/ui/ConfirmModal';
 import { Loader2, RotateCcw, ShieldCheck, Check, Minus } from 'lucide-react';
 import type { inferRouterOutputs } from '@trpc/server';
 import type { AppRouter } from '@/server/routers/_app';
@@ -37,6 +38,7 @@ export function PermissionsAdmin() {
   const { data: session } = useSession();
   const router = useRouter();
   const isAdmin = session?.user.globalRole === 'ADMIN';
+  const [confirmResetOpen, setConfirmResetOpen] = useState(false);
 
   const utils = trpc.useUtils();
   const { data, isLoading } = trpc.permission.list.useQuery(undefined, { enabled: isAdmin });
@@ -110,6 +112,19 @@ export function PermissionsAdmin() {
 
   return (
     <div className="space-y-5">
+      <ConfirmModal
+        open={confirmResetOpen}
+        title="Скинути всі перевизначення?"
+        destructive
+        message={`${overrideCount} перевизначен${overrideCount === 1 ? 'ня' : 'ь'} буде скинуто до значень за замовчуванням.`}
+        confirmLabel="Скинути все"
+        isPending={resetAll.isPending}
+        onConfirm={() => {
+          resetAll.mutate();
+          setConfirmResetOpen(false);
+        }}
+        onClose={() => setConfirmResetOpen(false)}
+      />
       <PageHeader
         title="Ролі та права"
         subtitle="Налаштовуйте, що може кожна роль у робочій групі. Адмін завжди має повний доступ."
@@ -118,13 +133,7 @@ export function PermissionsAdmin() {
             type="button"
             onClick={() => {
               if (overrideCount === 0) return;
-              if (
-                confirm(
-                  `Скинути ${overrideCount} перевизначен${overrideCount === 1 ? 'ня' : 'ь'} до значень за замовчуванням?`,
-                )
-              ) {
-                resetAll.mutate();
-              }
+              setConfirmResetOpen(true);
             }}
             disabled={overrideCount === 0 || resetAll.isPending}
             className="inline-flex items-center gap-1.5 rounded-lg border border-hairline bg-card px-3 py-2 text-sm text-mid hover:text-ink hover:bg-page disabled:opacity-50 transition-colors"

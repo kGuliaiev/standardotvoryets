@@ -9,6 +9,8 @@ import { Avatar } from '@/components/ui/Avatar';
 import { StandardProgress, hasOverdueStage } from '@/components/standards/StandardProgress';
 import { SortableHeader } from '@/components/ui/SortableHeader';
 import { PageHeader } from '@/components/ui/PageHeader';
+import { ConfirmModal } from '@/components/ui/ConfirmModal';
+import { toast } from '@/lib/toast';
 import { useSort, sortedRows } from '@/lib/useSort';
 import { useLocalStorageState } from '@/lib/useLocalStorageState';
 import { AlertCircle, ChevronDown, Check, X as XIcon } from 'lucide-react';
@@ -44,6 +46,7 @@ export function StandardsList() {
   );
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [bulkMenu, setBulkMenu] = useState<'status' | 'wg' | null>(null);
+  const [confirmArchiveOpen, setConfirmArchiveOpen] = useState(false);
 
   const utils = trpc.useUtils();
   const bulkMutation = trpc.standard.bulkUpdate.useMutation({
@@ -52,10 +55,14 @@ export function StandardsList() {
       setBulkMenu(null);
       setSelectedIds(new Set());
       if (skipped.length > 0) {
-        alert(`Оновлено: ${updated.length}. Пропущено через відсутність прав: ${skipped.length}.`);
+        toast.info(
+          `Оновлено: ${updated.length}. Пропущено через відсутність прав: ${skipped.length}.`,
+        );
+      } else {
+        toast.success(`Оновлено: ${updated.length}.`);
       }
     },
-    onError: (e) => alert(`Помилка: ${e.message}`),
+    onError: (e) => toast.error(`Помилка: ${e.message}`),
   });
 
   // Close WG picker on outside click
@@ -574,14 +581,7 @@ export function StandardsList() {
             )}
           </div>
           <button
-            onClick={() => {
-              if (confirm(`Архівувати ${selectedIds.size} стандартів?`)) {
-                bulkMutation.mutate({
-                  ids: Array.from(selectedIds),
-                  patch: { status: 'ARCHIVED' },
-                });
-              }
-            }}
+            onClick={() => setConfirmArchiveOpen(true)}
             disabled={bulkMutation.isPending}
             className="text-xs px-3 py-1.5 rounded-lg border border-hairline text-red-600 hover:bg-red-50 dark:hover:bg-red-900/30"
           >
@@ -600,6 +600,19 @@ export function StandardsList() {
           </button>
         </div>
       )}
+      <ConfirmModal
+        open={confirmArchiveOpen}
+        title="Архівувати стандарти?"
+        destructive
+        message={`${selectedIds.size} ${selectedIds.size === 1 ? 'стандарт буде заархівовано' : 'стандартів буде заархівовано'}. Їх можна відновити з вкладки «Архів».`}
+        confirmLabel="Архівувати"
+        isPending={bulkMutation.isPending}
+        onConfirm={() => {
+          bulkMutation.mutate({ ids: Array.from(selectedIds), patch: { status: 'ARCHIVED' } });
+          setConfirmArchiveOpen(false);
+        }}
+        onClose={() => setConfirmArchiveOpen(false)}
+      />
     </div>
   );
 }

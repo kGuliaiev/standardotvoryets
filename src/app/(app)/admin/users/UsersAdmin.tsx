@@ -58,6 +58,11 @@ export function UsersAdmin() {
   const { data: session } = useSession();
   const router = useRouter();
   const [search, setSearch] = useState('');
+  const [pendingRemoveMember, setPendingRemoveMember] = useState<{
+    workingGroupId: string;
+    userId: string;
+    code: string;
+  } | null>(null);
   const [showInvite, setShowInvite] = useState(false);
   const [inviteForm, setInviteForm] = useState({
     email: '',
@@ -167,6 +172,27 @@ export function UsersAdmin() {
 
   return (
     <div className="space-y-5">
+      <ConfirmModal
+        open={pendingRemoveMember !== null}
+        title="Видалити з групи?"
+        destructive
+        message={
+          pendingRemoveMember
+            ? `Користувача буде видалено з групи ${pendingRemoveMember.code}.`
+            : ''
+        }
+        confirmLabel="Видалити"
+        isPending={removeMemberMutation.isPending}
+        onConfirm={() => {
+          if (pendingRemoveMember)
+            removeMemberMutation.mutate({
+              workingGroupId: pendingRemoveMember.workingGroupId,
+              userId: pendingRemoveMember.userId,
+            });
+          setPendingRemoveMember(null);
+        }}
+        onClose={() => setPendingRemoveMember(null)}
+      />
       <PageHeader
         title="Користувачі"
         actions={
@@ -696,14 +722,13 @@ export function UsersAdmin() {
                         ))}
                       </select>
                       <button
-                        onClick={() => {
-                          if (confirm(`Видалити з групи ${m.workingGroup.code}?`)) {
-                            removeMemberMutation.mutate({
-                              workingGroupId: m.workingGroup.id,
-                              userId: editingUserData.id,
-                            });
-                          }
-                        }}
+                        onClick={() =>
+                          setPendingRemoveMember({
+                            workingGroupId: m.workingGroup.id,
+                            userId: editingUserData.id,
+                            code: m.workingGroup.code,
+                          })
+                        }
                         className="p-1 text-mid hover:text-red-600 rounded hover:bg-red-50"
                         title="Видалити з групи"
                       >

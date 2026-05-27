@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useSession } from 'next-auth/react';
 import { trpc } from '@/lib/trpc/client';
+import { toast } from '@/lib/toast';
 import { Avatar } from '@/components/ui/Avatar';
 import { Modal } from '@/components/ui/Modal';
 import { RichTextEditor } from '@/components/ui/RichTextEditor';
@@ -237,7 +238,7 @@ export function StandardBodyEditor({ target, bodyText, bodyUpdatedAt, bodyUpdate
       invalidateBody();
       setAcceptPreview(null);
     },
-    onError: (e) => alert(e.message),
+    onError: (e) => toast.error(e.message),
   });
   const rejectMutation = trpc.suggestion.reject.useMutation({
     onSuccess: () => invalidateSuggestions(),
@@ -246,7 +247,7 @@ export function StandardBodyEditor({ target, bodyText, bodyUpdatedAt, bodyUpdate
     onSuccess: () => {
       invalidateBody();
     },
-    onError: (e) => alert(e.message),
+    onError: (e) => toast.error(e.message),
   });
   const replaceBodyMutation = trpc.suggestion.replaceBody.useMutation({
     onSuccess: () => {
@@ -254,7 +255,7 @@ export function StandardBodyEditor({ target, bodyText, bodyUpdatedAt, bodyUpdate
       invalidateSuggestions();
       setPendingImport(null);
     },
-    onError: (e) => alert(e.message),
+    onError: (e) => toast.error(e.message),
   });
 
   function openSuggest(idx: number, op: OpKind = 'REPLACE') {
@@ -1538,7 +1539,7 @@ function DocxImportButton({
   async function handleFile(file: File) {
     if (!file) return;
     if (!file.name.toLowerCase().endsWith('.docx')) {
-      alert('Підтримуються лише файли .docx (Microsoft Word).');
+      toast.error('Підтримуються лише файли .docx (Microsoft Word).');
       return;
     }
     setBusy(true);
@@ -1551,7 +1552,7 @@ function DocxImportButton({
       });
       if (!res.ok) {
         const err = (await res.json().catch(() => ({}))) as { error?: string };
-        alert(err.error ?? 'Не вдалося імпортувати документ');
+        toast.error(err.error ?? 'Не вдалося імпортувати документ');
         return;
       }
       const data = (await res.json()) as {

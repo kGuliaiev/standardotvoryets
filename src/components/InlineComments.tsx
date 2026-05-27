@@ -6,6 +6,7 @@ import { useSession } from 'next-auth/react';
 import { trpc } from '@/lib/trpc/client';
 import { Avatar } from '@/components/ui/Avatar';
 import { ConfirmModal } from '@/components/ui/ConfirmModal';
+import { toast } from '@/lib/toast';
 import { Check, X as XIcon, Loader2, MessageCirclePlus, Pencil, Reply } from 'lucide-react';
 import type { RouterOutputs } from '@/lib/trpc/client';
 
@@ -177,7 +178,7 @@ export function InlineComments({
       // auto-opens the composer without a click on the pill.
       setBubbleActive(false);
     },
-    onError: (e) => alert(e.message),
+    onError: (e) => toast.error(e.message),
   });
   const [pending, setPending] = useState<PendingSelection | null>(null);
   const [draft, setDraft] = useState('');
