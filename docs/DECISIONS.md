@@ -40,3 +40,14 @@
 - **Рішення:** глобальні `ADMIN`/`DIRECTOR`/`USER`; у РГ `LEADER`/`DEPUTY`/`SECRETARY`/`MEMBER`/`GUEST`; ~24 actions. Hardcoded `PERMISSIONS`-дефолти перевизначаються таблицею `RolePermission` (кеш у пам'яті, `ensureLoaded()` у tRPC middleware). ADMIN — short-circuit allow; DIRECTOR — повний read + actions зі своєї колонки; `seesAllWorkingGroups()` дає read-усе для ADMIN/DIRECTOR/SECRETARY (per наказ).
 - **Альтернативи:** проста role-enum без per-WG — недостатньо для домену.
 - **Наслідки:** легко забути перевірку прав на нових процедурах → QA-Backend знайшов цілий клас IDOR/RBAC-bypass (B-1, B-2, B-5, B-6, B-7, B-9). Правило: **кожна нова tRPC-процедура з `byId`/`list`/мутацією має явну `can(...)` або membership-перевірку**; це треба покрити regression-тестами (`tests/security/idor.test.ts`).
+
+---
+
+## ADR-0000 — Прийнято протокол agent-handoff
+
+- **Дата:** 2026-05-27
+- **Статус:** Прийнято
+- **Контекст:** Агенти змінюються між сесіями (ліміт токенів, фрізи, переключення Kir), губиться контекст, повторюється робота, ламаються раніше прийняті рішення.
+- **Рішення:** Прийнято протокол agent-handoff (див. `.claude/skills/agent-handoff/SKILL.md`). Усі агенти зобов'язані читати HANDOFF.md, CONTINUATION.md, останні 15 комітів до початку роботи й оновлювати журнал по віхах. Sync-коміт перед паузою/завершенням сесії — обов'язковий.
+- **Альтернативи:** Покладатися на усну передачу контексту через Kir — відкинуто як нестабільне.
+- **Наслідки:** Кожна сесія починається з onboarding-чекліста (~5 хв). CONTINUATION.md тримається в актуальному стані. Розгорнуто аналогічно в усіх трьох проєктах Kir (Atommuz, buildco-platform, standardotvoryets).
