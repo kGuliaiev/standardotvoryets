@@ -214,6 +214,17 @@ export const documentRouter = createTRPCRouter({
       }),
     )
     .mutation(async ({ ctx, input }) => {
+      // RBAC: registering a document against a standard requires upload rights
+      // on its WG — confirmUpload had none, so anyone could attach a document
+      // to any standard by cuid (B-5). Mirror registerMetadata.
+      const standard = await ctx.db.standard.findUniqueOrThrow({
+        where: { id: input.standardId },
+        select: { workingGroupId: true },
+      });
+      if (!can(userCtx(ctx.session), 'document:upload', standard.workingGroupId)) {
+        throw new TRPCError({ code: 'FORBIDDEN' });
+      }
+
       // If setting as current, unset previous current
       if (input.isCurrent) {
         await ctx.db.document.updateMany({
@@ -250,6 +261,19 @@ export const documentRouter = createTRPCRouter({
   list: protectedProcedure
     .input(z.object({ standardId: z.string().cuid() }))
     .query(async ({ ctx, input }) => {
+      // RBAC: documents belong to a standard's WG. Restrict to members
+      // (admins/director/secretaries see all) — list had no check, so anyone
+      // could enumerate any standard's documents by cuid (B-5).
+      const standard = await ctx.db.standard.findUniqueOrThrow({
+        where: { id: input.standardId },
+        select: { workingGroupId: true },
+      });
+      const isMember = ctx.session.user.memberships?.some(
+        (m) => m.workingGroupId === standard.workingGroupId,
+      );
+      if (!seesAllWorkingGroups(ctx.session.user) && !isMember) {
+        throw new TRPCError({ code: 'FORBIDDEN' });
+      }
       return ctx.db.document.findMany({
         where: { standardId: input.standardId },
         include: {
