@@ -108,6 +108,16 @@ export const meetingRouter = createTRPCRouter({
       });
 
       if (!meeting) throw new TRPCError({ code: 'NOT_FOUND' });
+
+      // RBAC: a meeting exposes attendees, agenda, decisions and the full WG
+      // member roster. Restrict to members (admins/director/secretaries see
+      // all) — previously any authed user could read any meeting by cuid (B-6).
+      const isMember = ctx.session.user.memberships?.some(
+        (m) => m.workingGroupId === meeting.workingGroup.id,
+      );
+      if (!seesAllWorkingGroups(ctx.session.user) && !isMember) {
+        throw new TRPCError({ code: 'FORBIDDEN' });
+      }
       return meeting;
     }),
 
