@@ -1,156 +1,115 @@
-### Companion docs (attach alongside this one for full context)
-
-- **`OPS.md`** — operations runbook: Cloudflare, custom domain, Railway env vars, deploy pipeline, debugging cycle (redirect loops, build failures, auth, S3, cron). Read first when production is misbehaving.
-- **`DESIGN.md`** — UI/UX rules: theming tokens, dark+light parity, sidebar, tabs/badges, modals, mobile responsiveness, empty states, forms, polling for live updates. Read first when building any screen.
-
----
-
 # Стандартотворець — Continuation Brief
 
-This document is the handoff for a new Claude session to pick up the project mid-flight. It captures **what's live**, **what's pending**, and **how to resume work**.
-
-> Attach this file (or its path) at the start of a new chat. The file is committed to the repo root.
+> Живий документ. Прочитай разом із `HANDOFF.md` (статичний знімок) і `docs/DECISIONS.md` (ADR).
+> Оновлюй після **кожної значимої віхи** (merge гілки, зміна вектора, перед паузою).
+> Companion docs: **`OPS.md`** (runbook: Cloudflare/Railway/деплой/дебаг), **`DESIGN.md`** (UI/UX токени, dark+light, модалки).
 
 ---
 
-## 0. Local environment (read before running locally)
+## ▶ ПОТОЧНИЙ СТАН (оновлювати щоразу)
 
-- **Local path**: `~/Private/claude/standardotvoryets` (macOS case-insensitive — may display as `Private/Claude`).
-- **⚠️ Never keep this project under iCloud (`~/Documents`, `~/Desktop`).** iCloud sync makes reading `node_modules` block `read()` indefinitely → `tsc`/`eslint`/`next build` hang at 0% CPU; a reboot does not help. Moved out of `~/Documents/Claude/Projects/8 центр/` on 2026-05-26 for this reason.
-- **After a fresh clone**: `pnpm install && pnpm exec prisma generate` BEFORE `pnpm typecheck`/`lint` (without the generated Prisma client, tsc shows implicit-any and eslint floods with no-unsafe errors). `.env` is not in git — restore it from Railway → Variables before running the app.
+- **Гілка:** `main`
+- **Останній коміт:** `910f5f8` — `docs: note local path + iCloud gotcha (moved out of ~/Documents)`
+- **Зараз у роботі:** Part 1 — інфраструктура «вічного контексту» (`QA-tests/`, `HANDOFF.md`, `docs/DECISIONS.md`, цей файл). Далі — security-хотфікс QA-циклу 2026-05-26.
+- **Закрито за останній цикл:** редактор тіла документа (#6–#11): дефолт TNR 14pt, актуальний шрифт при виділенні, інлайн-коментарі, тулбар без лагу (`6fb3cfa`, `c60329b`, `f8a4709`, `2f022f9`). Перенос репо з iCloud (`910f5f8`).
+- **Останній QA-цикл:** `QA-tests/2026-05-26/` (34 backend / 20 designer / 11 frontend багів). Зведення — `QA-tests/2026-05-26/summary.md`.
 
-## 1. Live system
+### Відкриті задачі (за пріоритетом)
 
-- **App**: <https://terrific-imagination-production.up.railway.app>
-- **Repo**: <https://github.com/kGuliaiev/standardotvoryets> (branch `main` → Railway auto-deploys)
-- **Railway project**: `standart` (id `c19b77cb-0ebb-482b-af9a-febdbe66b8db`)
-- **Services**:
-  - `Standartotvorets` (app — Next.js 14, Prisma, tRPC, NextAuth)
-  - `Postgres` (DATABASE_URL via `${{Postgres.DATABASE_URL}}`)
-  - `arranged-locker` (S3-compatible bucket, Railway-hosted)
-- **Admin login**: `admin@test.ua` / `Admin123!` (seeded on every start via `pnpm prisma:seed` — idempotent upserts)
-- **Test users**: olena.kovalenko/mykola.petrenko/iryna.savchenko/dmytro.bondarenko/natalia.moroz/vasyl.shevchenko + `@test.ua` — password `User123!`
+**🔴 P0 — Security hotfix** (гілка `fix/security-hotfix-2026-05-26`): B-1 (workingGroupIds bypass), B-2 (bulkUpdate status RBAC), B-3 (stored XSS у suggestion body → DOMPurify), B-4 (acceptInvite email-mismatch), B-5 (document confirmUpload/list/registerMetadata без RBAC), B-6 (meeting.byId), B-7 (task.byId), B-8 (auth.authorize isActive), B-9 (vote.current мутує без RBAC/ізоляції).
 
-## 2. Architecture in one breath
+**🔴 P0 — Designer release-blockers** (`fix/qa-designer-2026-05-26`): D-1 (login завжди темна), D-2 (dashboard overdue ≠ /tasks), D-3 (sidebar count рассинхрон), D-4 (filter-active індикатор), D-9 (hex-колір як code-блок).
 
-- **Framework**: Next.js 14 (App Router, `(app)` group requires auth, `(auth)` group is public)
-- **DB**: PostgreSQL via Prisma (`prisma db push` on start — no migration files)
-- **Auth**: NextAuth Credentials + JWT, session includes `globalRole` + `memberships[]`
-- **API**: tRPC routers in `src/server/routers/*` (user, workingGroup, standard, document, vote, meeting, task, notification, dashboard, activityLog)
-- **Storage**: S3 via `@aws-sdk/client-s3`, presigned URLs in `src/server/s3.ts`. Railway bucket uses virtual-hosted-style URLs.
-- **RBAC**: `src/lib/rbac.ts` — `can(user, action, workingGroupId)`, plus global `ADMIN` and `DIRECTOR` short-circuits
-- **Audit log**: `ActivityLog` model + `src/server/audit.ts` `logActivity()` helper + `<ActivityFeed>` component
-- **Theming**: CSS variables in `src/app/globals.css` (`--c-*` tokens), `.dark` class on `<html>`, toggle in Topbar (Sun/Moon)
-- **Design system**: tokens in `tailwind.config.ts` (`bg-card`, `text-ink`, `text-mid`, `text-light`, `bg-page`, `border-hairline`, `bg-pill`, `text-navy`, `bg-brand`, `bg-brand-soft`)
-- **Reusable Modal**: `src/components/ui/Modal.tsx` (Esc-to-close, body scroll lock, backdrop blur+darken)
+**🟠 P1 — Frontend HIGH** (`fix/qa-frontend-2026-05-26`): F-1 (tRPC dev-logger у проді), F-2 (Modal focus-trap).
 
-## 3. What's done (recent → older)
+**🟡 P2 — Quick wins** (`fix/qa-polish-2026-05-26`): D-5, D-7, D-10, D-15, D-18, F-3, F-4, F-5, F-6.
 
-- **Email + invite flow**: `src/server/email.ts` sends via Resend if `RESEND_API_KEY` is set (no-op otherwise). `user.invite` now emails an invite link to `/invite/[token]`. New `/invite/[token]` page handles four states (not-found / used / expired / email-mismatch) and a one-click "Прийняти".
-- **Meeting protocol PDF**: `/api/meetings/[id]/protocol` route renders a Cyrillic-safe PDF (NotoSans) with brand header, meta row, agenda, attendee table, minutes text, footer. "📄 PDF" link in MeetingDetail.
-- **Voting auto-close**: `vote.current` query auto-closes any OPEN voting past its deadline on read (no worker required) and transitions standard to ADOPTED/REJECTED.
-- **Global search**: `search.global` tRPC procedure + `<GlobalSearch>` Topbar component with Cmd+K, 300ms debounce, dropdown grouped by entity.
-- **Undo button**: `activityLog.restore` mutation + button on every reversible log entry; whitelists fields per entity for safety.
-- **Audit log expansion**: `logActivity` calls in `task.update/changeStatus`, `workingGroup.update/setArchived`, `user.changeGlobalRole/setActive` (added on top of `standard.update/changeStatus` and `meeting.update/cancel`).
-- **Comments**: full router (list / create / update / delete) + threaded UI on Standard "Обговорення" tab; 2-level nesting; author or LEADER/ADMIN can delete; comment creation logs a Standard activity entry.
-- **S3 storage**: Railway Bucket service `arranged-locker` connected; `S3_ENDPOINT`/`S3_REGION`/`S3_BUCKET`/`S3_ACCESS_KEY`/`S3_SECRET_KEY` wired via reference variables; `DocumentUploadModal` does real presigned PUT to S3
-- **Audit log**: schema + `logActivity` helper + `<ActivityFeed entity="..." entityId="...">`. Wired in `standard.update`, `standard.changeStatus`, `meeting.update`, `meeting.cancel`. Displayed in Standard "Історія" tab and Meeting detail bottom.
-- **Documents tab on WG**: `document.byWorkingGroup` returns standard docs + meeting protocols; rendered in `working-groups/[id]` "Документи" tab.
-- **Light/Dark theme**: token-driven via CSS vars; toggle button in Topbar; bootstrap script in `src/app/layout.tsx` avoids FOUC.
-- **Sidebar redesign**: white sidebar with sectioned nav (ГОЛОВНЕ / ЗАСІДАННЯ / РОБОТА / АДМІН) + live badge counts from new `dashboard.navCounts`.
-- **Dashboard redesign**: 4 colored-stripe KPI cards, My tasks widget, upcoming meetings with date tiles, notifications, RG meetings table with colored progress bars.
-- **Meetings calendar**: month grid + week + list views, RG legend pills as filters, right rail with monthly RG summary + day detail.
-- **Tasks page**: 260px tree (РГ → стандарти with open-task counts) + grouped Відкриті/Виконані lists + filter chips (Всі/Відкриті/Виконані/Мої) + inline "+ Додати завдання" + create/edit modals.
-- **Task & Document modals**: `TaskFormModal` (used in Tasks list and StandardDetail tasks tab), `DocumentUploadModal` (used in StandardDetail documents tab).
-- **User edit modal** (admin): change global role, list memberships with per-WG role dropdown + remove, "Додати до групи" composer for multi-WG.
-- **WG archive (admin)** + **User activate/deactivate** + Standard/Meeting/Task edit modals with form.
-- **/standards/new**, **/meetings/new** dedicated form pages.
-- **Stub pages** `/protocols`, `/documents`, `/discussions`, `/reports` to prevent 404s from sidebar.
-- **CRUD + cache invalidation** on edits — list pages auto-refresh after a detail-screen update.
-- **Escape closes all modals** (via `<Modal>` and `useEscape` hook).
+**🧪 P2 — Test infra (Part 3):** Vitest setup + 44 unit-кейси (портувати з iCloud-копії), `scripts/qa-smoke.sh`, hard-delete тест-стандарту `cmpoc1qpm0001gb43j0h5nhrm`.
 
-## 4. What's still pending (user's outstanding asks)
+**Backlog (не цей цикл):** B-15…B-34 (state-machine статусів B-16, last-leader guard B-18, транзакції B-20/B-25/B-27, cron-secret query B-28, /api/version leak B-29, CSP, iCal-token model B-32), D-6/D-8/D-11…D-20 (mobile QA окремо), F-7…F-11.
 
-In priority order, derived from the most recent user messages:
+### Відомі блокери та обхідні шляхи
 
-### A. Polish & visual fidelity to `прототип.html`
+- **iCloud lock:** репо НЕ тримати в `~/Documents`/`~/Desktop` — sync вішає `tsc`/`eslint`/`next build` на `read()` `node_modules`. Перенесено в `~/Private/Claude/standardotvoryets` (2026-05-26). Обхід: працювати з не-синхронізованої копії.
+- **Порт-конфлікт з `buildco-platform`:** на машині Kir інфра-порти (3000/5432/6379/9000/9001/1025/8025) бувають зайняті. Обхід: локальний `docker-compose.override.yml` (`ports: !override`, зміщені порти) + `PORT=3001 pnpm dev`. Файл — у `.gitignore`. Деталі в `HANDOFF.md`.
+- **Prisma client (pnpm):** генерується в `.pnpm`-стор, не в `node_modules/.prisma/client`. Перед typecheck — `pnpm exec prisma generate`.
 
-Working on this iteratively. The current implementations cover Dashboard, Tasks page, calendar, sidebar, but the user wants **every detail** to match:
+### Контекст архітектурних рішень (останні цикли)
 
-- Standard card page (`/standards/[id]`): the prototype's right-side green voting panel, members card, document download row layout, voting result bars
-- Standards list (`/standards`): the prototype shows mini progress bars in the table, owner avatar+name in the cell, deadline as a plain date with red highlight when overdue
-- Meeting detail (`/meetings/[id]`): the modal shown in the prototype with header + agenda block tinted bg + footer split layout
-- Working groups list (`/working-groups`): probably needs minor polish to match card style
-- Login page: prototype has a 400px white card on navy→blue gradient with brand block — verify
+Повний журнал — `docs/DECISIONS.md`. Стисло:
 
-### B. Functional gaps (remaining)
+- **ADR-0004** `db push` замість міграцій → `--accept-data-loss` на кожному деплої, тільки nullable-додавання без узгодження.
+- **ADR-0003** in-process `node-cron`, без зовнішнього планувальника (single-instance).
+- **ADR-0002** token-driven theming → заборона hardcoded `bg-white`/`slate-*` (джерело D-1/F-3/F-6).
+- **ADR-0001** RBAC 3×5 + DB-override → легко забути `can()` на нових процедурах (джерело класу IDOR-багів B-1/B-5/B-6/B-7/B-9).
 
-- **Audit log for document/vote mutations**: not yet wired in `document.confirmUpload/delete`, `vote.openVoting/cast/closeVoting`. Same pattern as elsewhere.
-- **Meeting reminder emails**: `templateMeetingReminder` exists in `src/server/email.ts` but nothing schedules them. Need a daily cron route `/api/cron/meeting-reminders` that fetches meetings 24h ahead and emails PENDING attendees.
-- **Comments**: 2 levels only — if customer wants deeper nesting, relax the parent.parentId check in `comment.create`.
+### URL / credentials / секрети
 
-### D. Dark theme iteration
+**НЕ зберігаються тут.** Контракт ENV — `.env.example`; реальні значення — Railway → Variables. Логіни для QA — у `prisma/seed.ts`. Staging — `§1` нижче.
 
-User asked for "iteratively fix to achieve maximum result". The framework is in place but several screens still hardcode `bg-white`, `text-blue-700`, etc. Mass-conversion already done for major pages, but check screenshots in both themes:
+---
 
-- `/login` (auth layout has a navy gradient — fine, but inputs/labels need verifying)
-- `/working-groups/[id]` Documents tab table
-- Standard detail header card has `bg-card` already but row strip via `bg-page` may be wrong
-- Tasks page tree colors — check that selected state has good contrast in dark
+## 0. Локальне середовище (читати перед запуском)
 
-### E. Tasks page parity with prototype (final pass)
+- **Local path:** `~/Private/Claude/standardotvoryets` (macOS case-insensitive — може показуватись як `Private/claude`).
+- **⚠️ Ніколи не тримати під iCloud** (`~/Documents`, `~/Desktop`) — sync вішає `tsc`/`eslint`/`next build` на 0% CPU; reboot не допомагає. Перенесено з `~/Documents/Claude/Projects/8 центр/` 2026-05-26.
+- **Після свіжого clone:** `pnpm install && pnpm exec prisma generate` ПЕРЕД `pnpm typecheck`/`lint`. `.env` не в git — відновити з Railway → Variables (або `cp .env.example .env`).
+- Повні команди запуску/тестів — `HANDOFF.md`.
 
-The current implementation has the tree + grouped lists, but the user attached two screenshots showing exactly how each row should look (priority dot, assignee chip with name fragment, due-date colored chip). Verify against `прототип.html` lines for Tasks screen.
+## 1. Жива система
 
-### F-Done. Module coverage tests (2026-05-16)
+- **App (staging/prod):** <https://standart.202ok.online/> · Railway-домен: <https://terrific-imagination-production.up.railway.app>
+- **Repo:** <https://github.com/kGuliaiev/standardotvoryets> (`main` → Railway auto-deploy)
+- **Railway project:** `standart` (id `c19b77cb-0ebb-482b-af9a-febdbe66b8db`)
+- **Services:** `Standartotvorets` (Next.js app) · `Postgres` (`${{Postgres.DATABASE_URL}}`) · `arranged-locker` (S3 bucket)
+- **Логіни:** `admin@test.ua` (ADMIN) + тестові `<імя>.<прізв>@test.ua` (USER) — паролі в `prisma/seed.ts` (idempotent upsert на кожен старт). Тут не дублюємо.
 
-Two scripts ship in `scripts/`:
+## 2. Архітектура одним подихом
 
-- `pnpm test:audit-coverage` — static analysis using ts-morph. Scans every tRPC mutation in `src/server/routers/*.ts` and asserts each contains a `logActivity(` call. Current state: 41 covered, 6 exempt (notification UX + S3 plumbing), 0 uncovered. The exempt list is at the top of `scripts/audit-coverage.ts`. Add to CI so future PRs cannot regress audit coverage.
-- `pnpm test:modules` — integration test that walks through full CRUD lifecycles for every domain entity (WorkingGroup, Standard, Task, Meeting, Vote, Comment, User, Admin, Notification, Dashboard, Search, ActivityLog) via `appRouter.createCaller`. For each step it also asserts an ActivityLog row exists. Uses a `TEST_<timestamp>` tag so it isolates and self-cleans. **Requires a reachable DB** at `DATABASE_URL` — run only against dev/test DBs.
+- **Framework:** Next.js 14 (App Router; `(app)` — auth-зона, `(auth)` — публічна)
+- **DB:** PostgreSQL via Prisma (`db push` на старті — без migration-файлів; кастомні індекси — `prisma/indexes.sql`)
+- **Auth:** NextAuth Credentials + JWT; сесія = `globalRole` + `memberships[]`
+- **API:** tRPC роутери `src/server/routers/*` (16 шт.)
+- **Storage:** S3 (`@aws-sdk/client-s3`), presigned URLs у `src/server/s3.ts`
+- **RBAC:** `src/lib/rbac.ts` — `can(user, action, workingGroupId)`; ADMIN/DIRECTOR short-circuits; DB-override дефолтів через `RolePermission`
+- **Audit:** `ActivityLog` + `src/server/audit.ts` `logActivity()` + `<ActivityFeed>`
+- **Черги:** BullMQ + ioredis (`workers/`)
+- **Theming:** CSS-змінні в `globals.css` (`--c-*`), `.dark` на `<html>`, токени в `tailwind.config.ts` (`bg-card`/`text-ink`/`text-mid`/`text-light`/`bg-page`/`border-hairline`/`bg-pill`/`bg-brand`)
+- **Reusable Modal:** `src/components/ui/Modal.tsx` (Esc-close, scroll-lock, backdrop) — ⚠️ без focus-trap (F-2)
 
-### G. Future backlog (recorded 2026-05-16)
+## 3. Як орієнтуватись у коді
 
-- **Mobile version** — adaptive layout for phones/tablets: hamburger menu instead of fixed 228px sidebar; vertical-stack tables; touch-friendly tap targets (44px); responsive Modal that becomes a bottom-sheet on <768px. Likely a 2-3 week separate effort.
-- **Bug-found-to-task flow** — when QA / users find a bug they should be able to file it inline (button "Повідомити про помилку") that opens a TaskFormModal pre-filled with screenshot + URL + browser info, auto-assigned to admin or a "QA" working group. Saves manual copy-paste between chat and the task tracker.
-- **Notification delivery worker** — wired 2026-05-16:
-  - `src/server/notify.ts` central dispatcher reads `SystemSettings` + per-user `notifyEmail/notifyInApp` toggles, writes Notification rows and best-effort sends email via Resend.
-  - Event-driven calls wired in: `meeting.create/update`, `task.create/update/changeStatus(DONE)`, `vote.openVoting/closeVoting`, `standard.changeStatus`.
-  - Cron route `GET /api/cron/notifications?secret=$CRON_SECRET` handles scheduled reminders (meeting lead 1 & 2, task deadline lead, task overdue one-shot, vote closing). Disabled (503) unless `CRON_SECRET` env is set. Dedup via Notification table lookups.
-  - **TODO**: configure Railway cron to hit `/api/cron/notifications?secret=…` every hour. Set `CRON_SECRET` in Railway env first.
+- **List-сторінки:** `src/app/(app)/<thing>/page.tsx` — тонкий server-wrapper; код у `<Thing>List.tsx` (client).
+- **Detail-сторінки:** `src/app/(app)/<thing>/[id]/page.tsx` тонкий wrapper, код у `<Thing>Detail.tsx`.
+- **Edit-модалки:** кожна detail-сторінка рендерить `<Modal>` інлайн; Tasks — спільна `TaskFormModal`.
+- **Audit:** будь-яка мутація, що має трекатись → `logActivity(ctx.db, ...)` після write. Перевірка покриття: `pnpm test:audit-coverage`.
+- **Нова процедура:** ОБОВ'ЯЗКОВО `can(...)`/membership-перевірка на `byId`/`list`/мутаціях (урок B-1/B-5/B-6/B-7).
 
-## 5. How to find your way around
+## 4. Що зроблено (історія, нове → старе)
 
-- **List pages**: `src/app/(app)/<thing>/page.tsx` is a thin server wrapper; real code is in `<Thing>List.tsx` (client)
-- **Detail pages**: `src/app/(app)/<thing>/[id]/page.tsx` thin wrapper, real code in `<Thing>Detail.tsx`
-- **Edit modals**: each detail page renders `<Modal>` inline with form state. Tasks have a shared `TaskFormModal` because it's used from two places.
-- **Audit logging**: any mutation that should be tracked needs a `logActivity(ctx.db, ...)` call after the DB write
-- **Adding a new screen**: copy a stub (`/protocols/page.tsx`) and replace `ComingSoon` with your client component
+Редактор тіла документа (#6–#11), інлайн-коментарі, email+invite flow (`/invite/[token]`, 4 стани), PDF-протокол засідання (кирилиця NotoSans), auto-close голосування, глобальний пошук (Cmd+K), undo (`activityLog.restore`), коментарі (2 рівні), S3-storage, audit-log + `<ActivityFeed>`, light/dark theme, sidebar redesign (`dashboard.navCounts`), dashboard KPI-картки, календар засідань, tasks-сторінка з деревом РГ, edit-модалки, `/standards/new` + `/meetings/new`, stub-сторінки, escape-close модалок. Module coverage scripts: `test:audit-coverage` (41/6/0), `test:modules` (CRUD integration).
 
-## 6. Common commands
+## 5. Спільні команди
 
-```bash
-# locally
-pnpm install
-pnpm prisma generate
-pnpm lint
-pnpm typecheck
-pnpm build
+Див. `HANDOFF.md` (повний список). Деплой = `git push origin main` → Railway білдить. Railway start: `prisma db push --accept-data-loss && prisma:seed && start`.
 
-# deploy = git push to main; Railway auto-builds
-git add -A && git commit -m "feat: ..." && git push origin main
-```
+## 6. Відомі gotchas
 
-Railway's start command is `pnpm prisma db push --accept-data-loss && pnpm prisma:seed && pnpm start` — schema changes apply automatically, seed re-runs harmlessly.
+- **ESLint `--max-warnings 0`** — навіть один warning блокує Railway build. Часті: unused imports, `||` замість `??`, зайві type-assertions, hardcoded `bg-white`/`slate-*` замість токенів.
+- **`bg-slate-*` не перемикається в dark** — тільки токени (`bg-card`/`text-ink`/`text-mid`/`text-light`/`border-hairline`/`bg-page`/`bg-pill`).
+- **Prisma JSON columns** (`ActivityLog.before/after/diff`) — `as Prisma.InputJsonValue` лише на самому краю.
+- **Lucide icon type** — `LucideIcon` з `lucide-react`, не кастомний `ComponentType<{size}>`.
+- **Husky + lint-staged** на коміті може reformat/auto-fix; `[STARTED]/[COMPLETED]` рядки — не помилки.
 
-## 7. Known gotchas
+## 7. Комунікація
 
-- **ESLint is `--max-warnings 0`** — even one warning blocks Railway build. Common offenders: unused imports, `||` instead of `??`, type assertions that lint marks as unnecessary, hardcoded `bg-white` vs token classes.
-- **`bg-slate-*` colors don't auto-switch in dark mode** — must use the token classes (`bg-card`, `text-ink`, `text-mid`, `text-light`, `border-hairline`, `bg-page`, `bg-pill`). Mass-replaced once but new code keeps re-introducing slate-\* — watch for it.
-- **Prisma JSON columns** (`ActivityLog.before/after/diff`) need `as Prisma.InputJsonValue` only at the very edge — internally we pass typed objects through `logActivity()`.
-- **Tasks page Lucide icon type** — use `LucideIcon` from `lucide-react`, not custom `ComponentType<{ size }>` (strict-mode mismatch on `propTypes.size`).
-- **Husky + lint-staged** sometimes runs on commit and may reformat or auto-fix; the `[STARTED] / [COMPLETED]` lines show in commit output and are not failures.
+Kir віддає перевагу **українській/російській мішанці** в UI (українська для продукту), стислим відповідям, автономному виконанню. Push у `main` дозволено; один коміт на задачу; перед паузою — синхронізуючий `wip:` коміт + оновлення цього файлу + push.
 
-## 8. Communication
+## 8. Регламент роботи (QA fix-cycle)
 
-The user prefers **Ukrainian/Russian mix** in UI strings (Ukrainian for product), terse responses, and autonomous execution — they explicitly said "автономно проработай и итерациями двигайся". They will dispatch via Claude mobile when they want a fresh ping.
+- Кожен фікс → окремий коміт, conventional message (`fix(security): B-3 sanitize suggestion body with DOMPurify`).
+- Кожна гілка → окремий merge у `main` + оновлення `CHANGELOG.md`.
+- Після кожного merge → оновити «ПОТОЧНИЙ СТАН» вище (що закрито, що далі).
+- Кожні 3–5 комітів / зміна вектора → оновити `HANDOFF.md`, якщо щось фундаментальне.
+- Архітектурне рішення → запис у `docs/DECISIONS.md` (окремий коміт).
+- Перед паузою/завершенням → `wip: state at <дата>` + оновлення цього файлу + push.

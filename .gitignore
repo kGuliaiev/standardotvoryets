@@ -28,6 +28,9 @@ pnpm-debug.log*
 .env.test.local
 .env.production.local
 
+# local-only docker compose port overrides (machine-specific, see HANDOFF.md)
+docker-compose.override.yml
+
 # prisma migrations (only migration files are gitignored, schema is not)
 # prisma/migrations/*
 
