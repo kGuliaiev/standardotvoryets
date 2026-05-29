@@ -85,6 +85,15 @@ const STATUS_LABELS: Record<StandardStatus, string> = {
   ARCHIVED: 'Архів',
 };
 
+const DOC_TYPE_LABEL: Record<string, string> = {
+  STANDARD: 'Стандарт',
+  TECH_SPEC: 'ТЗ',
+  FEEDBACK: 'Відгук',
+  AGENDA: 'Порядок денний',
+  ATTACHMENT: 'Додаток',
+  MEETING_MINUTES: 'Протокол',
+};
+
 const VALID_TABS = new Set<Tab>([
   'journal',
   'body',
@@ -693,8 +702,18 @@ export function StandardDetail({ id }: { id: string }) {
                       );
                       const suggTotal =
                         suggCounts.pending + suggCounts.accepted + suggCounts.rejected;
+                      // Locked snapshots are read-only — created by
+                      // vote.closeVoting when a voting closes. They keep
+                      // their filename with the appended voting ref so
+                      // the user can see "what we voted on, when, and
+                      // how it ended" right from the row.
+                      const isLocked = Boolean(doc.lockedAt);
+                      const typeLabel = DOC_TYPE_LABEL[doc.type] ?? doc.type;
                       return (
-                        <div key={doc.id} className="flex items-center gap-4 px-5 py-3.5">
+                        <div
+                          key={doc.id}
+                          className={`flex items-center gap-4 px-5 py-3.5 ${isLocked ? 'bg-page/60' : ''}`}
+                        >
                           <div className="w-8 h-8 bg-blue-50 rounded-lg flex items-center justify-center flex-shrink-0">
                             <span className="text-xs font-bold text-blue-600">
                               {doc.filename.split('.').pop()?.toUpperCase().slice(0, 3)}
@@ -703,9 +722,9 @@ export function StandardDetail({ id }: { id: string }) {
                           <div className="flex-1 min-w-0">
                             <p className="text-sm font-medium text-ink truncate">{doc.filename}</p>
                             <p className="text-xs text-light flex items-center gap-1.5 flex-wrap">
-                              <span>{doc.type}</span>
+                              <span>{typeLabel}</span>
                               <span>·</span>
-                              <span>v{doc.version}</span>
+                              <span>{doc.version}</span>
                               <span>·</span>
                               <span>{formatBytes(doc.sizeBytes)}</span>
                               <span>·</span>
@@ -752,22 +771,42 @@ export function StandardDetail({ id }: { id: string }) {
                               )}
                             </p>
                           </div>
-                          {doc.isCurrent && (
+                          {isLocked && (
+                            <span
+                              className="text-xs bg-slate-100 text-slate-700 dark:bg-slate-800/60 dark:text-slate-300 border border-slate-300 dark:border-slate-700 rounded-full px-2 py-0.5 flex-shrink-0 inline-flex items-center gap-1"
+                              title={
+                                doc.lockedAt
+                                  ? `Заблоковано ${formatDate(doc.lockedAt)} — частина архіву голосування`
+                                  : 'Заблоковано'
+                              }
+                            >
+                              🔒 Заблоковано
+                            </span>
+                          )}
+                          {!isLocked && doc.isCurrent && (
                             <span className="text-xs bg-green-50 text-green-700 border border-green-200 rounded-full px-2 py-0.5 flex-shrink-0">
                               Актуальний
                             </span>
                           )}
                           {/* Order: Текст → Завантажити → Картка → Видалити.
-                              Текст is the primary action so it leads;
-                              destructive Видалити is last and red. */}
-                          {doc.allowEdits && (
+                              Locked docs: "Переглянути" (read-only) + Завантажити only.
+                              Card / Delete are hidden on locked snapshots —
+                              they are immutable evidence pinned to a voting.
+                              We show the open-button for any doc that has
+                              an editable body — including locked ones, so
+                              users can read the snapshot + comments. */}
+                          {(doc.allowEdits || isLocked) && (
                             <button
                               onClick={() => setEditDocId(doc.id)}
                               className="text-xs px-2.5 py-1 rounded border border-brand text-brand hover:bg-brand hover:text-white transition-colors inline-flex items-center gap-1 flex-shrink-0"
-                              title="Відкрити документ у колаборативному редакторі"
+                              title={
+                                isLocked
+                                  ? 'Заблоковано — тільки перегляд, з коментарями та правками'
+                                  : 'Відкрити документ у колаборативному редакторі'
+                              }
                             >
                               <FileText className="w-3 h-3" />
-                              Текст
+                              {isLocked ? 'Переглянути' : 'Текст'}
                             </button>
                           )}
                           <DownloadButton
@@ -775,7 +814,7 @@ export function StandardDetail({ id }: { id: string }) {
                             standardId={id}
                             filename={doc.filename}
                           />
-                          {canUpload && (
+                          {canUpload && !isLocked && (
                             <button
                               onClick={() => setEditMetaDocId(doc.id)}
                               className="text-xs px-2.5 py-1 rounded border border-hairline text-mid hover:text-ink hover:bg-pill transition-colors inline-flex items-center gap-1 flex-shrink-0"
@@ -785,7 +824,7 @@ export function StandardDetail({ id }: { id: string }) {
                               Картка
                             </button>
                           )}
-                          {canDeleteDoc && (
+                          {canDeleteDoc && !isLocked && (
                             <button
                               onClick={() => {
                                 // Open the 6-digit-code modal directly.
@@ -1422,12 +1461,16 @@ export function StandardDetail({ id }: { id: string }) {
       {editDocId &&
         (() => {
           const doc = standard.documents.find((d) => d.id === editDocId);
-          if (!doc?.allowEdits) return null;
+          // Open for either: editable docs OR locked snapshots (those
+          // render read-only with full comment/suggestion history).
+          if (!doc) return null;
+          if (!doc.allowEdits && !doc.lockedAt) return null;
+          const titlePrefix = doc.lockedAt ? 'Перегляд' : 'Редагування';
           return (
             <Modal
               open={!!editDocId}
               onClose={() => setEditDocId(null)}
-              title={`Редагування: ${doc.filename}`}
+              title={`${titlePrefix}: ${doc.filename}`}
               size="full"
             >
               <StandardBodyEditor
@@ -1441,6 +1484,15 @@ export function StandardDetail({ id }: { id: string }) {
                 bodyUpdatedAt={doc.bodyUpdatedAt}
                 bodyUpdatedBy={doc.bodyUpdatedBy}
                 standardStatus={standard.status}
+                documentLocked={Boolean(doc.lockedAt)}
+                documentLockInfo={
+                  doc.lockedByVoting
+                    ? {
+                        votingSeqNumber: doc.lockedByVoting.seqNumber,
+                        closedAt: doc.lockedByVoting.closedAt,
+                      }
+                    : null
+                }
               />
             </Modal>
           );

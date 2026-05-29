@@ -9,18 +9,26 @@ import { DeleteObjectCommand } from '@aws-sdk/client-s3';
 import { env } from '@/lib/env';
 import type { DocumentType, GlobalRole, PrismaClient, WorkingGroupRole } from '@prisma/client';
 
-// Types that may exist at most ONCE per standard (per user spec —
-// "на 1 стандарт може бути одне ТЗ і один файл стандарту"). The check is
-// shared by every creation path (createEmpty / registerMetadata /
-// confirmUpload + the proxy /api/standards/[id]/documents POST route).
+// Types where at most ONE active (= not locked by a closed voting)
+// document may exist per standard. Per user spec: "акутальный может
+// быть 1 документ в категории DocumentType для STANDARD и TECH_SPEC".
+// Locked snapshots of past votings don't count — there can be many of
+// those, they're historical evidence pinned to a Voting row.
 const ONE_PER_STANDARD_TYPES: ReadonlySet<DocumentType> = new Set<DocumentType>([
-  'DRAFT_STANDARD',
+  'STANDARD',
   'TECH_SPEC',
 ]);
 const ONE_PER_STANDARD_LABEL: Partial<Record<DocumentType, string>> = {
-  DRAFT_STANDARD: 'Стандарт',
+  STANDARD: 'Стандарт',
   TECH_SPEC: 'ТЗ',
 };
+
+// Same set, exposed under a clearer name for the isCurrent-toggle logic:
+// the "актуальний" tag is only meaningful for these two types; for
+// everything else the server forces isCurrent=false and the UI hides
+// the toggle. Many FEEDBACK / AGENDA / ATTACHMENT rows can coexist
+// without any of them being "current".
+const HAS_CURRENT_FLAG: ReadonlySet<DocumentType> = ONE_PER_STANDARD_TYPES;
 
 async function assertUniqueTypePerStandard(
   db: PrismaClient,
@@ -29,17 +37,26 @@ async function assertUniqueTypePerStandard(
 ) {
   if (!ONE_PER_STANDARD_TYPES.has(type)) return;
   const existing = await db.document.findFirst({
-    where: { standardId, type },
+    // Only UNLOCKED docs count toward the cap — frozen voting snapshots
+    // can pile up indefinitely without blocking new editable versions.
+    where: { standardId, type, lockedAt: null },
     select: { id: true, filename: true },
   });
   if (existing) {
     const label = ONE_PER_STANDARD_LABEL[type] ?? type;
     throw new TRPCError({
       code: 'CONFLICT',
-      message: `На цьому стандарті вже є документ типу «${label}» («${existing.filename}»). Видаліть наявний, щоб завантажити новий.`,
+      message: `На цьому стандарті вже є активний документ типу «${label}» («${existing.filename}»). Видаліть наявний, щоб завантажити новий.`,
     });
   }
 }
+
+// Centralised input schema — accepts only the types the UI offers for
+// uploads. MEETING_MINUTES is excluded (the Протоколи module owns those
+// now); FINAL/DRAFT_STANDARD were dropped from the enum (migrated by
+// scripts/pre-db-push.sql). Kept as a const so all four creation paths
+// stay in lock-step.
+const UPLOADABLE_DOC_TYPES = z.enum(['STANDARD', 'TECH_SPEC', 'FEEDBACK', 'AGENDA', 'ATTACHMENT']);
 
 function userCtx(session: {
   user: { globalRole: string; memberships: { workingGroupId: string; role: string }[] };
@@ -70,15 +87,7 @@ export const documentRouter = createTRPCRouter({
         contentType: z.string().refine((ct) => ALLOWED_MIME_TYPES.includes(ct), {
           message: 'Дозволені формати: PDF, DOCX, XLSX, ODT',
         }),
-        type: z.enum([
-          'DRAFT_STANDARD',
-          'TECH_SPEC',
-          'FEEDBACK',
-          'MEETING_MINUTES',
-          'AGENDA',
-          'ATTACHMENT',
-          'FINAL',
-        ]),
+        type: UPLOADABLE_DOC_TYPES,
         version: z.string().min(1).max(20),
       }),
     )
@@ -107,15 +116,7 @@ export const documentRouter = createTRPCRouter({
         filename: z.string().min(1).max(255),
         sizeBytes: z.number().int().min(0).default(0),
         version: z.string().min(1).max(20),
-        type: z.enum([
-          'DRAFT_STANDARD',
-          'TECH_SPEC',
-          'FEEDBACK',
-          'MEETING_MINUTES',
-          'AGENDA',
-          'ATTACHMENT',
-          'FINAL',
-        ]),
+        type: UPLOADABLE_DOC_TYPES,
         note: z.string().optional(),
         isCurrent: z.boolean().default(false),
       }),
@@ -129,9 +130,12 @@ export const documentRouter = createTRPCRouter({
         throw new TRPCError({ code: 'FORBIDDEN' });
       }
       await assertUniqueTypePerStandard(ctx.db, input.standardId, input.type);
-      if (input.isCurrent) {
+      // isCurrent has no meaning for FEEDBACK / AGENDA / ATTACHMENT —
+      // coerce false even if the client sent true.
+      const wantsCurrent = input.isCurrent && HAS_CURRENT_FLAG.has(input.type);
+      if (wantsCurrent) {
         await ctx.db.document.updateMany({
-          where: { standardId: input.standardId, isCurrent: true },
+          where: { standardId: input.standardId, type: input.type, isCurrent: true },
           data: { isCurrent: false },
         });
       }
@@ -145,7 +149,7 @@ export const documentRouter = createTRPCRouter({
           sizeBytes: input.sizeBytes,
           version: input.version,
           note: input.note,
-          isCurrent: input.isCurrent,
+          isCurrent: wantsCurrent,
         },
       });
     }),
@@ -159,15 +163,7 @@ export const documentRouter = createTRPCRouter({
       z.object({
         standardId: z.string().cuid(),
         filename: z.string().min(1).max(255),
-        type: z.enum([
-          'DRAFT_STANDARD',
-          'TECH_SPEC',
-          'FEEDBACK',
-          'MEETING_MINUTES',
-          'AGENDA',
-          'ATTACHMENT',
-          'FINAL',
-        ]),
+        type: UPLOADABLE_DOC_TYPES,
         version: z.string().min(1).max(20).default('v0.1'),
         note: z.string().max(2000).optional(),
         isCurrent: z.boolean().default(false),
@@ -183,9 +179,10 @@ export const documentRouter = createTRPCRouter({
       }
       await assertUniqueTypePerStandard(ctx.db, input.standardId, input.type);
 
-      if (input.isCurrent) {
+      const wantsCurrent = input.isCurrent && HAS_CURRENT_FLAG.has(input.type);
+      if (wantsCurrent) {
         await ctx.db.document.updateMany({
-          where: { standardId: input.standardId, isCurrent: true },
+          where: { standardId: input.standardId, type: input.type, isCurrent: true },
           data: { isCurrent: false },
         });
       }
@@ -206,7 +203,7 @@ export const documentRouter = createTRPCRouter({
           sizeBytes: 0,
           version: input.version,
           note: input.note ?? null,
-          isCurrent: input.isCurrent,
+          isCurrent: wantsCurrent,
           allowEdits: true,
           bodyHtml: '',
           bodyUpdatedAt: new Date(),
@@ -235,15 +232,7 @@ export const documentRouter = createTRPCRouter({
         filename: z.string(),
         sizeBytes: z.number().positive(),
         version: z.string(),
-        type: z.enum([
-          'DRAFT_STANDARD',
-          'TECH_SPEC',
-          'FEEDBACK',
-          'MEETING_MINUTES',
-          'AGENDA',
-          'ATTACHMENT',
-          'FINAL',
-        ]),
+        type: UPLOADABLE_DOC_TYPES,
         note: z.string().optional(),
         isCurrent: z.boolean().default(false),
       }),
@@ -261,10 +250,10 @@ export const documentRouter = createTRPCRouter({
       }
       await assertUniqueTypePerStandard(ctx.db, input.standardId, input.type);
 
-      // If setting as current, unset previous current
-      if (input.isCurrent) {
+      const wantsCurrent = input.isCurrent && HAS_CURRENT_FLAG.has(input.type);
+      if (wantsCurrent) {
         await ctx.db.document.updateMany({
-          where: { standardId: input.standardId, isCurrent: true },
+          where: { standardId: input.standardId, type: input.type, isCurrent: true },
           data: { isCurrent: false },
         });
       }
@@ -279,7 +268,7 @@ export const documentRouter = createTRPCRouter({
           sizeBytes: input.sizeBytes,
           version: input.version,
           note: input.note,
-          isCurrent: input.isCurrent,
+          isCurrent: wantsCurrent,
         },
       });
       await logActivity(ctx.db, {
@@ -369,6 +358,8 @@ export const documentRouter = createTRPCRouter({
         type: DocumentType;
         sizeBytes: number;
         isCurrent: boolean;
+        lockedAt: Date | null;
+        lockedByVotingId: string | null;
         uploadedAt: Date;
         uploadedBy: { id: string; name: string };
         standard: { id: string; code: string; title: string };
@@ -390,6 +381,8 @@ export const documentRouter = createTRPCRouter({
         type: d.type,
         sizeBytes: d.sizeBytes,
         isCurrent: d.isCurrent,
+        lockedAt: d.lockedAt,
+        lockedByVotingId: d.lockedByVotingId,
         uploadedAt: d.createdAt,
         uploadedBy: d.uploadedBy,
         standard: d.standard,
@@ -414,9 +407,7 @@ export const documentRouter = createTRPCRouter({
         documentId: z.string().cuid(),
         filename: z.string().min(1).max(300).optional(),
         note: z.string().max(1000).optional().nullable(),
-        type: z
-          .enum(['DRAFT_STANDARD', 'MEETING_MINUTES', 'AGENDA', 'ATTACHMENT', 'FINAL'])
-          .optional(),
+        type: UPLOADABLE_DOC_TYPES.optional(),
       }),
     )
     .mutation(async ({ ctx, input }) => {
@@ -426,6 +417,14 @@ export const documentRouter = createTRPCRouter({
       });
       if (!can(userCtx(ctx.session), 'document:setCurrent', doc.standard.workingGroupId)) {
         throw new TRPCError({ code: 'FORBIDDEN' });
+      }
+      // Locked snapshots are immutable — name carries voting reference
+      // (see vote.closeVoting) and must not drift.
+      if (doc.lockedAt) {
+        throw new TRPCError({
+          code: 'BAD_REQUEST',
+          message: 'Документ заблоковано — він прикріплений до завершеного голосування',
+        });
       }
       const data = {
         filename: input.filename,
@@ -460,8 +459,24 @@ export const documentRouter = createTRPCRouter({
         throw new TRPCError({ code: 'FORBIDDEN' });
       }
 
+      // Locked docs are immutable snapshots — they're never "current" again.
+      if (doc.lockedAt) {
+        throw new TRPCError({
+          code: 'BAD_REQUEST',
+          message: 'Документ заблоковано після голосування — не може бути актуальним',
+        });
+      }
+      // isCurrent only applies to STANDARD and TECH_SPEC; other types
+      // can have multiple coexisting docs without an "actual" tag.
+      if (!HAS_CURRENT_FLAG.has(doc.type)) {
+        throw new TRPCError({
+          code: 'BAD_REQUEST',
+          message: 'Тег «актуальний» допустимий лише для документів типу Стандарт або ТЗ',
+        });
+      }
+
       await ctx.db.document.updateMany({
-        where: { standardId: doc.standardId, isCurrent: true },
+        where: { standardId: doc.standardId, type: doc.type, isCurrent: true },
         data: { isCurrent: false },
       });
 
@@ -490,17 +505,7 @@ export const documentRouter = createTRPCRouter({
     .input(
       z.object({
         documentId: z.string().cuid(),
-        type: z
-          .enum([
-            'DRAFT_STANDARD',
-            'TECH_SPEC',
-            'FEEDBACK',
-            'MEETING_MINUTES',
-            'AGENDA',
-            'ATTACHMENT',
-            'FINAL',
-          ])
-          .optional(),
+        type: UPLOADABLE_DOC_TYPES.optional(),
         version: z.string().min(1).max(50).optional(),
         note: z.string().max(2000).nullable().optional(),
         isCurrent: z.boolean().optional(),
@@ -516,10 +521,32 @@ export const documentRouter = createTRPCRouter({
       if (!can(userCtx(ctx.session), 'document:upload', doc.standard.workingGroupId)) {
         throw new TRPCError({ code: 'FORBIDDEN' });
       }
-      // If marking as current, unset any other current within the same standard.
-      if (input.isCurrent === true && !doc.isCurrent) {
+      if (doc.lockedAt) {
+        throw new TRPCError({
+          code: 'BAD_REQUEST',
+          message: 'Документ заблоковано — голосування його закрило',
+        });
+      }
+      // Coerce isCurrent against the (post-change) document type. The
+      // "actual" tag only exists for STANDARD / TECH_SPEC; for anything
+      // else we silently drop it server-side rather than 400-ing, since
+      // the client may legitimately resend the previous value while
+      // changing only `note`.
+      const effectiveType = input.type ?? doc.type;
+      const wantsCurrent =
+        input.isCurrent !== undefined
+          ? input.isCurrent && HAS_CURRENT_FLAG.has(effectiveType)
+          : undefined;
+
+      // If marking as current, unset any other current of the same type.
+      if (wantsCurrent === true && !doc.isCurrent) {
         await ctx.db.document.updateMany({
-          where: { standardId: doc.standardId, isCurrent: true, id: { not: doc.id } },
+          where: {
+            standardId: doc.standardId,
+            type: effectiveType,
+            isCurrent: true,
+            id: { not: doc.id },
+          },
           data: { isCurrent: false },
         });
       }
@@ -536,7 +563,7 @@ export const documentRouter = createTRPCRouter({
           ...(input.type !== undefined ? { type: input.type } : {}),
           ...(input.version !== undefined ? { version: input.version } : {}),
           ...(input.note !== undefined ? { note: input.note } : {}),
-          ...(input.isCurrent !== undefined ? { isCurrent: input.isCurrent } : {}),
+          ...(wantsCurrent !== undefined ? { isCurrent: wantsCurrent } : {}),
           ...(input.allowEdits !== undefined ? { allowEdits: input.allowEdits } : {}),
         },
       });

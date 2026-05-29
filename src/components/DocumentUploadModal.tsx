@@ -19,25 +19,22 @@ interface DocumentUploadModalProps {
   defaultMode?: 'upload' | 'empty';
 }
 
-const TYPE_OPTIONS: {
-  value:
-    | 'DRAFT_STANDARD'
-    | 'TECH_SPEC'
-    | 'FEEDBACK'
-    | 'MEETING_MINUTES'
-    | 'AGENDA'
-    | 'ATTACHMENT'
-    | 'FINAL';
-  label: string;
-}[] = [
+// Types offered in the create / upload picker. Mirrors UPLOADABLE_DOC_TYPES
+// on the server. MEETING_MINUTES is excluded — the Протоколи module is
+// the single source of truth for those now; FINAL was collapsed into
+// STANDARD (the locked snapshot post-voting IS the final).
+type UploadableDocType = 'STANDARD' | 'TECH_SPEC' | 'FEEDBACK' | 'AGENDA' | 'ATTACHMENT';
+const TYPE_OPTIONS: { value: UploadableDocType; label: string }[] = [
   { value: 'TECH_SPEC', label: 'ТЗ (технічне завдання)' },
-  { value: 'DRAFT_STANDARD', label: 'Чернетка стандарту' },
+  { value: 'STANDARD', label: 'Стандарт' },
   { value: 'FEEDBACK', label: 'Відгук' },
-  { value: 'FINAL', label: 'Фінальна версія' },
   { value: 'AGENDA', label: 'Порядок денний' },
-  { value: 'MEETING_MINUTES', label: 'Протокол' },
   { value: 'ATTACHMENT', label: 'Додатковий матеріал' },
 ];
+
+// Only these two types own the "actual" tag and the
+// "max one per standard" cap; for the rest the toggle is hidden.
+const HAS_CURRENT_FLAG = new Set<UploadableDocType>(['STANDARD', 'TECH_SPEC']);
 
 const ALLOWED_MIMES = [
   'application/pdf',
@@ -62,7 +59,7 @@ export function DocumentUploadModal({
   const [file, setFile] = useState<File | null>(null);
   const [emptyFilename, setEmptyFilename] = useState('');
   const [version, setVersion] = useState('v1.0');
-  const [type, setType] = useState<(typeof TYPE_OPTIONS)[number]['value']>('DRAFT_STANDARD');
+  const [type, setType] = useState<UploadableDocType>('STANDARD');
   const [isCurrent, setIsCurrent] = useState(true);
   // Default OFF: most uploads are reference material; the leader opts in
   // for documents they want the WG to collaboratively edit. Override
@@ -83,7 +80,7 @@ export function DocumentUploadModal({
       setFile(null);
       setEmptyFilename('');
       setVersion('v1.0');
-      setType('DRAFT_STANDARD');
+      setType('STANDARD');
       setIsCurrent(true);
       setAllowEdits(defaultAllowEdits);
       setNote('');
@@ -153,7 +150,7 @@ export function DocumentUploadModal({
           type,
           version: version.trim(),
           note: note.trim() || undefined,
-          isCurrent,
+          isCurrent: isCurrent && HAS_CURRENT_FLAG.has(type),
         });
         invalidateAfterUpload();
         onSaved?.();
@@ -176,7 +173,7 @@ export function DocumentUploadModal({
       form.append('file', file);
       form.append('type', type);
       form.append('version', version.trim());
-      form.append('isCurrent', String(isCurrent));
+      form.append('isCurrent', String(isCurrent && HAS_CURRENT_FLAG.has(type)));
       form.append('allowEdits', String(allowEdits && fileIsDocx));
       if (note.trim()) form.append('note', note.trim());
 
@@ -321,15 +318,22 @@ export function DocumentUploadModal({
         </div>
 
         <div className="space-y-2">
-          <label className="flex items-center gap-2 text-sm cursor-pointer">
-            <input
-              type="checkbox"
-              checked={isCurrent}
-              onChange={(e) => setIsCurrent(e.target.checked)}
-              className="w-4 h-4 accent-brand"
-            />
-            <span className="text-ink">Позначити як актуальну версію</span>
-          </label>
+          {/* "Актуальна версія" tag is only meaningful for STANDARD and
+              TECH_SPEC (max 1 active per standard). For other types many
+              docs can coexist without any of them being marked actual,
+              so we hide the toggle instead of letting the user set a
+              meaningless flag. */}
+          {HAS_CURRENT_FLAG.has(type) && (
+            <label className="flex items-center gap-2 text-sm cursor-pointer">
+              <input
+                type="checkbox"
+                checked={isCurrent}
+                onChange={(e) => setIsCurrent(e.target.checked)}
+                className="w-4 h-4 accent-brand"
+              />
+              <span className="text-ink">Позначити як актуальну версію</span>
+            </label>
+          )}
           {mode === 'upload' ? (
             <label
               className={`flex items-start gap-2 text-sm ${fileIsDocx ? 'cursor-pointer' : 'cursor-not-allowed opacity-60'}`}

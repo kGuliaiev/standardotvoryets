@@ -40,15 +40,16 @@ export const runtime = 'nodejs';
 // because we read as FormData, not JSON). Cap at 25 MB to match the modal.
 export const maxDuration = 60;
 
-const ALLOWED_TYPES: DocumentType[] = [
-  'DRAFT_STANDARD',
-  'TECH_SPEC',
-  'FEEDBACK',
-  'MEETING_MINUTES',
-  'AGENDA',
-  'ATTACHMENT',
-  'FINAL',
-];
+// Types accepted by the proxy upload endpoint. Mirrors the
+// UPLOADABLE_DOC_TYPES zod enum on the tRPC side — MEETING_MINUTES is
+// excluded (the Протоколи module is the single source for those) and
+// FINAL / DRAFT_STANDARD were dropped from the schema (migrated by
+// scripts/pre-db-push.sql to STANDARD / ATTACHMENT respectively).
+const ALLOWED_TYPES: DocumentType[] = ['STANDARD', 'TECH_SPEC', 'FEEDBACK', 'AGENDA', 'ATTACHMENT'];
+// Only these two types support the "actual / current" tag and the
+// "max one per standard" rule. For everything else many docs can
+// coexist and isCurrent is always false.
+const HAS_CURRENT_FLAG = new Set<DocumentType>(['STANDARD', 'TECH_SPEC']);
 
 const MAX_BYTES = 25 * 1024 * 1024;
 
@@ -107,24 +108,28 @@ export async function POST(req: Request, { params }: { params: { id: string } })
     return NextResponse.json({ error: 'Введіть версію' }, { status: 400 });
   }
 
-  // Uniqueness: one ТЗ + one «Стандарт» per standard. Check BEFORE the S3
-  // upload so we don't leave an orphan object on a 409.
-  if (type === 'DRAFT_STANDARD' || type === 'TECH_SPEC') {
+  // Uniqueness: at most one ACTIVE (unlocked) ТЗ + one «Стандарт» per
+  // standard. Locked snapshots from past votings don't count — they pile
+  // up as historical evidence. Check BEFORE the S3 upload so a 409
+  // doesn't leave an orphan object.
+  if (type === 'STANDARD' || type === 'TECH_SPEC') {
     const existing = await db.document.findFirst({
-      where: { standardId: params.id, type },
+      where: { standardId: params.id, type, lockedAt: null },
       select: { id: true, filename: true },
     });
     if (existing) {
-      const label = type === 'DRAFT_STANDARD' ? 'Стандарт' : 'ТЗ';
+      const label = type === 'STANDARD' ? 'Стандарт' : 'ТЗ';
       return NextResponse.json(
         {
-          error: `На цьому стандарті вже є документ типу «${label}» («${existing.filename}»). Видаліть наявний, щоб завантажити новий.`,
+          error: `На цьому стандарті вже є активний документ типу «${label}» («${existing.filename}»). Видаліть наявний, щоб завантажити новий.`,
         },
         { status: 409 },
       );
     }
   }
-  const isCurrent = isCurrentRaw === 'true' || isCurrentRaw === '1';
+  // isCurrent only meaningful for STANDARD/TECH_SPEC; coerce false otherwise.
+  const isCurrent =
+    (isCurrentRaw === 'true' || isCurrentRaw === '1') && HAS_CURRENT_FLAG.has(type as DocumentType);
   const allowEditsRequested = allowEditsRaw === 'true' || allowEditsRaw === '1';
   const noteStr = typeof note === 'string' && note.trim().length > 0 ? note.trim() : undefined;
 
@@ -177,10 +182,10 @@ export async function POST(req: Request, { params }: { params: { id: string } })
     );
   }
 
-  // If marking as current, unset any previous current
+  // If marking as current, unset any previous current of the same type.
   if (isCurrent) {
     await db.document.updateMany({
-      where: { standardId: params.id, isCurrent: true },
+      where: { standardId: params.id, type: type as DocumentType, isCurrent: true },
       data: { isCurrent: false },
     });
   }

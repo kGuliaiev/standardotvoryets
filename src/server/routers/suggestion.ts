@@ -148,7 +148,13 @@ const targetInput = z
 
 type ResolvedTarget =
   | { kind: 'standard'; standardId: string; workingGroupId: string; body: string | null }
-  | { kind: 'document'; documentId: string; workingGroupId: string; body: string | null };
+  | {
+      kind: 'document';
+      documentId: string;
+      workingGroupId: string;
+      body: string | null;
+      lockedAt: Date | null;
+    };
 
 async function resolveTarget(
   db: PrismaClient,
@@ -172,6 +178,7 @@ async function resolveTarget(
     select: {
       bodyHtml: true,
       allowEdits: true,
+      lockedAt: true,
       standard: { select: { workingGroupId: true } },
     },
   });
@@ -181,12 +188,30 @@ async function resolveTarget(
       message: 'Цей документ не позначений як такий, що допускає правки.',
     });
   }
+  // Locked snapshots remain readable (the `list` path needs to see
+  // them), but `create` / `accept` / `reject` / `updateBody` / `replaceBody`
+  // additionally enforce `assertNotLocked` on the resolved doc — see
+  // each handler. We surface lockedAt here so those handlers can branch
+  // without a second round-trip.
   return {
     kind: 'document',
     documentId: input.documentId!,
     workingGroupId: doc.standard.workingGroupId,
     body: doc.bodyHtml,
+    lockedAt: doc.lockedAt,
   };
+}
+
+/** Throws BAD_REQUEST when the target is a locked document. List/read
+ *  is fine; any write is rejected. Centralised so each write site only
+ *  has to call this. */
+function assertNotLocked(target: ResolvedTarget) {
+  if (target.kind === 'document' && target.lockedAt) {
+    throw new TRPCError({
+      code: 'BAD_REQUEST',
+      message: 'Документ заблоковано — він прикріплений до завершеного голосування',
+    });
+  }
 }
 
 export const suggestionRouter = createTRPCRouter({
@@ -238,6 +263,7 @@ export const suggestionRouter = createTRPCRouter({
     )
     .mutation(async ({ ctx, input }) => {
       const target = await resolveTarget(ctx.db, input);
+      assertNotLocked(target);
       if (!can(userCtx(ctx.session), 'comment:add', target.workingGroupId)) {
         // Reusing comment:add: any member of the WG can suggest.
         throw new TRPCError({ code: 'FORBIDDEN' });
@@ -335,6 +361,7 @@ export const suggestionRouter = createTRPCRouter({
             select: {
               id: true,
               bodyHtml: true,
+              lockedAt: true,
               standard: { select: { workingGroupId: true } },
             },
           },
@@ -349,6 +376,15 @@ export const suggestionRouter = createTRPCRouter({
       // direct-edit right as updateBody/replaceBody.
       if (!can(userCtx(ctx.session), 'standard:editBody', workingGroupId)) {
         throw new TRPCError({ code: 'FORBIDDEN' });
+      }
+      // Locked documents are immutable — refuse any further accept/reject
+      // even from ADMIN. The audit trail of pending suggestions stays
+      // visible to readers but no longer mutates the body.
+      if (sug.document?.lockedAt) {
+        throw new TRPCError({
+          code: 'BAD_REQUEST',
+          message: 'Документ заблоковано — прийняття правок недоступне',
+        });
       }
       if (sug.status !== 'PENDING') {
         throw new TRPCError({ code: 'BAD_REQUEST', message: 'Правку вже опрацьовано' });
@@ -480,7 +516,9 @@ export const suggestionRouter = createTRPCRouter({
         where: { id: input.id },
         include: {
           standard: { select: { workingGroupId: true } },
-          document: { select: { standard: { select: { workingGroupId: true } } } },
+          document: {
+            select: { lockedAt: true, standard: { select: { workingGroupId: true } } },
+          },
         },
       });
       const workingGroupId = sug.standard?.workingGroupId ?? sug.document?.standard.workingGroupId;
@@ -491,6 +529,12 @@ export const suggestionRouter = createTRPCRouter({
       // the same direct-edit right as accept.
       if (!can(userCtx(ctx.session), 'standard:editBody', workingGroupId)) {
         throw new TRPCError({ code: 'FORBIDDEN' });
+      }
+      if (sug.document?.lockedAt) {
+        throw new TRPCError({
+          code: 'BAD_REQUEST',
+          message: 'Документ заблоковано — відхилення правок недоступне',
+        });
       }
       if (sug.status !== 'PENDING') {
         throw new TRPCError({ code: 'BAD_REQUEST', message: 'Правку вже опрацьовано' });
@@ -522,6 +566,7 @@ export const suggestionRouter = createTRPCRouter({
     .input(targetInput.and(z.object({ bodyText: z.string().max(200_000) })))
     .mutation(async ({ ctx, input }) => {
       const target = await resolveTarget(ctx.db, input);
+      assertNotLocked(target);
       if (!can(userCtx(ctx.session), 'standard:editBody', target.workingGroupId)) {
         throw new TRPCError({ code: 'FORBIDDEN' });
       }
@@ -604,6 +649,7 @@ export const suggestionRouter = createTRPCRouter({
     .input(targetInput.and(z.object({ bodyText: z.string().max(200_000) })))
     .mutation(async ({ ctx, input }) => {
       const target = await resolveTarget(ctx.db, input);
+      assertNotLocked(target);
       if (!can(userCtx(ctx.session), 'standard:editBody', target.workingGroupId)) {
         throw new TRPCError({ code: 'FORBIDDEN' });
       }

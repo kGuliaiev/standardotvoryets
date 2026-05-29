@@ -61,6 +61,16 @@ interface Props {
    *  editing is disabled (changes must go through Suggestions). Optional —
    *  defaults to "not on review" for non-standard targets (documents). */
   standardStatus?: StandardStatus | null;
+  /** Document target only: when the document has been frozen by a closed
+   *  voting (Document.lockedAt set), no edits are permitted for anyone,
+   *  not even ADMIN. The viewer renders all comments + suggestions
+   *  read-only so the audit trail stays inspectable. */
+  documentLocked?: boolean;
+  /** Optional metadata about the lock for the banner — voting № and date. */
+  documentLockInfo?: {
+    votingSeqNumber: number | null;
+    closedAt: Date | string | null;
+  } | null;
 }
 
 type OpKind = 'REPLACE' | 'INSERT_AFTER' | 'DELETE';
@@ -96,6 +106,8 @@ export function StandardBodyEditor({
   bodyUpdatedAt,
   bodyUpdatedBy,
   standardStatus,
+  documentLocked = false,
+  documentLockInfo = null,
 }: Props) {
   const { data: session } = useSession();
   const utils = trpc.useUtils();
@@ -126,8 +138,14 @@ export function StandardBodyEditor({
   // `target.kind === 'document'` target and a `standardStatus` prop pointing
   // at the parent standard's status.
   const bodyLockedForReview = standardStatus === 'IN_REVIEW' && me?.globalRole !== 'ADMIN';
-  const canEditBody = rawCanEditBody && !bodyLockedForReview;
-  const canSuggest = userCtx ? can(userCtx, 'comment:add', target.workingGroupId) : false;
+  // Voting lock — absolute. Even ADMIN can't edit. The locked doc is
+  // immutable evidence pinned to a Voting row.
+  const canEditBody = rawCanEditBody && !bodyLockedForReview && !documentLocked;
+  // New suggestions / comments on a locked document don't make sense
+  // (the doc itself is no longer evolving), so we also disable them.
+  // Existing suggestions + comments remain visible read-only.
+  const canSuggest =
+    !documentLocked && (userCtx ? can(userCtx, 'comment:add', target.workingGroupId) : false);
 
   // Body is HTML emitted by TipTap (legacy plain-text bodies are migrated to
   // <p>-wrapped HTML transparently inside splitHtmlBlocks).
@@ -499,6 +517,24 @@ export function StandardBodyEditor({
 
   return (
     <div className="space-y-3">
+      {/* Lock banner — shown above the toolbar when the document is
+          frozen by a closed voting. The body and the rail still render
+          (read-only) so the audit trail of comments/suggestions stays
+          inspectable. */}
+      {documentLocked && (
+        <div className="rounded-lg border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/40 px-4 py-2.5 text-sm text-slate-700 dark:text-slate-300 flex items-start gap-2">
+          <span aria-hidden>🔒</span>
+          <div className="flex-1">
+            <div className="font-semibold">Документ заблоковано</div>
+            <div className="text-xs text-mid">
+              {documentLockInfo?.votingSeqNumber && documentLockInfo.closedAt
+                ? `Прикріплено до Голосування №${documentLockInfo.votingSeqNumber}, завершеного ${new Date(documentLockInfo.closedAt).toLocaleDateString('uk-UA')}. Редагування недоступне; усі коментарі та правки залишаються видимі.`
+                : 'Прикріплено до завершеного голосування. Редагування недоступне; усі коментарі та правки залишаються видимі.'}
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Header strip / action toolbar — pinned to top so it stays
           reachable while scrolling long documents. Lives OUTSIDE the
           grid so it spans the full width and the right rail starts at

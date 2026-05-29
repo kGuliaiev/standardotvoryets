@@ -71,6 +71,7 @@ COPY --from=build /app/.next ./.next
 COPY --from=build /app/public ./public
 COPY --from=build /app/prisma ./prisma
 COPY --from=build /app/src ./src
+COPY --from=build /app/scripts ./scripts
 COPY --from=build /app/next.config.mjs ./
 COPY --from=build /app/tsconfig.json ./
 
@@ -85,7 +86,12 @@ EXPOSE 3000
 # anyway so the app serves the login page with a "service unavailable"
 # panel instead of crash-looping into a 502.
 #
+# `scripts/pre-db-push.sh` runs FIRST — it migrates enum values whose
+# row data would otherwise block `prisma db push --accept-data-loss`
+# from dropping deprecated enum members (see the script header for the
+# full list). It's idempotent and skips fresh DBs cleanly.
+#
 # `prisma db push --accept-data-loss` is idempotent and additive when
 # schema only grows; switch to `prisma migrate deploy` once you adopt
 # migrations.
-CMD ["sh", "-c", "pnpm prisma db push --accept-data-loss && pnpm prisma:seed || echo '[start] DB sync/seed skipped — DB unreachable? Starting web server anyway.'; exec pnpm start"]
+CMD ["sh", "-c", "sh scripts/pre-db-push.sh && pnpm prisma db push --accept-data-loss && pnpm prisma:seed || echo '[start] DB sync/seed skipped — DB unreachable? Starting web server anyway.'; exec pnpm start"]

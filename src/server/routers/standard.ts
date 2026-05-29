@@ -184,6 +184,10 @@ export const standardRouter = createTRPCRouter({
               // can show "5 правок: 2 прийнято / 1 відхилено / 2 нових"
               // without an extra round-trip.
               suggestions: { select: { id: true, status: true } },
+              // For locked documents we surface the voting context so
+              // the lock badge / editor banner can render "Голосування
+              // №3, завершено 12.04.2026" without a follow-up fetch.
+              lockedByVoting: { select: { seqNumber: true, closedAt: true } },
             },
             orderBy: { createdAt: 'desc' },
           },

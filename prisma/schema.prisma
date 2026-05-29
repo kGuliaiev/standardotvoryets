@@ -43,13 +43,19 @@ enum StandardStatus {
 }
 
 enum DocumentType {
-  DRAFT_STANDARD  // Чернетка стандарту
+  STANDARD        // Стандарт (актуальний або заблокована версія голосування)
   TECH_SPEC       // ТЗ (технічне завдання)
   FEEDBACK        // Відгук
-  MEETING_MINUTES // Протокол засідання
+  // MEETING_MINUTES kept for backwards-compat — historical rows still
+  // render in the documents list with a deep-link to the Протоколи
+  // module. New uploads should NOT pick this type; the protocol module
+  // is the single source of truth.
+  MEETING_MINUTES
   AGENDA          // Порядок денний
   ATTACHMENT      // Додатковий матеріал
-  FINAL           // Фінальна версія
+  // FINAL was deprecated — collapsed into STANDARD (the locked
+  // post-voting version IS the final). Existing rows are migrated to
+  // ATTACHMENT by scripts/pre-db-push.sql on every boot.
 }
 
 enum VoteChoice {
@@ -481,7 +487,7 @@ model Document {
   /// bodyHtml until exported.
   s3Key        String?      @unique
   sizeBytes    Int          @default(0)
-  version      String // "v0.4"
+  version      String // "v0.4" — for STANDARD docs we use "vN" and bump on clone
   isCurrent    Boolean      @default(false)
   note         String? // "What changed in this version"
   createdAt    DateTime     @default(now())
@@ -497,11 +503,27 @@ model Document {
   bodyUpdatedById  String?
   bodyUpdatedBy    User?         @relation("DocumentBodyEditor", fields: [bodyUpdatedById], references: [id])
 
+  /// Set when a voting closes — the document that was being voted on is
+  /// frozen as a permanent snapshot tied to that voting. The editor and
+  /// suggestion machinery refuse writes on locked docs for everyone
+  /// (including ADMIN). A new editable clone with bumped `version` is
+  /// created when the voting was REJECTED.
+  lockedAt          DateTime?
+  lockedByVotingId  String?
+  lockedByVoting    Voting?       @relation("VotingLockedDoc", fields: [lockedByVotingId], references: [id])
+
+  /// Inverse of Voting.documentId — the voting (if any) where this
+  /// document was the snapshot. Same row as lockedByVoting; kept as a
+  /// separate relation because Prisma needs a name to back-resolve the
+  /// Voting.document field.
+  votingsAsDocument Voting[]      @relation("VotingDocument")
+
   standard       Standard             @relation(fields: [standardId], references: [id], onDelete: Cascade)
   uploadedBy     User                 @relation(fields: [uploadedById], references: [id])
   suggestions    StandardSuggestion[]
   inlineComments InlineComment[]
 
+  @@index([lockedByVotingId])
   @@map("documents")
 }
 
@@ -601,6 +623,10 @@ model Voting {
   openedAt    DateTime   @default(now())
   closedAt    DateTime?
   deadline    DateTime?
+  // Sequence number within the parent standard — assigned at open time,
+  // shown to users as "Голосування № N". Lets us name the locked
+  // snapshot document predictably without exposing cuid()s.
+  seqNumber   Int        @default(1)
   // Snapshot of the eligible voter count at the moment the voting was
   // closed (WG members with role LEADER / DEPUTY / MEMBER who are
   // active — SECRETARY does not vote, GUEST does not vote). The pass
@@ -609,10 +635,19 @@ model Voting {
   // migrated from before this field existed (UI falls back to the
   // old denominator for those historical records).
   eligibleAtClose Int?
+  // The STANDARD-type document that was being voted on. Populated at
+  // close time when the doc is locked. SetNull (not Cascade) because
+  // we want the voting record to survive a doc deletion — the
+  // numeric history (for/against, eligibleAtClose) stays meaningful.
+  documentId  String?
+  document    Document?  @relation("VotingDocument", fields: [documentId], references: [id], onDelete: SetNull)
 
   standard Standard @relation(fields: [standardId], references: [id], onDelete: Cascade)
   votes    Vote[]
+  lockedDocuments Document[] @relation("VotingLockedDoc")
 
+  @@unique([standardId, seqNumber])
+  @@index([documentId])
   @@map("votings")
 }
 

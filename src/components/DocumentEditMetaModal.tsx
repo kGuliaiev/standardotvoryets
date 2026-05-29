@@ -30,29 +30,29 @@ interface Props {
   onSaved?: () => void;
 }
 
-const TYPE_OPTIONS: {
-  value:
-    | 'DRAFT_STANDARD'
-    | 'TECH_SPEC'
-    | 'FEEDBACK'
-    | 'MEETING_MINUTES'
-    | 'AGENDA'
-    | 'ATTACHMENT'
-    | 'FINAL';
-  label: string;
-}[] = [
+// Mirrors UPLOADABLE_DOC_TYPES on the server.
+type UploadableDocType = 'STANDARD' | 'TECH_SPEC' | 'FEEDBACK' | 'AGENDA' | 'ATTACHMENT';
+const TYPE_OPTIONS: { value: UploadableDocType; label: string }[] = [
   { value: 'TECH_SPEC', label: 'ТЗ (технічне завдання)' },
-  { value: 'DRAFT_STANDARD', label: 'Стандарт' },
+  { value: 'STANDARD', label: 'Стандарт' },
   { value: 'FEEDBACK', label: 'Відгук' },
-  { value: 'FINAL', label: 'Фінальна версія' },
   { value: 'AGENDA', label: 'Порядок денний' },
-  { value: 'MEETING_MINUTES', label: 'Протокол' },
   { value: 'ATTACHMENT', label: 'Додатковий матеріал' },
 ];
+const HAS_CURRENT_FLAG = new Set<UploadableDocType>(['STANDARD', 'TECH_SPEC']);
+
+// Normalise a legacy / unknown DocumentType into one that the picker
+// can display. MEETING_MINUTES rows (now owned by the Протоколи module)
+// fall through to ATTACHMENT in the dropdown so the row at least edits
+// cleanly — the user can pick the right type if they want to keep it.
+function normaliseType(raw: string): UploadableDocType {
+  if (TYPE_OPTIONS.some((o) => o.value === raw)) return raw as UploadableDocType;
+  return 'ATTACHMENT';
+}
 
 export function DocumentEditMetaModal({ open, onClose, doc, onSaved }: Props) {
   const utils = trpc.useUtils();
-  const [type, setType] = useState<(typeof TYPE_OPTIONS)[number]['value']>('DRAFT_STANDARD');
+  const [type, setType] = useState<UploadableDocType>('STANDARD');
   const [version, setVersion] = useState('');
   const [note, setNote] = useState('');
   const [isCurrent, setIsCurrent] = useState(false);
@@ -63,7 +63,7 @@ export function DocumentEditMetaModal({ open, onClose, doc, onSaved }: Props) {
   // different document.
   useEffect(() => {
     if (open && doc) {
-      setType(doc.type as (typeof TYPE_OPTIONS)[number]['value']);
+      setType(normaliseType(doc.type));
       setVersion(doc.version);
       setNote(doc.note ?? '');
       setIsCurrent(doc.isCurrent);
@@ -99,7 +99,7 @@ export function DocumentEditMetaModal({ open, onClose, doc, onSaved }: Props) {
       type,
       version: version.trim(),
       note: note.trim() || null,
-      isCurrent,
+      isCurrent: isCurrent && HAS_CURRENT_FLAG.has(type),
       allowEdits: isDocx ? allowEdits : false,
     });
   }
@@ -151,15 +151,17 @@ export function DocumentEditMetaModal({ open, onClose, doc, onSaved }: Props) {
         </div>
 
         <div className="space-y-2">
-          <label className="flex items-center gap-2 text-sm cursor-pointer">
-            <input
-              type="checkbox"
-              checked={isCurrent}
-              onChange={(e) => setIsCurrent(e.target.checked)}
-              className="w-4 h-4 accent-brand"
-            />
-            <span className="text-ink">Позначити як актуальну версію</span>
-          </label>
+          {HAS_CURRENT_FLAG.has(type) && (
+            <label className="flex items-center gap-2 text-sm cursor-pointer">
+              <input
+                type="checkbox"
+                checked={isCurrent}
+                onChange={(e) => setIsCurrent(e.target.checked)}
+                className="w-4 h-4 accent-brand"
+              />
+              <span className="text-ink">Позначити як актуальну версію</span>
+            </label>
+          )}
           <label
             className={`flex items-start gap-2 text-sm ${
               isDocx ? 'cursor-pointer' : 'cursor-not-allowed opacity-60'

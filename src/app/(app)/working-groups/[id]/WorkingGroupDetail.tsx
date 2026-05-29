@@ -49,16 +49,17 @@ const TABS = [
 ] as const;
 
 const DOC_TYPE_LABELS: Record<string, { label: string; cls: string }> = {
-  DRAFT_STANDARD: { label: 'Стандарт', cls: 'bg-[#EEF4FF] text-[#1A3A8F]' },
+  STANDARD: { label: 'Стандарт', cls: 'bg-[#EEF4FF] text-[#1A3A8F]' },
   TECH_SPEC: { label: 'ТЗ', cls: 'bg-amber-50 text-amber-700' },
   FEEDBACK: { label: 'Відгук', cls: 'bg-cyan-50 text-cyan-700' },
+  // MEETING_MINUTES kept for historical rows — protocols module now
+  // owns new entries.
   MEETING_MINUTES: { label: 'Протокол', cls: 'bg-[#ECFDF5] text-[#065F46]' },
   AGENDA: {
     label: 'Порядок денний',
     cls: 'bg-sky-50 text-sky-700 dark:bg-sky-900/30 dark:text-sky-300',
   },
   ATTACHMENT: { label: 'Додаток', cls: 'bg-[#EDF0F7] text-[#4B5880]' },
-  FINAL: { label: 'Фінальна версія', cls: 'bg-violet-50 text-violet-700' },
 };
 
 function formatBytes(b: number) {
@@ -749,11 +750,18 @@ export function WorkingGroupDetail({ id }: Props) {
                               <span className="text-ink font-medium truncate max-w-[260px]">
                                 {d.filename}
                               </span>
-                              {d.isCurrent && (
+                              {d.lockedAt ? (
+                                <span
+                                  className="text-[10px] font-bold rounded-full px-2 py-0.5 bg-slate-100 text-slate-700 dark:bg-slate-800/60 dark:text-slate-300"
+                                  title="Заблоковано — частина архіву голосування"
+                                >
+                                  🔒 Заблоковано
+                                </span>
+                              ) : d.isCurrent ? (
                                 <span className="text-[10px] font-bold rounded-full px-2 py-0.5 bg-[#ECFDF5] text-[#065F46]">
                                   Актуальний
                                 </span>
-                              )}
+                              ) : null}
                             </div>
                           </td>
                           <td className="px-3 py-3">

@@ -4,7 +4,7 @@ import { createTRPCRouter, protectedProcedure } from '@/server/trpc';
 import { can } from '@/lib/rbac';
 import { logActivity } from '@/server/audit';
 import { notifyVoteOpened, notifyVoteClosed } from '@/server/notify';
-import type { GlobalRole, WorkingGroupRole } from '@prisma/client';
+import type { GlobalRole, Prisma, PrismaClient, WorkingGroupRole } from '@prisma/client';
 
 function userCtx(session: {
   user: { globalRole: string; memberships: { workingGroupId: string; role: string }[] };
@@ -16,6 +16,124 @@ function userCtx(session: {
       role: m.role as WorkingGroupRole,
     })),
   };
+}
+
+/**
+ * Parse a version string like "v3", "v1.2", "draft" into a bumpable
+ * integer. We keep it forgiving: anything we can't parse falls back to
+ * "1" and the bump becomes "2". Used when cloning a locked STANDARD
+ * document into a fresh editable version after a REJECTED voting.
+ */
+function bumpVersion(prev: string | null | undefined): string {
+  if (!prev) return 'v2';
+  const m = /v?(\d+)/i.exec(prev);
+  if (!m) return `${prev}-нова`;
+  const n = parseInt(m[1]!, 10);
+  if (Number.isNaN(n)) return `${prev}-нова`;
+  return `v${n + 1}`;
+}
+
+/** Render the localised filename suffix appended to the locked snapshot. */
+function lockedSuffix(seqNumber: number, closedAt: Date, verdict: 'ADOPTED' | 'DRAFT') {
+  const dd = closedAt.toLocaleDateString('uk-UA');
+  const v = verdict === 'ADOPTED' ? 'прийнято' : 'відхилено';
+  return ` (Голосування №${seqNumber}, ${v} ${dd})`;
+}
+
+/**
+ * Lock the standard's CURRENT STANDARD-type document onto a voting that
+ * just closed, and (when the voting was REJECTED) clone it into a fresh
+ * editable version with bumped `version` and isCurrent=true.
+ *
+ * Runs inside the same transaction as the Voting row update so the
+ * lock + standard status change are atomic.
+ *
+ * @returns `{ lockedDocId, newDraftDocId }` — both nullable. lockedDocId
+ *          is null when the standard has no current STANDARD doc (e.g.
+ *          early in the lifecycle, vote was opened without one). The
+ *          UI handles that gracefully — no doc to show alongside the
+ *          archived voting.
+ */
+async function lockAndCloneStandardDoc(
+  tx: PrismaClient | Prisma.TransactionClient,
+  args: {
+    standardId: string;
+    votingId: string;
+    seqNumber: number;
+    closedAt: Date;
+    verdict: 'ADOPTED' | 'DRAFT';
+    userId: string;
+  },
+): Promise<{ lockedDocId: string | null; newDraftDocId: string | null }> {
+  // Find the active STANDARD-type document. There may be at most one
+  // unlocked STANDARD per standard (server-enforced in document router).
+  const current = await tx.document.findFirst({
+    where: {
+      standardId: args.standardId,
+      type: 'STANDARD',
+      lockedAt: null,
+    },
+  });
+  if (!current) {
+    return { lockedDocId: null, newDraftDocId: null };
+  }
+
+  // Lock + rename the current doc.
+  const suffix = lockedSuffix(args.seqNumber, args.closedAt, args.verdict);
+  const newName = current.filename.includes('Голосування №')
+    ? current.filename // never double-append if the worker re-runs somehow
+    : `${current.filename}${suffix}`;
+  await tx.document.update({
+    where: { id: current.id },
+    data: {
+      filename: newName,
+      isCurrent: false,
+      lockedAt: args.closedAt,
+      lockedByVotingId: args.votingId,
+    },
+  });
+  // Attach the locked snapshot to the voting (inverse relation).
+  await tx.voting.update({
+    where: { id: args.votingId },
+    data: { documentId: current.id },
+  });
+
+  // On ADOPTED we don't clone — the locked snapshot IS the final.
+  if (args.verdict === 'ADOPTED') {
+    return { lockedDocId: current.id, newDraftDocId: null };
+  }
+
+  // On REJECT/DRAFT — clone into a fresh editable copy with bumped
+  // version. s3Key is null (the clone lives only as bodyHtml until the
+  // editor exports it again), so we don't fork the underlying file.
+  const newVersion = bumpVersion(current.version);
+  const cleanBase = current.filename
+    // strip any prior "(Голосування №…)" suffix from previous lock cycles
+    .replace(/\s*\(Голосування №\d+[^)]*\)\s*$/, '')
+    .trim();
+  const cloneName = cleanBase.toLowerCase().endsWith('.docx')
+    ? `${cleanBase.replace(/\.docx$/i, '')} ${newVersion}.docx`
+    : `${cleanBase} ${newVersion}`;
+
+  const clone = await tx.document.create({
+    data: {
+      standardId: args.standardId,
+      uploadedById: args.userId,
+      type: 'STANDARD',
+      filename: cloneName,
+      s3Key: null,
+      sizeBytes: 0,
+      version: newVersion,
+      note: `Нова версія після голосування №${args.seqNumber}`,
+      isCurrent: true,
+      allowEdits: true,
+      bodyHtml: current.bodyHtml ?? '',
+      bodyUpdatedAt: args.closedAt,
+      bodyUpdatedById: args.userId,
+    },
+  });
+
+  return { lockedDocId: current.id, newDraftDocId: clone.id };
 }
 
 export const voteRouter = createTRPCRouter({
@@ -54,6 +172,14 @@ export const voteRouter = createTRPCRouter({
         throw new TRPCError({ code: 'CONFLICT', message: 'Голосування вже відкрито' });
       }
 
+      // Next seqNumber within this standard — used to name the locked
+      // snapshot doc on close ("Стандарт — Голосування №3 (завершено …)").
+      const lastSeq = await ctx.db.voting.aggregate({
+        where: { standardId: input.standardId },
+        _max: { seqNumber: true },
+      });
+      const nextSeq = (lastSeq._max.seqNumber ?? 0) + 1;
+
       const [voting] = await ctx.db.$transaction([
         ctx.db.voting.create({
           data: {
@@ -61,6 +187,7 @@ export const voteRouter = createTRPCRouter({
             title: input.title,
             description: input.description,
             deadline: input.deadline,
+            seqNumber: nextSeq,
           },
         }),
         ctx.db.standard.update({
@@ -178,22 +305,27 @@ export const voteRouter = createTRPCRouter({
       const againstVotes = voting.votes.filter((v) => v.choice === 'AGAINST').length;
       const total = forVotes + againstVotes;
       const adopted = eligibleCount > 0 && forVotes / eligibleCount > 0.5;
-      const newStatus = adopted ? 'ADOPTED' : 'REJECTED';
+      // Per user spec: a negative outcome sends the standard back to
+      // DRAFT (not REJECTED) so the WG can iterate on a fresh editable
+      // copy of the document. ADOPTED stays ADOPTED.
+      const newStatus = adopted ? 'ADOPTED' : 'DRAFT';
+      const verdict: 'ADOPTED' | 'DRAFT' = adopted ? 'ADOPTED' : 'DRAFT';
+      const closedAt = new Date();
 
-      await ctx.db.$transaction([
-        ctx.db.voting.update({
+      const { lockedDocId, newDraftDocId } = await ctx.db.$transaction(async (tx) => {
+        await tx.voting.update({
           where: { id: input.votingId },
           data: {
             status: 'CLOSED',
-            closedAt: new Date(),
+            closedAt,
             eligibleAtClose: eligibleCount,
           },
-        }),
-        ctx.db.standard.update({
+        });
+        await tx.standard.update({
           where: { id: voting.standard.id },
           data: { status: newStatus },
-        }),
-        ctx.db.standardStatusHistory.create({
+        });
+        await tx.standardStatusHistory.create({
           data: {
             standardId: voting.standard.id,
             fromStatus: 'VOTING',
@@ -201,8 +333,16 @@ export const voteRouter = createTRPCRouter({
             changedById: ctx.session.user.id,
             note: `Голосування завершено. За: ${forVotes} з ${eligibleCount}, Проти: ${againstVotes}`,
           },
-        }),
-      ]);
+        });
+        return lockAndCloneStandardDoc(tx, {
+          standardId: voting.standard.id,
+          votingId: input.votingId,
+          seqNumber: voting.seqNumber,
+          closedAt,
+          verdict,
+          userId: ctx.session.user.id,
+        });
+      });
 
       await logActivity(ctx.db, {
         userId: ctx.session.user.id,
@@ -211,7 +351,11 @@ export const voteRouter = createTRPCRouter({
         entityId: input.votingId,
         before: { status: 'OPEN' },
         after: { status: 'CLOSED' },
-        note: `Завершено. За: ${forVotes} з ${eligibleCount}, проти: ${againstVotes}. Результат: ${newStatus}`,
+        note:
+          `Завершено. За: ${forVotes} з ${eligibleCount}, проти: ${againstVotes}.` +
+          ` Результат: ${newStatus}` +
+          (lockedDocId ? `. Документ заблоковано.` : '') +
+          (newDraftDocId ? ' Створено нову версію.' : ''),
       });
 
       await notifyVoteClosed(
@@ -221,7 +365,15 @@ export const voteRouter = createTRPCRouter({
         ctx.session.user.id,
       );
 
-      return { status: newStatus, forVotes, againstVotes, total, eligibleCount };
+      return {
+        status: newStatus,
+        forVotes,
+        againstVotes,
+        total,
+        eligibleCount,
+        lockedDocId,
+        newDraftDocId,
+      };
     }),
 
   // ── results ───────────────────────────────────────────────────────────
@@ -300,20 +452,22 @@ export const voteRouter = createTRPCRouter({
       const againstVotes = open.votes.filter((v) => v.choice === 'AGAINST').length;
       const total = forVotes + againstVotes;
       const adopted = eligibleCount > 0 && forVotes / eligibleCount > 0.5;
-      const newStatus = adopted ? 'ADOPTED' : 'REJECTED';
+      const newStatus = adopted ? 'ADOPTED' : 'DRAFT';
+      const verdict: 'ADOPTED' | 'DRAFT' = adopted ? 'ADOPTED' : 'DRAFT';
+      const closedAt = new Date();
 
-      const didClose = await ctx.db.$transaction(
+      const result = await ctx.db.$transaction(
         async (tx) => {
           const fresh = await tx.voting.findFirst({
             where: { id: open.id, status: 'OPEN' },
             select: { id: true },
           });
-          if (!fresh) return false; // already closed by a concurrent request
+          if (!fresh) return null; // already closed by a concurrent request
           await tx.voting.update({
             where: { id: open.id },
             data: {
               status: 'CLOSED',
-              closedAt: new Date(),
+              closedAt,
               eligibleAtClose: eligibleCount,
             },
           });
@@ -330,12 +484,20 @@ export const voteRouter = createTRPCRouter({
               note: `Автоматичне завершення за дедлайном. За: ${forVotes} з ${eligibleCount}, Проти: ${againstVotes}`,
             },
           });
-          return true;
+          const docs = await lockAndCloneStandardDoc(tx, {
+            standardId: open.standard.id,
+            votingId: open.id,
+            seqNumber: open.seqNumber,
+            closedAt,
+            verdict,
+            userId: ctx.session.user.id,
+          });
+          return docs;
         },
         { isolationLevel: 'Serializable' },
       );
 
-      if (!didClose) return null;
+      if (!result) return null;
 
       await logActivity(ctx.db, {
         userId: ctx.session.user.id,
@@ -344,7 +506,11 @@ export const voteRouter = createTRPCRouter({
         entityId: open.id,
         before: { status: 'OPEN' },
         after: { status: 'CLOSED' },
-        note: `Авто-завершення за дедлайном. За: ${forVotes} з ${eligibleCount}, проти: ${againstVotes}. Результат: ${newStatus}`,
+        note:
+          `Авто-завершення за дедлайном. За: ${forVotes} з ${eligibleCount}, проти: ${againstVotes}.` +
+          ` Результат: ${newStatus}` +
+          (result.lockedDocId ? `. Документ заблоковано.` : '') +
+          (result.newDraftDocId ? ' Створено нову версію.' : ''),
       });
       await notifyVoteClosed(
         ctx.db,
@@ -353,7 +519,15 @@ export const voteRouter = createTRPCRouter({
         ctx.session.user.id,
       );
 
-      return { status: newStatus, forVotes, againstVotes, total, eligibleCount };
+      return {
+        status: newStatus,
+        forVotes,
+        againstVotes,
+        total,
+        eligibleCount,
+        lockedDocId: result.lockedDocId,
+        newDraftDocId: result.newDraftDocId,
+      };
     }),
 
   // ── history ───────────────────────────────────────────────────────────
