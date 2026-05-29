@@ -118,7 +118,8 @@ const VARIANT: Record<ToastVariant, { icon: typeof CheckCircle2; cls: string; ic
 
 const POSITION_CLS: Record<ToastPosition, string> = {
   'bottom-right': 'bottom-4 right-4',
-  'top-right': 'top-4 right-4',
+  // Sits below the sticky topbar so it doesn't overlap the bell / theme toggle.
+  'top-right': 'top-20 right-4',
 };
 
 function ToastCard({ t }: { t: ToastItem }) {
