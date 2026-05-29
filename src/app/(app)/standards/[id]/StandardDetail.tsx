@@ -1398,6 +1398,19 @@ export function StandardDetail({ id }: { id: string }) {
                 maxLength={6}
                 value={deleteDocConfirmText}
                 onChange={(e) => setDeleteDocConfirmText(e.target.value.replace(/\D/g, ''))}
+                onKeyDown={(e) => {
+                  // Enter submits when the typed code matches — same
+                  // gating as the button below; muscle-memory still has
+                  // to land six correct digits before this fires.
+                  if (
+                    e.key === 'Enter' &&
+                    deleteDocConfirmText === deleteDocCandidate?.code &&
+                    !deleteDocMutation.isPending
+                  ) {
+                    e.preventDefault();
+                    deleteDocMutation.mutate({ documentId: deleteDocCandidate.id });
+                  }
+                }}
                 className="input font-mono tracking-widest text-center text-lg"
                 placeholder="••••••"
                 autoFocus
