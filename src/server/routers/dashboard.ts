@@ -4,7 +4,6 @@ import { seesAllWorkingGroups } from '@/server/permissions';
 export const dashboardRouter = createTRPCRouter({
   // Aggregated KPIs for dashboard header
   kpis: protectedProcedure.query(async ({ ctx }) => {
-    const userId = ctx.session.user.id;
     const seesAll = seesAllWorkingGroups(ctx.session.user);
     const memberGroupIds = ctx.session.user.memberships?.map((m) => m.workingGroupId) ?? [];
 
@@ -53,10 +52,13 @@ export const dashboardRouter = createTRPCRouter({
         select: { startAt: true },
       }),
       ctx.db.task.count({
+        // D-2: count *all* overdue open tasks across the user's visible WGs,
+        // matching what /tasks shows. Previously this was scoped to
+        // assigneeId = me, which silently disagreed with the page header.
         where: {
-          assigneeId: userId,
           status: { in: ['OPEN', 'IN_PROGRESS'] },
           dueDate: { lt: now },
+          standard: wgFilter,
         },
       }),
       // Standards with any unconfirmed past-due stage (overdue program-plan stage)
@@ -143,7 +145,10 @@ export const dashboardRouter = createTRPCRouter({
         where: { ...(seesAll ? {} : { id: { in: memberGroupIds } }), isArchived: false },
       }),
       ctx.db.standard.count({
-        where: { ...wgFilter, status: { not: 'ARCHIVED' } },
+        // D-3: the sidebar "Стандарти" badge now counts the same "active" set
+        // (DRAFT/IN_REVIEW/VOTING) as the dashboard's KPI card, so the two
+        // can't drift (sidebar showed 13 incl. ADOPTED/REJECTED, KPI showed 12).
+        where: { ...wgFilter, status: { in: ['DRAFT', 'IN_REVIEW', 'VOTING'] } },
       }),
       // Protocols = meetings with any protocol activity (same as protocolsForUser).
       ctx.db.meeting.count({
