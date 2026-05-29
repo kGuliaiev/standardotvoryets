@@ -47,18 +47,70 @@ export function Modal({
 
   useEffect(() => {
     if (!open) return;
+
+    // Remember whoever opened the modal so we can return focus to them on
+    // close (F-2 — WCAG 2.4.3 Focus Order).
+    const previouslyFocused =
+      document.activeElement instanceof HTMLElement ? document.activeElement : null;
+
+    const FOCUSABLE_SELECTOR =
+      'a[href], button:not([disabled]), input:not([disabled]):not([type="hidden"]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
+
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
         e.preventDefault();
         onClose();
+        return;
+      }
+      // F-2 focus-trap: Tab / Shift+Tab cycles inside the panel.
+      if (e.key === 'Tab' && panelRef.current) {
+        const focusables = panelRef.current.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR);
+        if (focusables.length === 0) {
+          e.preventDefault();
+          panelRef.current.focus();
+          return;
+        }
+        const first = focusables[0];
+        const last = focusables[focusables.length - 1];
+        const active = document.activeElement as HTMLElement | null;
+        if (!panelRef.current.contains(active)) {
+          e.preventDefault();
+          first?.focus();
+        } else if (e.shiftKey && active === first) {
+          e.preventDefault();
+          last?.focus();
+        } else if (!e.shiftKey && active === last) {
+          e.preventDefault();
+          first?.focus();
+        }
       }
     };
+
     window.addEventListener('keydown', onKey);
     const prevOverflow = document.body.style.overflow;
     document.body.style.overflow = 'hidden';
+
+    // Initial focus: first interactive element inside the panel, skipping
+    // the close-X (so a form modal lands the cursor in the first input, not
+    // on "Закрити"). Defer to a microtask so any child with autoFocus fires
+    // first — if so, respect it.
+    const focusTimer = window.setTimeout(() => {
+      if (!panelRef.current) return;
+      if (panelRef.current.contains(document.activeElement)) return; // autoFocus already won
+      const all = Array.from(panelRef.current.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR));
+      const nonClose = all.filter((el) => el.getAttribute('aria-label') !== 'Закрити');
+      const target = nonClose[0] ?? all[0] ?? panelRef.current;
+      target.focus();
+    }, 0);
+
     return () => {
       window.removeEventListener('keydown', onKey);
       document.body.style.overflow = prevOverflow;
+      window.clearTimeout(focusTimer);
+      // F-2: return focus to the opener so keyboard users land where they were.
+      if (previouslyFocused && document.contains(previouslyFocused)) {
+        previouslyFocused.focus();
+      }
     };
   }, [open, onClose]);
 
@@ -74,13 +126,16 @@ export function Modal({
       role="dialog"
       aria-modal="true"
       className="fixed inset-0 z-[200] flex md:items-center justify-center bg-[rgba(8,14,33,0.55)] backdrop-blur-md md:p-4 animate-fade-in items-end"
-      onMouseDown={(e) => {
+      // F-10: onClick (not onMouseDown) so selecting text inside the modal
+      // and accidentally releasing the mouse on the backdrop doesn't close it.
+      onClick={(e) => {
         if (closeOnOverlay && e.target === e.currentTarget) onClose();
       }}
     >
       <div
         ref={panelRef}
-        className={`bg-card shadow-modal w-full overflow-y-auto
+        tabIndex={-1}
+        className={`bg-card shadow-modal w-full overflow-y-auto outline-none
           md:rounded-[18px] md:max-h-[92vh]
           rounded-t-[18px] max-h-[90vh] animate-[slideInFromBottom_220ms_ease-out]
           md:animate-fade-in ${SIZE_CLASSES[size]}`}
