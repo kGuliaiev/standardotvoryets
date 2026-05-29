@@ -1304,4 +1304,236 @@ export async function sendWeeklyDigest(db: PrismaClient) {
   return { sent, skipped };
 }
 
+/* ── Comment / inline-comment notifications ──────────────────────────── */
+
+/**
+ * Fired when a new top-level thread comment is added on a Standard. Notifies
+ * WG leadership and the standard's responsible person (deduped, skip the author).
+ */
+export async function notifyCommentNew(db: PrismaClient, commentId: string, actorUserId: string) {
+  try {
+    const c = await db.comment.findUnique({
+      where: { id: commentId },
+      include: {
+        author: { select: { name: true } },
+        standard: {
+          select: {
+            id: true,
+            code: true,
+            title: true,
+            workingGroupId: true,
+            responsibleId: true,
+          },
+        },
+      },
+    });
+    if (!c) return;
+    const leadership = await wgLeadershipRecipients(db, c.standard.workingGroupId);
+    const responsible = c.standard.responsibleId
+      ? await singleUserRecipient(db, c.standard.responsibleId)
+      : [];
+    const recipients = dedupeRecipients([leadership, responsible]);
+    if (recipients.length === 0) return;
+    const snippet = c.body.slice(0, 280) + (c.body.length > 280 ? '…' : '');
+    await emit({
+      db,
+      recipients,
+      excludeUserId: actorUserId,
+      type: 'COMMENT_ADDED',
+      title: `${c.author.name}: новий коментар у «${c.standard.title}»`,
+      body: snippet,
+      link: `/standards/${c.standard.id}?tab=comments`,
+      channelEnabled: { inApp: true, email: false },
+    });
+  } catch (e) {
+    console.error('[notifyCommentNew]', e);
+  }
+}
+
+/**
+ * Fired when someone replies to a top-level thread comment. Notifies the
+ * parent comment's author (skipping the replier).
+ */
+export async function notifyCommentReply(
+  db: PrismaClient,
+  replyCommentId: string,
+  actorUserId: string,
+) {
+  try {
+    const c = await db.comment.findUnique({
+      where: { id: replyCommentId },
+      include: {
+        author: { select: { name: true } },
+        parent: { select: { authorId: true } },
+        standard: { select: { id: true, code: true } },
+      },
+    });
+    if (!c?.parent) return;
+    if (c.parent.authorId === actorUserId) return; // replied to self
+    const recipients = await singleUserRecipient(db, c.parent.authorId);
+    if (recipients.length === 0) return;
+    const snippet = c.body.slice(0, 280) + (c.body.length > 280 ? '…' : '');
+    await emit({
+      db,
+      recipients,
+      type: 'COMMENT_ADDED',
+      title: `${c.author.name} відповів на ваш коментар: ${c.standard.code}`,
+      body: snippet,
+      link: `/standards/${c.standard.id}?tab=comments`,
+      channelEnabled: { inApp: true, email: false },
+    });
+  } catch (e) {
+    console.error('[notifyCommentReply]', e);
+  }
+}
+
+/**
+ * Fired when a new inline-comment is left on a body block. Notifies WG
+ * leadership + the standard's responsible person (deduped, skipping the author).
+ */
+export async function notifyInlineCommentNew(
+  db: PrismaClient,
+  inlineCommentId: string,
+  actorUserId: string,
+) {
+  try {
+    const c = await db.inlineComment.findUnique({
+      where: { id: inlineCommentId },
+      include: {
+        author: { select: { name: true } },
+        standard: {
+          select: {
+            id: true,
+            code: true,
+            title: true,
+            workingGroupId: true,
+            responsibleId: true,
+          },
+        },
+        document: {
+          select: {
+            filename: true,
+            standard: {
+              select: {
+                id: true,
+                code: true,
+                title: true,
+                workingGroupId: true,
+                responsibleId: true,
+              },
+            },
+          },
+        },
+      },
+    });
+    if (!c) return;
+    const parent = c.standard
+      ? {
+          code: c.standard.code,
+          subject: `«${c.standard.title}»`,
+          wgId: c.standard.workingGroupId,
+          responsibleId: c.standard.responsibleId,
+          link: `/standards/${c.standard.id}?tab=body`,
+        }
+      : c.document
+        ? {
+            code: c.document.standard.code,
+            subject: `📎 «${c.document.filename}»`,
+            wgId: c.document.standard.workingGroupId,
+            responsibleId: c.document.standard.responsibleId,
+            link: `/standards/${c.document.standard.id}?tab=documents`,
+          }
+        : null;
+    if (!parent) return;
+
+    const leadership = await wgLeadershipRecipients(db, parent.wgId);
+    const responsible = parent.responsibleId
+      ? await singleUserRecipient(db, parent.responsibleId)
+      : [];
+    const recipients = dedupeRecipients([leadership, responsible]);
+    if (recipients.length === 0) return;
+
+    const snippet = c.selectionText.slice(0, 120) + (c.selectionText.length > 120 ? '…' : '');
+    const note = c.body.slice(0, 200) + (c.body.length > 200 ? '…' : '');
+    await emit({
+      db,
+      recipients,
+      excludeUserId: actorUserId,
+      type: 'COMMENT_ADDED',
+      title: `Inline-коментар від ${c.author.name}: ${parent.code}`,
+      body: `${parent.subject} · параграф ${c.paragraphIndex + 1}\n«${snippet}»\n${note}`,
+      link: parent.link,
+      channelEnabled: { inApp: true, email: false },
+    });
+  } catch (e) {
+    console.error('[notifyInlineCommentNew]', e);
+  }
+}
+
+/**
+ * Fired when someone replies to an inline-comment. Notifies the original
+ * inline-commenter + all previous repliers (deduped, skipping the actor).
+ */
+export async function notifyInlineCommentReply(
+  db: PrismaClient,
+  replyId: string,
+  actorUserId: string,
+) {
+  try {
+    const r = await db.inlineCommentReply.findUnique({
+      where: { id: replyId },
+      include: {
+        author: { select: { name: true } },
+        comment: {
+          include: {
+            replies: { select: { authorId: true } },
+            standard: { select: { id: true, code: true, title: true } },
+            document: {
+              select: { standard: { select: { id: true, code: true, title: true } } },
+            },
+          },
+        },
+      },
+    });
+    if (!r) return;
+    const parent = r.comment.standard
+      ? {
+          code: r.comment.standard.code,
+          subject: `«${r.comment.standard.title}»`,
+          link: `/standards/${r.comment.standard.id}?tab=body`,
+        }
+      : r.comment.document
+        ? {
+            code: r.comment.document.standard.code,
+            subject: `«${r.comment.document.standard.title}»`,
+            link: `/standards/${r.comment.document.standard.id}?tab=documents`,
+          }
+        : null;
+    if (!parent) return;
+
+    const ids = new Set<string>();
+    ids.add(r.comment.authorId);
+    for (const rep of r.comment.replies) ids.add(rep.authorId);
+    ids.delete(actorUserId);
+    if (ids.size === 0) return;
+
+    const groups = await Promise.all(Array.from(ids).map((id) => singleUserRecipient(db, id)));
+    const recipients = dedupeRecipients(groups);
+    if (recipients.length === 0) return;
+
+    const snippet = r.body.slice(0, 200) + (r.body.length > 200 ? '…' : '');
+    await emit({
+      db,
+      recipients,
+      type: 'COMMENT_ADDED',
+      title: `${r.author.name} відповів у обговоренні: ${parent.code}`,
+      body: `${parent.subject}\n${snippet}`,
+      link: parent.link,
+      channelEnabled: { inApp: true, email: false },
+    });
+  } catch (e) {
+    console.error('[notifyInlineCommentReply]', e);
+  }
+}
+
 export { appUrl };

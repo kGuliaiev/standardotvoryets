@@ -20,9 +20,10 @@ export function NewNotificationsWatcher() {
     // Keep the window small — we only need to know what's new.
     { limit: 10 },
     {
-      refetchInterval: 30_000, // poll every 30s
+      refetchInterval: 20_000, // poll every 20s — snappy enough to feel "live"
       refetchIntervalInBackground: false, // pause when the tab is hidden
       refetchOnWindowFocus: true,
+      refetchOnMount: 'always',
     },
   );
 

@@ -22,6 +22,7 @@ import { TRPCError } from '@trpc/server';
 import { createTRPCRouter, protectedProcedure } from '@/server/trpc';
 import { can } from '@/lib/rbac';
 import { logActivity } from '@/server/audit';
+import { notifyInlineCommentNew, notifyInlineCommentReply } from '@/server/notify';
 import type { GlobalRole, WorkingGroupRole, PrismaClient } from '@prisma/client';
 
 function userCtx(session: {
@@ -138,6 +139,7 @@ export const inlineCommentRouter = createTRPCRouter({
         after: created,
         note: 'Залишено inline-коментар',
       });
+      await notifyInlineCommentNew(ctx.db, created.id, ctx.session.user.id);
       return created;
     }),
 
@@ -180,6 +182,7 @@ export const inlineCommentRouter = createTRPCRouter({
         after: created,
         note: 'Відповідь на inline-коментар',
       });
+      await notifyInlineCommentReply(ctx.db, created.id, ctx.session.user.id);
       return created;
     }),
 
