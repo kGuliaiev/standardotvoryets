@@ -27,6 +27,7 @@ interface ToastItem {
   position: ToastPosition;
   title?: string;
   href?: string;
+  onClick?: () => void;
 }
 
 let counter = 0;
@@ -46,6 +47,7 @@ interface PushOptions {
   title?: string;
   href?: string;
   position?: ToastPosition;
+  onClick?: () => void;
 }
 
 function push(message: string, variant: ToastVariant, ms: number, opts: PushOptions = {}) {
@@ -59,6 +61,7 @@ function push(message: string, variant: ToastVariant, ms: number, opts: PushOpti
       position: opts.position ?? 'bottom-right',
       title: opts.title,
       href: opts.href,
+      onClick: opts.onClick,
     },
   ];
   emit();
@@ -75,6 +78,9 @@ interface NotifyArgs {
   href?: string;
   /** Auto-dismiss in ms (default 5000). */
   durationMs?: number;
+  /** Custom click handler — if set, fires instead of the default href navigation.
+   *  Use this to mark the source notification as read and then navigate. */
+  onClick?: () => void;
 }
 
 export const toast = {
@@ -86,6 +92,7 @@ export const toast = {
     push(args.message, 'info', args.durationMs ?? 5000, {
       title: args.title,
       href: args.href,
+      onClick: args.onClick,
       position: 'top-right',
     }),
   dismiss,
@@ -120,11 +127,17 @@ function ToastCard({ t }: { t: ToastItem }) {
   // For top-right notification popups prefer the bell icon over the generic info.
   const Icon = t.position === 'top-right' && t.variant === 'info' ? Bell : v.icon;
 
-  const clickable = Boolean(t.href);
+  const clickable = Boolean(t.onClick) || Boolean(t.href);
   const handleCardClick = () => {
-    if (!t.href) return;
-    router.push(t.href);
-    dismiss(t.id);
+    if (t.onClick) {
+      t.onClick();
+      dismiss(t.id);
+      return;
+    }
+    if (t.href) {
+      router.push(t.href);
+      dismiss(t.id);
+    }
   };
 
   return (

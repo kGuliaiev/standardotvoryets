@@ -26,7 +26,12 @@ export function Topbar({ session: _session, onOpenMobileMenu }: TopbarProps) {
   const pathname = usePathname();
   const { theme, toggle } = useTheme();
   const { data: unreadCount } = trpc.notification.unreadCount.useQuery(undefined, {
-    refetchInterval: 60_000,
+    // Match the NewNotificationsWatcher poll so the bell badge and the
+    // top-right popup arrive together. Watcher also invalidates this query
+    // when it sees a new notification, so 15s is just the fallback cadence.
+    refetchInterval: 15_000,
+    refetchIntervalInBackground: false,
+    refetchOnWindowFocus: true,
   });
 
   // Find the title by longest matching prefix
