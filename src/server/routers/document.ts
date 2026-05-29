@@ -7,7 +7,39 @@ import { logActivity } from '@/server/audit';
 import { s3, getPresignedUploadUrl, getPresignedDownloadUrl } from '@/server/s3';
 import { DeleteObjectCommand } from '@aws-sdk/client-s3';
 import { env } from '@/lib/env';
-import type { DocumentType, GlobalRole, WorkingGroupRole } from '@prisma/client';
+import type { DocumentType, GlobalRole, PrismaClient, WorkingGroupRole } from '@prisma/client';
+
+// Types that may exist at most ONCE per standard (per user spec —
+// "на 1 стандарт може бути одне ТЗ і один файл стандарту"). The check is
+// shared by every creation path (createEmpty / registerMetadata /
+// confirmUpload + the proxy /api/standards/[id]/documents POST route).
+const ONE_PER_STANDARD_TYPES: ReadonlySet<DocumentType> = new Set<DocumentType>([
+  'DRAFT_STANDARD',
+  'TECH_SPEC',
+]);
+const ONE_PER_STANDARD_LABEL: Partial<Record<DocumentType, string>> = {
+  DRAFT_STANDARD: 'Стандарт',
+  TECH_SPEC: 'ТЗ',
+};
+
+async function assertUniqueTypePerStandard(
+  db: PrismaClient,
+  standardId: string,
+  type: DocumentType,
+) {
+  if (!ONE_PER_STANDARD_TYPES.has(type)) return;
+  const existing = await db.document.findFirst({
+    where: { standardId, type },
+    select: { id: true, filename: true },
+  });
+  if (existing) {
+    const label = ONE_PER_STANDARD_LABEL[type] ?? type;
+    throw new TRPCError({
+      code: 'CONFLICT',
+      message: `На цьому стандарті вже є документ типу «${label}» («${existing.filename}»). Видаліть наявний, щоб завантажити новий.`,
+    });
+  }
+}
 
 function userCtx(session: {
   user: { globalRole: string; memberships: { workingGroupId: string; role: string }[] };
@@ -59,6 +91,7 @@ export const documentRouter = createTRPCRouter({
       if (!can(userCtx(ctx.session), 'document:upload', standard.workingGroupId)) {
         throw new TRPCError({ code: 'FORBIDDEN' });
       }
+      await assertUniqueTypePerStandard(ctx.db, input.standardId, input.type);
 
       const s3Key = `standards/${input.standardId}/${Date.now()}-${input.filename}`;
       const uploadUrl = await getPresignedUploadUrl(s3Key, input.contentType);
@@ -95,6 +128,7 @@ export const documentRouter = createTRPCRouter({
       if (!can(userCtx(ctx.session), 'document:upload', standard.workingGroupId)) {
         throw new TRPCError({ code: 'FORBIDDEN' });
       }
+      await assertUniqueTypePerStandard(ctx.db, input.standardId, input.type);
       if (input.isCurrent) {
         await ctx.db.document.updateMany({
           where: { standardId: input.standardId, isCurrent: true },
@@ -147,6 +181,7 @@ export const documentRouter = createTRPCRouter({
       if (!can(userCtx(ctx.session), 'document:upload', standard.workingGroupId)) {
         throw new TRPCError({ code: 'FORBIDDEN' });
       }
+      await assertUniqueTypePerStandard(ctx.db, input.standardId, input.type);
 
       if (input.isCurrent) {
         await ctx.db.document.updateMany({
@@ -224,6 +259,7 @@ export const documentRouter = createTRPCRouter({
       if (!can(userCtx(ctx.session), 'document:upload', standard.workingGroupId)) {
         throw new TRPCError({ code: 'FORBIDDEN' });
       }
+      await assertUniqueTypePerStandard(ctx.db, input.standardId, input.type);
 
       // If setting as current, unset previous current
       if (input.isCurrent) {

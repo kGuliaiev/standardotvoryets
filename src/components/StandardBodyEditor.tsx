@@ -121,8 +121,11 @@ export function StandardBodyEditor({
   // locked for everyone except ADMIN; changes must come through Suggestions.
   // The flag lets the UI render a small notice instead of just silently
   // hiding the "Редагування" tab.
-  const bodyLockedForReview =
-    target.kind === 'standard' && standardStatus === 'IN_REVIEW' && me?.globalRole !== 'ADMIN';
+  // Lock applies to both the standard's main body and to its attached
+  // documents — the document editor reuses this component with a
+  // `target.kind === 'document'` target and a `standardStatus` prop pointing
+  // at the parent standard's status.
+  const bodyLockedForReview = standardStatus === 'IN_REVIEW' && me?.globalRole !== 'ADMIN';
   const canEditBody = rawCanEditBody && !bodyLockedForReview;
   const canSuggest = userCtx ? can(userCtx, 'comment:add', target.workingGroupId) : false;
 

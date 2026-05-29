@@ -106,6 +106,24 @@ export async function POST(req: Request, { params }: { params: { id: string } })
   if (typeof version !== 'string' || version.trim().length === 0) {
     return NextResponse.json({ error: 'Введіть версію' }, { status: 400 });
   }
+
+  // Uniqueness: one ТЗ + one «Стандарт» per standard. Check BEFORE the S3
+  // upload so we don't leave an orphan object on a 409.
+  if (type === 'DRAFT_STANDARD' || type === 'TECH_SPEC') {
+    const existing = await db.document.findFirst({
+      where: { standardId: params.id, type },
+      select: { id: true, filename: true },
+    });
+    if (existing) {
+      const label = type === 'DRAFT_STANDARD' ? 'Стандарт' : 'ТЗ';
+      return NextResponse.json(
+        {
+          error: `На цьому стандарті вже є документ типу «${label}» («${existing.filename}»). Видаліть наявний, щоб завантажити новий.`,
+        },
+        { status: 409 },
+      );
+    }
+  }
   const isCurrent = isCurrentRaw === 'true' || isCurrentRaw === '1';
   const allowEditsRequested = allowEditsRaw === 'true' || allowEditsRaw === '1';
   const noteStr = typeof note === 'string' && note.trim().length > 0 ? note.trim() : undefined;
