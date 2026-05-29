@@ -21,20 +21,18 @@ interface ThemeContextValue {
 const ThemeContext = createContext<ThemeContextValue | null>(null);
 
 export function ThemeProvider({ children }: { children: ReactNode }) {
-  const [theme, setThemeState] = useState<Theme>('light');
-
-  // Read initial from localStorage / system preference on mount
-  useEffect(() => {
-    const stored = typeof window !== 'undefined' ? localStorage.getItem('theme') : null;
-    if (stored === 'dark' || stored === 'light') {
-      setThemeState(stored);
-    } else if (
-      typeof window !== 'undefined' &&
-      window.matchMedia('(prefers-color-scheme: dark)').matches
-    ) {
-      setThemeState('dark');
-    }
-  }, []);
+  // F-3: lazy-initialise from whatever the root layout's pre-hydration
+  // bootstrap script already put on <html>. Starting at 'light' and then
+  // useEffect-ing to the real value caused a one-tick mismatch where any
+  // component reading useTheme().theme on first render saw 'light' even
+  // though the DOM was already dark — visible as a Sun/Moon icon flicker
+  // and (after logout → login) a brief light flash before settling back to
+  // dark. The bootstrap script already reads localStorage + prefers-color
+  // -scheme, so reading the resulting class is enough.
+  const [theme, setThemeState] = useState<Theme>(() => {
+    if (typeof document === 'undefined') return 'light';
+    return document.documentElement.classList.contains('dark') ? 'dark' : 'light';
+  });
 
   // Apply class on html
   useEffect(() => {

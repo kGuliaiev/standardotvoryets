@@ -7,6 +7,7 @@ import { useSession } from 'next-auth/react';
 import { Avatar } from '@/components/ui/Avatar';
 import { RankBadge } from '@/components/ui/RankBadge';
 import { useLocalStorageState } from '@/lib/useLocalStorageState';
+import { nounUk } from '@/lib/pluralize';
 import { MessageSquare, Sparkles, Reply, PenSquare } from 'lucide-react';
 import { renderMentions } from '@/components/ui/MentionTextarea';
 
@@ -103,7 +104,9 @@ export function DiscussionsFeed() {
               {newCount} нових
             </span>
           ) : (
-            <span className="text-xs text-light">{comments?.length ?? 0} коментарів</span>
+            <span className="text-xs text-light">
+              {nounUk(comments?.length ?? 0, ['коментар', 'коментарі', 'коментарів'])}
+            </span>
           )}
         </div>
       </div>
