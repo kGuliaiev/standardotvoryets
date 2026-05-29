@@ -16,6 +16,10 @@
 - **B-8** `auth.authorize` blocks login for deactivated (`!isActive`) users.
 - **B-9** `vote.current` is now read-only; overdue auto-close moved to a privileged, Serializable, idempotent `vote.closeOverdue` mutation.
 
+### Fixed
+
+- **Сповіщення — синхронізація + клік + вирівнювання:** клікнутий top-right попап тепер позначає нотифікацію прочитаною і веде на її лінк (`toast.notify({onClick})`); watcher одночасно інвалідовує `notification.unreadCount` + `notification.list` → колокольчик і `/notifications` оновлюються разом з попапом, без чекання власного polling-у. Poll watcher'а 20→15с, колокольчика 60→15с. `localStorage.lastSeenAt` дозволяє попапам спрацьовувати на нотифікації, що прийшли під час відсутності (з обмеженням 5/раз). Час у списку `/notifications` нарешті стоїть праворуч (час — сусід колонки, а не вкладений; кнопка «прочитати» — `absolute`).
+
 ### Added
 
 - **Політика нотифікацій уніфікована**: керівництво РГ (LEADER/DEPUTY/SECRETARY) отримує **все**; учасник (MEMBER) — нові правки + зміни їх статусу, відповіді на **його** коментарі та зміну статусу **його** inline-коментарів. Suggestion-події тепер broadcast по РГ; comment-події broadcast тільки керівництву; додано notify на resolve/unresolve inline-коментаря.
