@@ -53,16 +53,16 @@ export function LoginForm() {
 
   return (
     <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
-      {/* Error alert */}
+      {/* Error alert — themed (F-6) */}
       {error && (
-        <div className="bg-red-500/10 border border-red-500/40 text-red-200 text-sm rounded-xl px-4 py-3">
+        <div className="bg-red-50 dark:bg-red-500/10 border border-red-200 dark:border-red-500/40 text-red-700 dark:text-red-200 text-sm rounded-xl px-4 py-3">
           {error}
         </div>
       )}
 
       {/* Email */}
       <div>
-        <label htmlFor="email" className="block text-sm font-medium text-slate-300 mb-1.5">
+        <label htmlFor="email" className="block text-sm font-medium text-mid mb-1.5">
           Email
         </label>
         <input
@@ -70,7 +70,7 @@ export function LoginForm() {
           type="email"
           autoComplete="email"
           {...register('email')}
-          className="w-full px-4 py-2.5 bg-slate-900/60 border border-slate-700 rounded-xl text-sm text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all placeholder:text-slate-500"
+          className="w-full px-4 py-2.5 bg-page border border-hairline rounded-xl text-sm text-ink focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all placeholder:text-light"
           placeholder="name@example.ua"
         />
         {errors.email && <p className="mt-1 text-xs text-red-600">{errors.email.message}</p>}
@@ -78,7 +78,7 @@ export function LoginForm() {
 
       {/* Password */}
       <div>
-        <label htmlFor="password" className="block text-sm font-medium text-slate-300 mb-1.5">
+        <label htmlFor="password" className="block text-sm font-medium text-mid mb-1.5">
           Пароль
         </label>
         <div className="relative">
@@ -87,13 +87,14 @@ export function LoginForm() {
             type={showPassword ? 'text' : 'password'}
             autoComplete="current-password"
             {...register('password')}
-            className="w-full px-4 py-2.5 bg-slate-900/60 border border-slate-700 rounded-xl text-sm text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all placeholder:text-slate-500 pr-10"
+            className="w-full px-4 py-2.5 bg-page border border-hairline rounded-xl text-sm text-ink focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all placeholder:text-light pr-10"
             placeholder="••••••••"
           />
           <button
             type="button"
             onClick={() => setShowPassword((v) => !v)}
-            className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-200 transition-colors"
+            aria-label={showPassword ? 'Сховати пароль' : 'Показати пароль'}
+            className="absolute right-3 top-1/2 -translate-y-1/2 text-mid hover:text-ink transition-colors"
           >
             {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
           </button>
@@ -101,7 +102,7 @@ export function LoginForm() {
         {errors.password && <p className="mt-1 text-xs text-red-600">{errors.password.message}</p>}
       </div>
 
-      {/* Submit */}
+      {/* Submit — brand blue stays as the action colour in both themes */}
       <button
         type="submit"
         disabled={isSubmitting}
