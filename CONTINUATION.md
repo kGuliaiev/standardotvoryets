@@ -9,7 +9,7 @@
 ## ▶ ПОТОЧНИЙ СТАН (оновлювати щоразу)
 
 - **Гілка:** `main`
-- **Останній коміт:** `700b6a8` — merge `feat/notify-comments-replies`
+- **Останній коміт:** `7203b81` — merge `feat/notify-policy-refine`
 - **Зараз у роботі:** security + admin-delete + week-nav + comment-delete-modal + **уніфікація confirm/alert (toast + ConfirmModal, F-4 done)**. Далі — Designer release-blockers (`fix/qa-designer-2026-05-26`).
 - **UI-патерн:** для підтверджень — `ConfirmModal` (`@/components/ui/ConfirmModal`, є type-to-confirm), для сповіщень — `toast` (`@/lib/toast`: `toast.success/error/info`). Нативні `confirm()/alert()` під забороною.
 - **Закрито за останній цикл:** Part 1 (`3429dba`); **Security hotfix B-1…B-9** (merge `29208de`); **адмін-видалення стандарту** з type-to-confirm + S3-cleanup та перенос `standard:editBody` у групу «Документи» (merge `bff4612`). Build/lint/typecheck — зелені.
