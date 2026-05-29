@@ -39,11 +39,20 @@ export function NotificationsList() {
     return Array.from(set);
   }, [activeCats]);
 
-  const { data: notifications, isLoading } = trpc.notification.list.useQuery({
-    limit: 200,
-    unreadOnly,
-    types: typeFilter.length > 0 ? typeFilter : undefined,
-  });
+  const { data: notifications, isLoading } = trpc.notification.list.useQuery(
+    {
+      limit: 200,
+      unreadOnly,
+      types: typeFilter.length > 0 ? typeFilter : undefined,
+    },
+    {
+      // Auto-refresh the list while the page is open so new notifications show
+      // up without a manual reload. Paused in background tabs to avoid noise.
+      refetchInterval: 15_000,
+      refetchIntervalInBackground: false,
+      refetchOnWindowFocus: true,
+    },
+  );
 
   const markReadMutation = trpc.notification.markRead.useMutation({
     onSuccess: () => {
