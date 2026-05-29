@@ -16,6 +16,17 @@
 - **B-8** `auth.authorize` blocks login for deactivated (`!isActive`) users.
 - **B-9** `vote.current` is now read-only; overdue auto-close moved to a privileged, Serializable, idempotent `vote.closeOverdue` mutation.
 
+### Fixed — QA frontend HIGH + quick wins 2026-05-26
+
+- **F-1** ✅ (no change needed) — tRPC `loggerLink` already uses `enabled: opts => NODE_ENV==='development' || (down && Error)`, which is exactly what QA recommended.
+- **F-2 / F-10** — `Modal`: implemented focus-trap (Tab / Shift+Tab cycle inside the panel, initial focus skips the close-X so form modals land on the first field, focus returns to the opener on close); backdrop dismiss switched from `onMouseDown` to `onClick` so selecting text and accidentally releasing on the backdrop no longer closes.
+- **D-5** — Escape closes the РГ multi-select on `/standards`.
+- **D-7** — Topbar: added `/profile`, `/reports`, `/discussions`, `/protocols` titles; `/protocols` no longer falls through to «Засідання».
+- **D-10** — Ukrainian plural picker (`src/lib/pluralize.ts`) + applied to `/discussions` («1 коментар / 2 коментарі / 5 коментарів»).
+- **D-18** — `/standards` search input has a clear (✕) button (input persists in localStorage; old values like «QA-T» used to stick invisibly).
+- **F-3** — `ThemeProvider` lazy-initialises from `document.documentElement.classList`; the Sun/Moon icon flicker and the logout→login light-flash are gone.
+- **F-5** — Localised 404 page (`src/app/not-found.tsx`) with brand colour + button «На головну».
+
 ### Fixed — QA designer release-blockers 2026-05-26
 
 - **D-1 / D-15 / F-6 / F-7 — `/login`:** `(auth)/layout` тепер світла/темна (`bg-gradient-to-br from-blue-50 ... dark:from-slate-900 ...`), `LoginForm` повністю на токенах (`bg-page`, `border-hairline`, `text-ink/mid/light`, `bg-card`), прибрано дублюючий заголовок «Вхід до системи» (D-15), додано `aria-label` для toggle паролю (F-7).
