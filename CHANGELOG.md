@@ -16,6 +16,14 @@
 - **B-8** `auth.authorize` blocks login for deactivated (`!isActive`) users.
 - **B-9** `vote.current` is now read-only; overdue auto-close moved to a privileged, Serializable, idempotent `vote.closeOverdue` mutation.
 
+### Fixed — QA designer release-blockers 2026-05-26
+
+- **D-1 / D-15 / F-6 / F-7 — `/login`:** `(auth)/layout` тепер світла/темна (`bg-gradient-to-br from-blue-50 ... dark:from-slate-900 ...`), `LoginForm` повністю на токенах (`bg-page`, `border-hairline`, `text-ink/mid/light`, `bg-card`), прибрано дублюючий заголовок «Вхід до системи» (D-15), додано `aria-label` для toggle паролю (F-7).
+- **D-2 — Dashboard «Прострочені завдання» ↔ `/tasks`:** KPI більше не фільтрує по `assigneeId=me` і скоупиться по видимих РГ — лічильник нарешті збігається з `/tasks` хедером.
+- **D-3 — Sidebar «Стандарти» ↔ KPI «Активних»:** `navCounts.standards` тепер той самий active-набір (`DRAFT/IN_REVIEW/VOTING`), що й у KPI.
+- **D-4 — `/standards` «filter active» індикатор:** під фільтр-карткою з’являється рядок «Фільтр:» з чіпами обраних РГ (колір + код + ✕) і кнопкою «Скинути все».
+- **D-9 — `/working-groups/[id]` hex колір:** прибрав код-блок поряд зі swatch'ем; hex тепер у `title` tooltip-і swatch'а.
+
 ### Fixed
 
 - **Сповіщення — синхронізація + клік + вирівнювання:** клікнутий top-right попап тепер позначає нотифікацію прочитаною і веде на її лінк (`toast.notify({onClick})`); watcher одночасно інвалідовує `notification.unreadCount` + `notification.list` → колокольчик і `/notifications` оновлюються разом з попапом, без чекання власного polling-у. Poll watcher'а 20→15с, колокольчика 60→15с. `localStorage.lastSeenAt` дозволяє попапам спрацьовувати на нотифікації, що прийшли під час відсутності (з обмеженням 5/раз). Час у списку `/notifications` нарешті стоїть праворуч (час — сусід колонки, а не вкладений; кнопка «прочитати» — `absolute`).
