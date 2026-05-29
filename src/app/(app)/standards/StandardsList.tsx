@@ -65,6 +65,17 @@ export function StandardsList() {
     onError: (e) => toast.error(`Помилка: ${e.message}`),
   });
 
+  // D-5: Escape closes the WG multi-select (matches the rest of the app's
+  // dismiss patterns and is what DESIGN.md expects for popovers).
+  useEffect(() => {
+    if (!wgPickerOpen) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setWgPickerOpen(false);
+    };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [wgPickerOpen]);
+
   // Close WG picker on outside click
   useEffect(() => {
     if (!wgPickerOpen) return;
@@ -163,8 +174,20 @@ export function StandardsList() {
               placeholder="Пошук за кодом або назвою…"
               value={filters.search}
               onChange={(e) => setSearch(e.target.value)}
-              className="w-full pl-9 pr-3 py-2 text-sm border border-hairline rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              className="w-full pl-9 pr-9 py-2 text-sm border border-hairline rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
             />
+            {/* D-18: clear button — search persists in localStorage, so without
+                this an old value (e.g. "QA-T") sticks around invisibly. */}
+            {filters.search && (
+              <button
+                type="button"
+                onClick={() => setSearch('')}
+                aria-label="Очистити пошук"
+                className="absolute right-2 top-1/2 -translate-y-1/2 text-light hover:text-ink p-1 rounded transition-colors"
+              >
+                <XIcon className="w-3.5 h-3.5" />
+              </button>
+            )}
           </div>
 
           {/* WG multi-select picker */}
