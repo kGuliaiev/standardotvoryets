@@ -441,20 +441,23 @@ export function StandardDetail({ id }: { id: string }) {
               )}
               {canChangeStatus &&
                 STATUS_TRANSITIONS[standard.status].map((next) => {
-                  // DRAFT → IN_REVIEW requires at least one active TECH_SPEC
-                  // doc (per spec). Mirrored server-side in standard.changeStatus,
-                  // so this is a UX hint — the server would reject anyway.
-                  // ADMIN bypasses the gate.
+                  // DRAFT → IN_REVIEW requires at least one active STANDARD
+                  // document (per spec — TZ is NOT required, only the
+                  // standard text itself). Mirrored server-side in
+                  // standard.changeStatus, so this is a UX hint — the
+                  // server would reject anyway. ADMIN bypasses the gate.
                   const goingToReview = next === 'IN_REVIEW' && standard.status === 'DRAFT';
-                  const hasTechSpec =
-                    standard.documents?.some((d) => d.type === 'TECH_SPEC' && !d.lockedAt) ?? false;
-                  const reviewBlocked = goingToReview && !hasTechSpec && !isAdmin;
+                  const hasStandardDoc =
+                    standard.documents?.some((d) => d.type === 'STANDARD' && !d.lockedAt) ?? false;
+                  const reviewBlocked = goingToReview && !hasStandardDoc && !isAdmin;
                   return (
                     <button
                       key={next}
                       onClick={() => changeStatus.mutate({ id, status: next })}
                       disabled={changeStatus.isPending || reviewBlocked}
-                      title={reviewBlocked ? 'Спочатку завантажте документ типу ТЗ' : undefined}
+                      title={
+                        reviewBlocked ? 'Спочатку завантажте документ типу «Стандарт»' : undefined
+                      }
                       className="px-3 py-1.5 text-xs font-medium rounded-lg border border-hairline hover:bg-page text-ink transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                       → {STATUS_LABELS[next]}

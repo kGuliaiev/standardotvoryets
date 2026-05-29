@@ -344,17 +344,19 @@ export const standardRouter = createTRPCRouter({
       assertAllowedTransition(standard.status, input.status, isAdmin);
 
       // Per spec: DRAFT → IN_REVIEW requires at least one active (unlocked)
-      // ТЗ on the standard. Without a TZ there's nothing to review.
+      // STANDARD document on the standard. Without the actual standard
+      // text there's nothing to review or put to a vote. TЗ is NOT
+      // required for review/voting — only the standard doc is the gate.
       // ADMIN keeps the escape hatch (e.g. data-recovery).
       if (input.status === 'IN_REVIEW' && standard.status === 'DRAFT' && !isAdmin) {
-        const techSpecCount = await ctx.db.document.count({
-          where: { standardId: input.id, type: 'TECH_SPEC', lockedAt: null },
+        const standardDocCount = await ctx.db.document.count({
+          where: { standardId: input.id, type: 'STANDARD', lockedAt: null },
         });
-        if (techSpecCount === 0) {
+        if (standardDocCount === 0) {
           throw new TRPCError({
             code: 'BAD_REQUEST',
             message:
-              'Спочатку завантажте документ типу «ТЗ» — без нього стандарт не можна перевести «На розгляд».',
+              'Спочатку завантажте документ типу «Стандарт» — без нього стандарт не можна перевести «На розгляд».',
           });
         }
       }
