@@ -42,7 +42,7 @@ const TYPE_OPTIONS: {
   label: string;
 }[] = [
   { value: 'TECH_SPEC', label: 'ТЗ (технічне завдання)' },
-  { value: 'DRAFT_STANDARD', label: 'Чернетка стандарту' },
+  { value: 'DRAFT_STANDARD', label: 'Стандарт' },
   { value: 'FEEDBACK', label: 'Відгук' },
   { value: 'FINAL', label: 'Фінальна версія' },
   { value: 'AGENDA', label: 'Порядок денний' },
