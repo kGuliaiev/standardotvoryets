@@ -16,6 +16,13 @@
 - **B-8** `auth.authorize` blocks login for deactivated (`!isActive`) users.
 - **B-9** `vote.current` is now read-only; overdue auto-close moved to a privileged, Serializable, idempotent `vote.closeOverdue` mutation.
 
+### Added — QA Part 3: test infra
+
+- **Vitest** уніт-набір: `vitest.config.ts` (happy-dom, `@/`-alias), dev-deps `vitest @vitest/ui happy-dom @testing-library/{react,jest-dom,user-event}`, 5 файлів у `src/lib/__tests__` (`utils`, `wordDiff`, `standardBody`, `ranks`, `rbac`) → **48/48 passes**. Скрипти `pnpm test`, `test:watch`, `test:ui`, `test:coverage`.
+- **`scripts/qa-smoke.sh`** — read-only smoke проти staging: NextAuth login (admin@test.ua) + unauth probes + 7 authed tRPC reads + RBAC-negative для `meeting.byId`/`task.byId`. Виходить з ненульовим кодом при провалах; запуск `pnpm qa:smoke` (можна перевизначити `BASE`/`EMAIL`/`PASS`).
+
+> ⚠️ Чистка тест-артефакту `cmpoc1qpm0001gb43j0h5nhrm` (`[QA-TEST] Після редагування`, в архіві на проді) — зробити через адмін-кнопку «Видалити стандарт» (type-to-confirm) у `/standards/<id>` після того, як Railway підхопить останній build.
+
 ### Fixed — QA frontend HIGH + quick wins 2026-05-26
 
 - **F-1** ✅ (no change needed) — tRPC `loggerLink` already uses `enabled: opts => NODE_ENV==='development' || (down && Error)`, which is exactly what QA recommended.

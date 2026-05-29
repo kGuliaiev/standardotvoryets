@@ -9,7 +9,8 @@
 ## ▶ ПОТОЧНИЙ СТАН (оновлювати щоразу)
 
 - **Гілка:** `main`
-- **Останній коміт:** `531b532` — merge `fix/qa-polish-2026-05-26` (D-5/7/10/18 + F-3/F-5 quick wins). До цього `fix/qa-frontend-2026-05-26` (F-2 Modal focus-trap + F-10 backdrop click).
+- **Останній коміт:** `c210d77` — merge `feat/qa-test-infra` (Vitest 48/48 + `qa-smoke.sh`).
+- **Цикл QA 2026-05-26 закрито:** security (B-1…B-9), designer (D-1/2/3/4/9 + захоплені D-15/F-6/F-7), frontend HIGH (F-2/F-10; F-1 був уже коректний), quick wins (D-5/7/10/18 + F-3/F-5), test infra (Vitest + qa-smoke). Залишок як backlog: B-15…B-34, D-6/8/11–14/16/17/19/20 (mobile), F-8/F-9/F-11 (mobile).
 - **Зараз у роботі:** security + admin-delete + week-nav + comment-delete-modal + **уніфікація confirm/alert (toast + ConfirmModal, F-4 done)**. Далі — Designer release-blockers (`fix/qa-designer-2026-05-26`).
 - **UI-патерн:** для підтверджень — `ConfirmModal` (`@/components/ui/ConfirmModal`, є type-to-confirm), для сповіщень — `toast` (`@/lib/toast`: `toast.success/error/info`). Нативні `confirm()/alert()` під забороною.
 - **Закрито за останній цикл:** Part 1 (`3429dba`); **Security hotfix B-1…B-9** (merge `29208de`); **адмін-видалення стандарту** з type-to-confirm + S3-cleanup та перенос `standard:editBody` у групу «Документи» (merge `bff4612`). Build/lint/typecheck — зелені.
