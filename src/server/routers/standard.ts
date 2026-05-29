@@ -165,6 +165,9 @@ export const standardRouter = createTRPCRouter({
                       rank: true,
                       position: true,
                       phone: true,
+                      // Needed for voting quorum: only active members count
+                      // toward the eligible-voter denominator.
+                      isActive: true,
                     },
                   },
                 },

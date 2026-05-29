@@ -15,8 +15,11 @@ import {
   Save,
   Target,
   CalendarDays,
+  AlertTriangle,
 } from 'lucide-react';
 import { PageHeader } from '@/components/ui/PageHeader';
+import { ConfirmModal } from '@/components/ui/ConfirmModal';
+import { toast } from '@/lib/toast';
 
 interface SettingsState {
   meetingRemindLead1Hours: number;
@@ -87,6 +90,19 @@ export function SystemSettingsForm() {
 
   const [form, setForm] = useState<SettingsState | null>(null);
   const [savedAt, setSavedAt] = useState<Date | null>(null);
+  const [wipeOpen, setWipeOpen] = useState(false);
+  const [wipeError, setWipeError] = useState<string | null>(null);
+
+  const wipeVotings = trpc.vote.adminWipeAll.useMutation({
+    onSuccess: (r) => {
+      setWipeOpen(false);
+      setWipeError(null);
+      toast.success(
+        `Очищено ${r.votingCount} голосувань, ${r.voteCount} голосів. Повернуто ${r.revertedStandards} стандартів на розгляд.`,
+      );
+    },
+    onError: (e) => setWipeError(e.message),
+  });
 
   useEffect(() => {
     if (data && !form) {
@@ -454,6 +470,74 @@ export function SystemSettingsForm() {
               </tbody>
             </table>
           </Card>
+
+          {/* Danger zone — destructive, system-wide operations. Kept at the
+              very bottom so it doesn't get accidentally tapped while scrolling
+              through normal settings. */}
+          <section className="bg-card rounded-xl border border-red-300 dark:border-red-700/60 p-5">
+            <div className="flex items-center gap-2 mb-4">
+              <AlertTriangle size={18} className="text-red-600" />
+              <h2 className="text-base font-semibold text-ink">Небезпечна зона</h2>
+            </div>
+            <div className="space-y-3">
+              <div className="flex items-start justify-between gap-4">
+                <div className="flex-1">
+                  <p className="text-sm text-ink font-medium">Очистити всі голосування</p>
+                  <p className="text-xs text-mid mt-0.5">
+                    Видаляє всі голосування та голоси по системі. Стандарти у статусах{' '}
+                    <span className="font-mono">VOTING / ADOPTED / REJECTED</span> повертаються у{' '}
+                    <span className="font-mono">IN_REVIEW</span> для повторного голосування. Дія
+                    незворотна.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setWipeError(null);
+                    setWipeOpen(true);
+                  }}
+                  className="shrink-0 inline-flex items-center gap-1.5 rounded-lg border border-red-300 dark:border-red-700/60 bg-red-50 dark:bg-red-900/20 px-3 py-1.5 text-sm font-medium text-red-700 dark:text-red-300 hover:bg-red-100 dark:hover:bg-red-900/40"
+                >
+                  Очистити
+                </button>
+              </div>
+            </div>
+          </section>
+
+          <ConfirmModal
+            open={wipeOpen}
+            title="Очистити всі голосування?"
+            destructive
+            message={
+              <div className="space-y-2">
+                <p>
+                  Будуть видалені <strong>всі</strong> голосування та голоси по всій системі.
+                </p>
+                <p>
+                  Усі стандарти у статусах{' '}
+                  <span className="font-mono">VOTING / ADOPTED / REJECTED</span> будуть повернуті у{' '}
+                  <span className="font-mono">IN_REVIEW</span>.
+                </p>
+                <p className="text-red-700 dark:text-red-400">Дія незворотна.</p>
+              </div>
+            }
+            confirmText="WIPE-ALL-VOTINGS"
+            confirmTextLabel={
+              <>
+                Для підтвердження введіть <span className="font-mono">WIPE-ALL-VOTINGS</span>:
+              </>
+            }
+            confirmLabel="Очистити все"
+            isPending={wipeVotings.isPending}
+            error={wipeError}
+            onConfirm={() => wipeVotings.mutate({ confirm: 'WIPE-ALL-VOTINGS' })}
+            onClose={() => {
+              if (!wipeVotings.isPending) {
+                setWipeOpen(false);
+                setWipeError(null);
+              }
+            }}
+          />
         </>
       )}
     </div>

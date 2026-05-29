@@ -601,6 +601,14 @@ model Voting {
   openedAt    DateTime   @default(now())
   closedAt    DateTime?
   deadline    DateTime?
+  // Snapshot of the eligible voter count at the moment the voting was
+  // closed (WG members with role LEADER / DEPUTY / MEMBER who are
+  // active — SECRETARY does not vote, GUEST does not vote). The pass
+  // threshold is `forVotes / eligibleAtClose > 0.5`, NOT
+  // `forVotes / (for + against) > 0.5`. Null = voting still OPEN or
+  // migrated from before this field existed (UI falls back to the
+  // old denominator for those historical records).
+  eligibleAtClose Int?
 
   standard Standard @relation(fields: [standardId], references: [id], onDelete: Cascade)
   votes    Vote[]
