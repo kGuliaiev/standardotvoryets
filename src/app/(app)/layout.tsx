@@ -5,6 +5,7 @@ import { Shell } from '@/components/layout/Shell';
 import { TRPCProvider } from '@/lib/trpc/provider';
 import { SessionWrapper } from '@/components/providers/SessionWrapper';
 import { PermissionsBootstrap } from '@/components/providers/PermissionsBootstrap';
+import { NewNotificationsWatcher } from '@/components/NewNotificationsWatcher';
 import { menuVisForUser, overridesForUser } from '@/server/landing';
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
@@ -28,6 +29,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     <SessionWrapper session={session}>
       <TRPCProvider>
         <PermissionsBootstrap initialOverrides={initialOverrides} />
+        <NewNotificationsWatcher />
         <Shell session={session} initialMenuVis={initialMenuVis}>
           {children}
         </Shell>
