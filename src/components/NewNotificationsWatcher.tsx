@@ -8,11 +8,10 @@ import { toast } from '@/lib/toast';
 const MAX_POPS_PER_FETCH = 5;
 
 /**
- * Polls notification.list on a timer (15s — fast enough to feel "live"). The
- * first fetch silently marks every currently-known notification id as "seen"
- * so a reload doesn't replay history. Every subsequent fetch pops any unread
- * id that wasn't in that set, capped to MAX_POPS_PER_FETCH so a backlog
- * doesn't flood the UI.
+ * Polls notification.list on a timer (15s). The first fetch silently records
+ * every currently-known notification id as "seen" so a reload doesn't replay
+ * history. Every subsequent fetch pops any unread id that wasn't in that set,
+ * capped to MAX_POPS_PER_FETCH so a backlog doesn't flood the UI.
  *
  * Clicking the popup marks that notification read and navigates to its link.
  * We also invalidate `notification.unreadCount` and `notification.list` the
@@ -22,7 +21,11 @@ const MAX_POPS_PER_FETCH = 5;
 export function NewNotificationsWatcher() {
   const router = useRouter();
   const utils = trpc.useUtils();
-  const markReadMutation = trpc.notification.markRead.useMutation({
+  // Destructure `mutate` — the only referentially stable handle from
+  // useMutation. The full mutation *object* re-identifies on every state
+  // transition (idle→pending→…), which would otherwise force this useEffect
+  // to re-run via the deps array even when nothing about the data changed.
+  const { mutate: markRead } = trpc.notification.markRead.useMutation({
     onSuccess: () => {
       void utils.notification.unreadCount.invalidate();
       void utils.notification.list.invalidate();
@@ -45,7 +48,8 @@ export function NewNotificationsWatcher() {
   useEffect(() => {
     if (!notifications) return;
 
-    // First fetch — record the current state as the baseline; do NOT pop.
+    // First fetch — record current state as baseline; do NOT pop. This is what
+    // keeps reloads from re-firing every notification the user already saw.
     if (!initialisedRef.current) {
       for (const n of notifications) seenIdsRef.current.add(n.id);
       initialisedRef.current = true;
@@ -59,13 +63,14 @@ export function NewNotificationsWatcher() {
       seenIdsRef.current.add(n.id);
       if (n.read) continue;
       if (popped >= MAX_POPS_PER_FETCH) continue;
+      const link = n.link ?? '/notifications';
       toast.notify({
         title: n.title,
         message: n.body,
-        href: n.link ?? '/notifications',
+        href: link,
         onClick: () => {
-          markReadMutation.mutate({ id: n.id });
-          router.push(n.link ?? '/notifications');
+          markRead({ id: n.id });
+          router.push(link);
         },
       });
       popped += 1;
@@ -75,7 +80,7 @@ export function NewNotificationsWatcher() {
       void utils.notification.unreadCount.invalidate();
       void utils.notification.list.invalidate();
     }
-  }, [notifications, markReadMutation, router, utils]);
+  }, [notifications, markRead, router, utils]);
 
   return null;
 }

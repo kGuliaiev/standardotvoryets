@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { useRouter } from 'next/navigation';
 import { Bell, CheckCircle2, AlertCircle, Info, X } from 'lucide-react';
 
@@ -170,24 +171,44 @@ function ToastCard({ t }: { t: ToastItem }) {
 
 export function Toaster() {
   const [list, setList] = useState<ToastItem[]>(items);
+  const [mounted, setMounted] = useState(false);
+
   useEffect(() => {
+    setMounted(true);
     listeners.add(setList);
     setList(items);
+    // Expose a console-callable test helper so it's trivial to verify the
+    // popup channel renders end-to-end ("In DevTools: __testToast()" — if you
+    // see a top-right card, the toast infra is working; if the watcher then
+    // still doesn't pop on a real notification, the bug is upstream in the
+    // watcher / data, not in rendering).
+    if (typeof window !== 'undefined') {
+      (window as unknown as { __testToast?: () => void }).__testToast = () => {
+        toast.notify({
+          title: 'Тест попапу',
+          message: 'Якщо ти це бачиш — top-right popup-інфра рендериться правильно.',
+        });
+      };
+    }
     return () => {
       listeners.delete(setList);
     };
   }, []);
 
-  if (list.length === 0) return null;
+  if (!mounted || list.length === 0) return null;
 
   const topRight = list.filter((t) => t.position === 'top-right');
   const bottomRight = list.filter((t) => t.position === 'bottom-right');
 
-  return (
+  // Render via createPortal directly into <body> so the toasts escape ANY
+  // ancestor stacking context (transformed/blurred parents, etc.) that would
+  // otherwise pin `position: fixed` to a wrong containing block. Also pushes
+  // z-index well above the Modal (z-200) so the popup wins on top.
+  return createPortal(
     <>
       {topRight.length > 0 && (
         <div
-          className={`fixed z-[200] flex flex-col gap-2 max-w-[calc(100vw-2rem)] w-[360px] ${POSITION_CLS['top-right']}`}
+          className={`fixed z-[9999] flex flex-col gap-2 max-w-[calc(100vw-2rem)] w-[360px] ${POSITION_CLS['top-right']}`}
         >
           {topRight.map((t) => (
             <ToastCard key={t.id} t={t} />
@@ -196,13 +217,14 @@ export function Toaster() {
       )}
       {bottomRight.length > 0 && (
         <div
-          className={`fixed z-[200] flex flex-col gap-2 max-w-[calc(100vw-2rem)] w-[360px] ${POSITION_CLS['bottom-right']}`}
+          className={`fixed z-[9999] flex flex-col gap-2 max-w-[calc(100vw-2rem)] w-[360px] ${POSITION_CLS['bottom-right']}`}
         >
           {bottomRight.map((t) => (
             <ToastCard key={t.id} t={t} />
           ))}
         </div>
       )}
-    </>
+    </>,
+    document.body,
   );
 }
