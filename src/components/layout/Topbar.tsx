@@ -17,7 +17,13 @@ const PAGE_TITLES: Record<string, string> = {
   '/standards': 'Стандарти',
   '/working-groups': 'Робочі групи',
   '/meetings': 'Засідання',
+  // D-7: /protocols used to fall through to /meetings via prefix matching
+  // ("Засідання"); now it has its own title.
+  '/protocols': 'Протоколи',
   '/tasks': 'Завдання',
+  '/discussions': 'Обговорення',
+  '/reports': 'Звіт',
+  '/profile': 'Профіль',
   '/notifications': 'Сповіщення',
   '/admin': 'Адміністрування',
 };
