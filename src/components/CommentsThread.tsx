@@ -27,7 +27,17 @@ interface Comment {
 export function CommentsThread({ standardId }: { standardId: string }) {
   const { data: session } = useSession();
   const utils = trpc.useUtils();
-  const { data: comments, isLoading } = trpc.comment.list.useQuery({ standardId });
+  // Poll every 10s + on focus so a reply added in another tab / by another user
+  // shows up without a manual reload (the "counter changed but messages didn't"
+  // symptom Kir hit on the Обговорення tab).
+  const { data: comments, isLoading } = trpc.comment.list.useQuery(
+    { standardId },
+    {
+      refetchInterval: 10_000,
+      refetchIntervalInBackground: false,
+      refetchOnWindowFocus: true,
+    },
+  );
   const { data: standard } = trpc.standard.byId.useQuery({ id: standardId });
   const { data: workingGroup } = trpc.workingGroup.byId.useQuery(
     { id: standard?.workingGroupId ?? '' },
