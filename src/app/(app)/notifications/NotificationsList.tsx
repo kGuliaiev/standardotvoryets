@@ -194,7 +194,7 @@ export function NotificationsList() {
                   >
                     <button
                       onClick={() => openNotification(n.id, n.link ?? null)}
-                      className="w-full flex items-start gap-3 px-5 py-3.5 text-left hover:bg-pill/40"
+                      className="relative w-full flex items-start gap-3 px-5 py-3.5 text-left hover:bg-pill/40"
                     >
                       <div className="relative shrink-0 mt-0.5">
                         <span
@@ -207,25 +207,23 @@ export function NotificationsList() {
                         )}
                       </div>
                       <div className="flex-1 min-w-0">
-                        <div className="flex items-baseline justify-between gap-3">
-                          <p
-                            className={`truncate ${n.read ? 'text-mid font-medium' : 'text-ink font-semibold'}`}
-                          >
-                            {n.title}
-                          </p>
-                          <span
-                            className="text-[11px] text-light shrink-0"
-                            title={fullDateTime(n.createdAt)}
-                          >
-                            {isToday ? timeOfDay(n.createdAt) : fullDateTime(n.createdAt)}
-                          </span>
-                        </div>
+                        <p
+                          className={`truncate pr-2 ${n.read ? 'text-mid font-medium' : 'text-ink font-semibold'}`}
+                        >
+                          {n.title}
+                        </p>
                         {n.body && (
                           <p className="text-sm text-mid mt-0.5 line-clamp-2 whitespace-pre-line">
                             {n.body}
                           </p>
                         )}
                       </div>
+                      <span
+                        className="text-[11px] text-light shrink-0 mt-0.5"
+                        title={fullDateTime(n.createdAt)}
+                      >
+                        {isToday ? timeOfDay(n.createdAt) : fullDateTime(n.createdAt)}
+                      </span>
                       {!n.read && (
                         <span
                           role="button"
@@ -234,7 +232,7 @@ export function NotificationsList() {
                             e.stopPropagation();
                             markReadMutation.mutate({ id: n.id });
                           }}
-                          className="opacity-0 group-hover:opacity-100 text-mid hover:text-brand p-1.5 rounded hover:bg-pill transition-all"
+                          className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 text-mid hover:text-brand p-1.5 rounded hover:bg-pill transition-all"
                           title="Позначити прочитаним"
                         >
                           <Check className="w-4 h-4" />
