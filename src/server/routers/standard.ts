@@ -22,6 +22,40 @@ function userCtx(session: {
   };
 }
 
+/**
+ * Standard lifecycle state machine (B-16 / Pack 3). VOTING is only ever
+ * reachable via `vote.openVoting` (not changeStatus), and ADOPTED/REJECTED
+ * are only ever reachable via `vote.closeVoting` — so they're absent from
+ * every list here. ADMIN bypasses this for cleanup / emergency corrections;
+ * everyone else must follow the declared transitions.
+ */
+const STATUS_TRANSITIONS: Record<
+  'DRAFT' | 'IN_REVIEW' | 'VOTING' | 'ADOPTED' | 'REJECTED' | 'ARCHIVED',
+  ('DRAFT' | 'IN_REVIEW' | 'VOTING' | 'ADOPTED' | 'REJECTED' | 'ARCHIVED')[]
+> = {
+  DRAFT: ['IN_REVIEW', 'ARCHIVED'],
+  IN_REVIEW: ['DRAFT', 'ARCHIVED'],
+  VOTING: ['IN_REVIEW'], // manual cancel only; ADOPTED/REJECTED come from vote.closeVoting
+  ADOPTED: ['ARCHIVED'],
+  REJECTED: ['DRAFT', 'ARCHIVED'],
+  ARCHIVED: [],
+};
+
+function assertAllowedTransition(
+  from: keyof typeof STATUS_TRANSITIONS,
+  to: keyof typeof STATUS_TRANSITIONS,
+  isAdmin: boolean,
+) {
+  if (from === to || isAdmin) return;
+  if (!STATUS_TRANSITIONS[from].includes(to)) {
+    const allowed = STATUS_TRANSITIONS[from].join(', ') || '(жодного)';
+    throw new TRPCError({
+      code: 'BAD_REQUEST',
+      message: `Заборонений перехід "${from}" → "${to}". Дозволено: ${allowed}.`,
+    });
+  }
+}
+
 export const standardRouter = createTRPCRouter({
   // ── list (paginated + filtered) ───────────────────────────────────────
   list: protectedProcedure
@@ -296,6 +330,12 @@ export const standardRouter = createTRPCRouter({
         throw new TRPCError({ code: 'FORBIDDEN' });
       }
 
+      // Pack 3 / B-16: enforce the lifecycle on the server. ADMIN keeps an
+      // escape hatch; everyone else must follow STATUS_TRANSITIONS, so
+      // DRAFT → ADOPTED-style shortcuts past the voting flow are impossible.
+      const isAdmin = ctx.session.user.globalRole === 'ADMIN';
+      assertAllowedTransition(standard.status, input.status, isAdmin);
+
       const [updated] = await ctx.db.$transaction([
         ctx.db.standard.update({
           where: { id: input.id },
@@ -535,6 +575,19 @@ export const standardRouter = createTRPCRouter({
           !can(uctx, 'standard:changeStatus', t.workingGroupId)
         ) {
           skipped.push({ id: t.id, reason: 'no permission to change status' });
+          continue;
+        }
+        // Pack 3 / B-16: state-machine on bulk too. ADMIN bypasses.
+        if (
+          input.patch.status &&
+          input.patch.status !== t.status &&
+          !isAdmin &&
+          !STATUS_TRANSITIONS[t.status].includes(input.patch.status)
+        ) {
+          skipped.push({
+            id: t.id,
+            reason: `заборонений перехід ${t.status} → ${input.patch.status}`,
+          });
           continue;
         }
         // Permission: also editing meta on the *target* WG when moving
