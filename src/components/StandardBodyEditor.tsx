@@ -30,7 +30,7 @@ import {
   MessageSquarePlus,
 } from 'lucide-react';
 import { can } from '@/lib/rbac';
-import type { GlobalRole, WorkingGroupRole } from '@prisma/client';
+import type { GlobalRole, StandardStatus, WorkingGroupRole } from '@prisma/client';
 import type { RouterOutputs } from '@/lib/trpc/client';
 
 type SuggestionListItem = RouterOutputs['suggestion']['list'][number];
@@ -57,6 +57,10 @@ interface Props {
   bodyText: string | null;
   bodyUpdatedAt: Date | string | null;
   bodyUpdatedBy: { name: string } | null;
+  /** Lifecycle of the parent standard. When `IN_REVIEW`, direct WYSIWYG
+   *  editing is disabled (changes must go through Suggestions). Optional —
+   *  defaults to "not on review" for non-standard targets (documents). */
+  standardStatus?: StandardStatus | null;
 }
 
 type OpKind = 'REPLACE' | 'INSERT_AFTER' | 'DELETE';
@@ -86,7 +90,13 @@ const READONLY_PROSE_CLASSES =
   'prose-a:text-brand prose-code:bg-pill prose-code:px-1 prose-code:rounded ' +
   'prose-p:my-0 prose-headings:my-0';
 
-export function StandardBodyEditor({ target, bodyText, bodyUpdatedAt, bodyUpdatedBy }: Props) {
+export function StandardBodyEditor({
+  target,
+  bodyText,
+  bodyUpdatedAt,
+  bodyUpdatedBy,
+  standardStatus,
+}: Props) {
   const { data: session } = useSession();
   const utils = trpc.useUtils();
   const me = session?.user;
@@ -106,7 +116,14 @@ export function StandardBodyEditor({ target, bodyText, bodyUpdatedAt, bodyUpdate
   // read-only view + suggestion (пропозиція) flow. (This replaced the old
   // `standard:editMeta` gate on the body editor — editMeta now only governs
   // the standard's metadata card elsewhere.)
-  const canEditBody = userCtx ? can(userCtx, 'standard:editBody', target.workingGroupId) : false;
+  const rawCanEditBody = userCtx ? can(userCtx, 'standard:editBody', target.workingGroupId) : false;
+  // Pack 1: while the standard is "На розгляді", direct body editing is
+  // locked for everyone except ADMIN; changes must come through Suggestions.
+  // The flag lets the UI render a small notice instead of just silently
+  // hiding the "Редагування" tab.
+  const bodyLockedForReview =
+    target.kind === 'standard' && standardStatus === 'IN_REVIEW' && me?.globalRole !== 'ADMIN';
+  const canEditBody = rawCanEditBody && !bodyLockedForReview;
   const canSuggest = userCtx ? can(userCtx, 'comment:add', target.workingGroupId) : false;
 
   // Body is HTML emitted by TipTap (legacy plain-text bodies are migrated to
@@ -197,7 +214,10 @@ export function StandardBodyEditor({ target, bodyText, bodyUpdatedAt, bodyUpdate
   type BodyMode = 'view' | 'suggest' | 'edit';
   const [pickedMode, setPickedMode] = useState<BodyMode | null>(null);
   const defaultMode: BodyMode = canEditBody ? 'edit' : canSuggest ? 'suggest' : 'view';
-  const mode: BodyMode = pickedMode ?? defaultMode;
+  // Fall back if the user has 'edit' picked from a previous session but lost
+  // the right (e.g. status flipped to IN_REVIEW while they were on the page).
+  const mode: BodyMode =
+    pickedMode && (pickedMode !== 'edit' || canEditBody) ? pickedMode : defaultMode;
   // Switching AWAY from the editor clears any import-seed override so that
   // re-entering the editor seeds from the latest saved body — not the
   // pre-edit imported snapshot, which would visually drop (and then risk
