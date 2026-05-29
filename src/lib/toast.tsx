@@ -117,12 +117,6 @@ const VARIANT: Record<ToastVariant, { icon: typeof CheckCircle2; cls: string; ic
   },
 };
 
-const POSITION_CLS: Record<ToastPosition, string> = {
-  'bottom-right': 'bottom-4 right-4',
-  // Sits below the sticky topbar so it doesn't overlap the bell / theme toggle.
-  'top-right': 'top-20 right-4',
-};
-
 function ToastCard({ t }: { t: ToastItem }) {
   const router = useRouter();
   const v = VARIANT[t.variant];
@@ -201,24 +195,41 @@ export function Toaster() {
   const bottomRight = list.filter((t) => t.position === 'bottom-right');
 
   // Render via createPortal directly into <body> so the toasts escape ANY
-  // ancestor stacking context (transformed/blurred parents, etc.) that would
-  // otherwise pin `position: fixed` to a wrong containing block. Also pushes
-  // z-index well above the Modal (z-200) so the popup wins on top.
+  // ancestor stacking context (transformed/blurred parents, etc.). Critical
+  // positioning is done via inline `style` instead of Tailwind classes — that
+  // way the container does NOT depend on Tailwind's content-scan picking up
+  // `top-20` / `right-4` / `z-[9999]` (which is exactly the failure mode that
+  // kept biting us: container rendered with the classes but no CSS was emitted,
+  // so it appeared at 0,0 underneath everything).
+  const topRightStyle: React.CSSProperties = {
+    position: 'fixed',
+    top: '80px',
+    right: '16px',
+    zIndex: 9999,
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '8px',
+    width: '360px',
+    maxWidth: 'calc(100vw - 32px)',
+    pointerEvents: 'auto',
+  };
+  const bottomRightStyle: React.CSSProperties = {
+    ...topRightStyle,
+    top: undefined,
+    bottom: '16px',
+  };
+
   return createPortal(
     <>
       {topRight.length > 0 && (
-        <div
-          className={`fixed z-[9999] flex flex-col gap-2 max-w-[calc(100vw-2rem)] w-[360px] ${POSITION_CLS['top-right']}`}
-        >
+        <div style={topRightStyle} data-toast-stack="top-right">
           {topRight.map((t) => (
             <ToastCard key={t.id} t={t} />
           ))}
         </div>
       )}
       {bottomRight.length > 0 && (
-        <div
-          className={`fixed z-[9999] flex flex-col gap-2 max-w-[calc(100vw-2rem)] w-[360px] ${POSITION_CLS['bottom-right']}`}
-        >
+        <div style={bottomRightStyle} data-toast-stack="bottom-right">
           {bottomRight.map((t) => (
             <ToastCard key={t.id} t={t} />
           ))}
