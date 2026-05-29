@@ -525,15 +525,26 @@ export const suggestionRouter = createTRPCRouter({
       if (!can(userCtx(ctx.session), 'standard:editBody', target.workingGroupId)) {
         throw new TRPCError({ code: 'FORBIDDEN' });
       }
-      // Pack 1: a standard's body is read-only while it sits in IN_REVIEW
-      // ("На розгляді") — changes must go through Suggestions so the audit
-      // trail is preserved. ADMIN keeps an emergency escape.
-      if (target.kind === 'standard' && ctx.session.user.globalRole !== 'ADMIN') {
-        const std = await ctx.db.standard.findUnique({
-          where: { id: target.standardId },
-          select: { status: true },
-        });
-        if (std?.status === 'IN_REVIEW') {
+      // Pack 1: the body (standard's own OR an attached document's) is
+      // read-only while the parent standard sits in IN_REVIEW ("На розгляді").
+      // Changes must go through Suggestions so the audit trail is preserved.
+      // ADMIN keeps an emergency escape.
+      if (ctx.session.user.globalRole !== 'ADMIN') {
+        const parentStatus =
+          target.kind === 'standard'
+            ? (
+                await ctx.db.standard.findUnique({
+                  where: { id: target.standardId },
+                  select: { status: true },
+                })
+              )?.status
+            : (
+                await ctx.db.document.findUnique({
+                  where: { id: target.documentId },
+                  select: { standard: { select: { status: true } } },
+                })
+              )?.standard.status;
+        if (parentStatus === 'IN_REVIEW') {
           throw new TRPCError({
             code: 'BAD_REQUEST',
             message:
@@ -596,15 +607,25 @@ export const suggestionRouter = createTRPCRouter({
       if (!can(userCtx(ctx.session), 'standard:editBody', target.workingGroupId)) {
         throw new TRPCError({ code: 'FORBIDDEN' });
       }
-      // Pack 1: standard's body frozen on IN_REVIEW (the .docx import path
-      // would also wipe every existing suggestion / inline comment). ADMIN
-      // keeps an emergency escape.
-      if (target.kind === 'standard' && ctx.session.user.globalRole !== 'ADMIN') {
-        const std = await ctx.db.standard.findUnique({
-          where: { id: target.standardId },
-          select: { status: true },
-        });
-        if (std?.status === 'IN_REVIEW') {
+      // Pack 1: body (standard's or attached document's) frozen on IN_REVIEW
+      // — the .docx import path would also wipe every existing suggestion /
+      // inline comment. ADMIN keeps an emergency escape.
+      if (ctx.session.user.globalRole !== 'ADMIN') {
+        const parentStatus =
+          target.kind === 'standard'
+            ? (
+                await ctx.db.standard.findUnique({
+                  where: { id: target.standardId },
+                  select: { status: true },
+                })
+              )?.status
+            : (
+                await ctx.db.document.findUnique({
+                  where: { id: target.documentId },
+                  select: { standard: { select: { status: true } } },
+                })
+              )?.standard.status;
+        if (parentStatus === 'IN_REVIEW') {
           throw new TRPCError({
             code: 'BAD_REQUEST',
             message:
