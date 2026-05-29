@@ -41,7 +41,16 @@ async function emit(args: EmitArgs) {
   if (args.channelEnabled.email && settings.channelEmail) channels.push('email');
   if (channels.length === 0) return;
 
-  const targets = args.recipients.filter((r) => r.id !== args.excludeUserId);
+  // Dedupe by user id — callers may pass overlapping arrays
+  // (e.g. WG members + center directors when a user is both).
+  const seen = new Set<string>();
+  const targets = args.recipients
+    .filter((r) => r.id !== args.excludeUserId)
+    .filter((r) => {
+      if (seen.has(r.id)) return false;
+      seen.add(r.id);
+      return true;
+    });
 
   await Promise.all(
     targets.flatMap((u) => {
@@ -298,10 +307,17 @@ export async function notifyVoteOpened(db: PrismaClient, votingId: string, actor
     if (!v) return;
     const settings = await getSettings(db);
     if (!settings.voteOpenedNotify) return;
-    const recipients = await workingGroupRecipients(db, v.standard.workingGroupId);
+    // Per spec: voting-opened pings ALL WG members (including secretary
+    // and guests) PLUS DIRECTOR/ADMIN — so center leadership is aware
+    // of every vote. Overlap (a director who's also a WG member) is
+    // deduped by emit().
+    const [wgMembers, leadership] = await Promise.all([
+      workingGroupRecipients(db, v.standard.workingGroupId),
+      directorAndAdminRecipients(db),
+    ]);
     await emit({
       db,
-      recipients,
+      recipients: [...wgMembers, ...leadership],
       excludeUserId: actorUserId,
       type: 'VOTE_OPENED',
       title: `Відкрито голосування: ${v.title}`,

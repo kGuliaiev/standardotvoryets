@@ -9,7 +9,11 @@ interface DocumentUploadModalProps {
   open: boolean;
   onClose: () => void;
   standardId: string;
-  onSaved?: () => void;
+  /** Fires with the new Document's id + type after a successful create/upload.
+   *  Parent decides what to do next — e.g. auto-open in editor for
+   *  STANDARD/TECH_SPEC. The callback is kept optional and zero-arg-safe
+   *  via default values for existing call sites. */
+  onSaved?: (newDoc?: { id: string; type: UploadableDocType }) => void;
   /** When true the "Дозволити правки" checkbox starts ticked — used
    *  by the "Імпортувати з Word" entry point that's specifically
    *  intended for collaborative-editing uploads. */
@@ -17,6 +21,10 @@ interface DocumentUploadModalProps {
   /** Which tab the modal opens on. "+ Створити" opens on 'empty',
    *  "Імпортувати з Word" / generic upload opens on 'upload'. */
   defaultMode?: 'upload' | 'empty';
+  /** Default document type to preselect in the picker. Parent computes
+   *  the smart default based on what's already attached to the standard
+   *  (e.g. when there's no TECH_SPEC yet → TECH_SPEC; otherwise STANDARD). */
+  initialType?: UploadableDocType;
 }
 
 // Types offered in the create / upload picker. Mirrors UPLOADABLE_DOC_TYPES
@@ -51,6 +59,7 @@ export function DocumentUploadModal({
   onSaved,
   defaultAllowEdits = false,
   defaultMode = 'upload',
+  initialType = 'STANDARD',
 }: DocumentUploadModalProps) {
   const utils = trpc.useUtils();
   // 'upload' — pick a file from disk; 'empty' — type a filename and
@@ -59,7 +68,7 @@ export function DocumentUploadModal({
   const [file, setFile] = useState<File | null>(null);
   const [emptyFilename, setEmptyFilename] = useState('');
   const [version, setVersion] = useState('v1.0');
-  const [type, setType] = useState<UploadableDocType>('STANDARD');
+  const [type, setType] = useState<UploadableDocType>(initialType);
   const [isCurrent, setIsCurrent] = useState(true);
   // Default OFF: most uploads are reference material; the leader opts in
   // for documents they want the WG to collaboratively edit. Override
@@ -80,14 +89,14 @@ export function DocumentUploadModal({
       setFile(null);
       setEmptyFilename('');
       setVersion('v1.0');
-      setType('STANDARD');
+      setType(initialType);
       setIsCurrent(true);
       setAllowEdits(defaultAllowEdits);
       setNote('');
       setError(null);
       setProgress('idle');
     }
-  }, [open, defaultAllowEdits, defaultMode]);
+  }, [open, defaultAllowEdits, defaultMode, initialType]);
 
   // Only .docx can be inlined as editable HTML — the server will convert
   // it via mammoth. For PDF/XLSX/etc. we disable the option.
@@ -144,7 +153,7 @@ export function DocumentUploadModal({
       }
       try {
         setProgress('confirming');
-        await createEmptyMutation.mutateAsync({
+        const created = await createEmptyMutation.mutateAsync({
           standardId,
           filename: name,
           type,
@@ -153,7 +162,7 @@ export function DocumentUploadModal({
           isCurrent: isCurrent && HAS_CURRENT_FLAG.has(type),
         });
         invalidateAfterUpload();
-        onSaved?.();
+        onSaved?.({ id: created.id, type });
         onClose();
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Не вдалося створити документ');
@@ -193,8 +202,19 @@ export function DocumentUploadModal({
         throw new Error(`HTTP ${resp.status}${detail ? ` · ${detail}` : ''}`);
       }
       setProgress('confirming');
+      // Read the created doc id from the JSON response so the parent can
+      // auto-open the editor on STANDARD/TECH_SPEC uploads. Response was
+      // not consumed above (we only inspected it on !resp.ok), so .json()
+      // here is the first read.
+      let createdId: string | null = null;
+      try {
+        const j = (await resp.json()) as { id?: string } | null;
+        createdId = j?.id ?? null;
+      } catch {
+        /* the row was created — parent will just skip the auto-open */
+      }
       invalidateAfterUpload();
-      onSaved?.();
+      onSaved?.(createdId ? { id: createdId, type } : undefined);
       onClose();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Помилка завантаження');

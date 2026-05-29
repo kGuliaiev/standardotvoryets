@@ -85,9 +85,13 @@ interface NotifyArgs {
 }
 
 export const toast = {
-  success: (message: string) => push(message, 'success', 4000),
-  error: (message: string) => push(message, 'error', 6000),
-  info: (message: string) => push(message, 'info', 4000),
+  // All status toasts now live in the top-right — same column as the
+  // new-notification popups, so the user always looks in one place for
+  // app-emitted messages. Per UX spec: filled colored cards + generous
+  // padding, see ToastCard / VARIANT below.
+  success: (message: string) => push(message, 'success', 4000, { position: 'top-right' }),
+  error: (message: string) => push(message, 'error', 6000, { position: 'top-right' }),
+  info: (message: string) => push(message, 'info', 4000, { position: 'top-right' }),
   /** Top-right notification popup (5s, optional title + click-through). */
   notify: (args: NotifyArgs) =>
     push(args.message, 'info', args.durationMs ?? 5000, {
@@ -99,21 +103,47 @@ export const toast = {
   dismiss,
 };
 
-const VARIANT: Record<ToastVariant, { icon: typeof CheckCircle2; cls: string; iconCls: string }> = {
+// Per UX spec: filled cards with strong colored backgrounds, white
+// foreground on success/error so they read instantly against the dark
+// shell. `info` stays neutral (used by the notification popup channel,
+// where bright colors would feel like a status alert).
+const VARIANT: Record<
+  ToastVariant,
+  {
+    icon: typeof CheckCircle2;
+    cardCls: string;
+    iconCls: string;
+    titleCls: string;
+    bodyCls: string;
+    closeCls: string;
+  }
+> = {
   success: {
     icon: CheckCircle2,
-    cls: 'border-green-200 dark:border-green-900/60',
-    iconCls: 'text-green-600 dark:text-green-400',
+    cardCls:
+      'bg-emerald-600 dark:bg-emerald-700 border-emerald-700 dark:border-emerald-600 shadow-emerald-900/40',
+    iconCls: 'text-white',
+    titleCls: 'text-white',
+    bodyCls: 'text-emerald-50',
+    closeCls: 'text-emerald-100 hover:text-white',
   },
   error: {
     icon: AlertCircle,
-    cls: 'border-red-200 dark:border-red-900/60',
-    iconCls: 'text-red-600 dark:text-red-400',
+    cardCls: 'bg-rose-600 dark:bg-rose-700 border-rose-700 dark:border-rose-600 shadow-rose-900/40',
+    iconCls: 'text-white',
+    titleCls: 'text-white',
+    bodyCls: 'text-rose-50',
+    closeCls: 'text-rose-100 hover:text-white',
   },
   info: {
     icon: Info,
-    cls: 'border-hairline',
+    // Neutral filled card — strong-enough background to stand off the
+    // page chrome but no semantic colour.
+    cardCls: 'bg-card border-hairline shadow-black/30 dark:shadow-black/60',
     iconCls: 'text-brand',
+    titleCls: 'text-ink',
+    bodyCls: 'text-mid',
+    closeCls: 'text-light hover:text-ink',
   },
 };
 
@@ -141,12 +171,16 @@ function ToastCard({ t }: { t: ToastItem }) {
       role="status"
       aria-live="polite"
       onClick={clickable ? handleCardClick : undefined}
-      className={`flex items-start gap-2.5 rounded-xl border bg-card shadow-lg px-3.5 py-3 text-sm text-ink ${v.cls} ${clickable ? 'cursor-pointer hover:shadow-xl transition-shadow' : ''}`}
+      className={`flex items-start gap-3 rounded-2xl border-2 px-5 py-4 text-sm shadow-2xl ${v.cardCls} ${clickable ? 'cursor-pointer hover:scale-[1.02] transition-transform' : ''}`}
     >
-      <Icon className={`w-5 h-5 shrink-0 mt-0.5 ${v.iconCls}`} />
+      <Icon className={`w-6 h-6 shrink-0 mt-0.5 ${v.iconCls}`} />
       <div className="flex-1 min-w-0">
-        {t.title && <div className="font-semibold leading-snug break-words mb-0.5">{t.title}</div>}
-        <div className="leading-snug break-words text-mid">{t.message}</div>
+        {t.title && (
+          <div className={`font-semibold leading-snug break-words mb-1 ${v.titleCls}`}>
+            {t.title}
+          </div>
+        )}
+        <div className={`leading-snug break-words ${v.bodyCls}`}>{t.message}</div>
       </div>
       <button
         type="button"
@@ -155,7 +189,7 @@ function ToastCard({ t }: { t: ToastItem }) {
           dismiss(t.id);
         }}
         aria-label="Закрити"
-        className="shrink-0 text-light hover:text-ink transition-colors"
+        className={`shrink-0 transition-colors ${v.closeCls}`}
       >
         <X className="w-4 h-4" />
       </button>
@@ -204,13 +238,13 @@ export function Toaster() {
   const topRightStyle: React.CSSProperties = {
     position: 'fixed',
     top: '80px',
-    right: '16px',
+    right: '24px',
     zIndex: 9999,
     display: 'flex',
     flexDirection: 'column',
-    gap: '8px',
-    width: '360px',
-    maxWidth: 'calc(100vw - 32px)',
+    gap: '10px',
+    width: '380px',
+    maxWidth: 'calc(100vw - 48px)',
     pointerEvents: 'auto',
   };
   const bottomRightStyle: React.CSSProperties = {

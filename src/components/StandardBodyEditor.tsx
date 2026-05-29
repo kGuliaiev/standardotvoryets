@@ -71,6 +71,12 @@ interface Props {
     votingSeqNumber: number | null;
     closedAt: Date | string | null;
   } | null;
+  /** Initial mode for the body editor. Default is `'view'` (read-only).
+   *  Parent passes `'edit'` when it makes sense to land the user
+   *  directly in the WYSIWYG — e.g. immediately after creating a new
+   *  STANDARD / TECH_SPEC document. Ignored when the user lacks edit
+   *  permission (falls back to view/suggest as before). */
+  initialMode?: 'view' | 'suggest' | 'edit';
 }
 
 type OpKind = 'REPLACE' | 'INSERT_AFTER' | 'DELETE';
@@ -108,6 +114,7 @@ export function StandardBodyEditor({
   standardStatus,
   documentLocked = false,
   documentLockInfo = null,
+  initialMode,
 }: Props) {
   const { data: session } = useSession();
   const utils = trpc.useUtils();
@@ -233,12 +240,15 @@ export function StandardBodyEditor({
   // can track permissions as the session resolves (avoids landing on the
   // wrong mode during the brief window before `me` loads).
   type BodyMode = 'view' | 'suggest' | 'edit';
-  const [pickedMode, setPickedMode] = useState<BodyMode | null>(null);
-  // Always open in read-only "view" — even when the current user CAN
-  // edit. Per-user spec: leaders shouldn't land in WYSIWYG by accident
+  // Seed pickedMode from `initialMode` when the parent asked for a
+  // specific landing mode (e.g. 'edit' right after a STANDARD/TECH_SPEC
+  // doc was created). Otherwise null = follow defaultMode.
+  const [pickedMode, setPickedMode] = useState<BodyMode | null>(initialMode ?? null);
+  // Default is read-only "view" everywhere — even when the current user
+  // CAN edit. Per spec: leaders shouldn't land in WYSIWYG by accident
   // and start scrolling/clicking inside an editable surface; they
   // explicitly switch to "Редагування" via the toggle when they intend
-  // to write. Read-only stays the safe default everywhere.
+  // to write.
   const defaultMode: BodyMode = 'view';
   // Fall back if the user has 'edit' picked from a previous session but lost
   // the right (e.g. status flipped to IN_REVIEW while they were on the page).

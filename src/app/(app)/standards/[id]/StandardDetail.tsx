@@ -168,6 +168,7 @@ export function StandardDetail({ id }: { id: string }) {
 
   const changeStatus = trpc.standard.changeStatus.useMutation({
     onSuccess: invalidateStandardLists,
+    onError: (e) => toast.error(e.message),
   });
   const castVote = trpc.vote.cast.useMutation({
     onSuccess: () => {
@@ -248,6 +249,12 @@ export function StandardDetail({ id }: { id: string }) {
   // ID of the editable document whose collaborative editor is currently
   // shown as a fullscreen modal (null = no editor open).
   const [editDocId, setEditDocId] = useState<string | null>(null);
+  // When the editor opens because the user JUST created the doc (and
+  // it's a STANDARD or TECH_SPEC — the document types that the WG
+  // expects to write into), we override the default 'view' mode and
+  // land directly in 'edit'. Reset after consumption so reopening the
+  // same doc later starts in view again.
+  const [editDocInitialMode, setEditDocInitialMode] = useState<'view' | 'edit'>('view');
   // Separate state for the doc-meta edit modal (filename, type,
   // version, isCurrent, allowEdits) — the body editor stays as
   // `editDocId`.
@@ -433,16 +440,27 @@ export function StandardDetail({ id }: { id: string }) {
                 </button>
               )}
               {canChangeStatus &&
-                STATUS_TRANSITIONS[standard.status].map((next) => (
-                  <button
-                    key={next}
-                    onClick={() => changeStatus.mutate({ id, status: next })}
-                    disabled={changeStatus.isPending}
-                    className="px-3 py-1.5 text-xs font-medium rounded-lg border border-hairline hover:bg-page text-ink transition-colors disabled:opacity-50"
-                  >
-                    → {STATUS_LABELS[next]}
-                  </button>
-                ))}
+                STATUS_TRANSITIONS[standard.status].map((next) => {
+                  // DRAFT → IN_REVIEW requires at least one active TECH_SPEC
+                  // doc (per spec). Mirrored server-side in standard.changeStatus,
+                  // so this is a UX hint — the server would reject anyway.
+                  // ADMIN bypasses the gate.
+                  const goingToReview = next === 'IN_REVIEW' && standard.status === 'DRAFT';
+                  const hasTechSpec =
+                    standard.documents?.some((d) => d.type === 'TECH_SPEC' && !d.lockedAt) ?? false;
+                  const reviewBlocked = goingToReview && !hasTechSpec && !isAdmin;
+                  return (
+                    <button
+                      key={next}
+                      onClick={() => changeStatus.mutate({ id, status: next })}
+                      disabled={changeStatus.isPending || reviewBlocked}
+                      title={reviewBlocked ? 'Спочатку завантажте документ типу ТЗ' : undefined}
+                      className="px-3 py-1.5 text-xs font-medium rounded-lg border border-hairline hover:bg-page text-ink transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      → {STATUS_LABELS[next]}
+                    </button>
+                  );
+                })}
               {canChangeStatus && standard.status === 'IN_REVIEW' && canOpenVoting && (
                 <Link
                   href={`/standards/${id}/open-voting`}
@@ -1357,9 +1375,30 @@ export function StandardDetail({ id }: { id: string }) {
         open={docModalOpen}
         onClose={() => setDocModalOpen(false)}
         standardId={id}
-        onSaved={() => void refetch()}
+        onSaved={(newDoc) => {
+          void refetch();
+          // Drop the user straight into the editor for newly-created
+          // STANDARD / TECH_SPEC documents (the spec'd ones the WG is
+          // expected to write into). Anything else closes the modal
+          // and stays in the documents list as before.
+          if (newDoc && (newDoc.type === 'STANDARD' || newDoc.type === 'TECH_SPEC')) {
+            setEditDocInitialMode('edit');
+            setEditDocId(newDoc.id);
+          }
+        }}
         defaultAllowEdits={uploadAllowEditsDefault}
         defaultMode={docModalMode}
+        initialType={(() => {
+          // Smart default per spec:
+          //   - no STANDARD yet AND there IS a TECH_SPEC → start with STANDARD
+          //   - no STANDARD AND no TECH_SPEC          → start with TECH_SPEC
+          //   - everything already exists              → ATTACHMENT (safe)
+          const hasStd = standard.documents?.some((d) => d.type === 'STANDARD' && !d.lockedAt);
+          const hasTz = standard.documents?.some((d) => d.type === 'TECH_SPEC' && !d.lockedAt);
+          if (!hasStd && hasTz) return 'STANDARD';
+          if (!hasStd && !hasTz) return 'TECH_SPEC';
+          return 'ATTACHMENT';
+        })()}
       />
 
       {/* Second-stage confirmation for document deletion. The first
@@ -1482,7 +1521,11 @@ export function StandardDetail({ id }: { id: string }) {
           return (
             <Modal
               open={!!editDocId}
-              onClose={() => setEditDocId(null)}
+              onClose={() => {
+                setEditDocId(null);
+                // Reset so re-opening this doc later starts in view mode.
+                setEditDocInitialMode('view');
+              }}
               title={`${titlePrefix}: ${doc.filename}`}
               size="full"
             >
@@ -1506,6 +1549,7 @@ export function StandardDetail({ id }: { id: string }) {
                       }
                     : null
                 }
+                initialMode={editDocInitialMode}
               />
             </Modal>
           );

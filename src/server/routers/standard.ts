@@ -343,6 +343,22 @@ export const standardRouter = createTRPCRouter({
       const isAdmin = ctx.session.user.globalRole === 'ADMIN';
       assertAllowedTransition(standard.status, input.status, isAdmin);
 
+      // Per spec: DRAFT → IN_REVIEW requires at least one active (unlocked)
+      // ТЗ on the standard. Without a TZ there's nothing to review.
+      // ADMIN keeps the escape hatch (e.g. data-recovery).
+      if (input.status === 'IN_REVIEW' && standard.status === 'DRAFT' && !isAdmin) {
+        const techSpecCount = await ctx.db.document.count({
+          where: { standardId: input.id, type: 'TECH_SPEC', lockedAt: null },
+        });
+        if (techSpecCount === 0) {
+          throw new TRPCError({
+            code: 'BAD_REQUEST',
+            message:
+              'Спочатку завантажте документ типу «ТЗ» — без нього стандарт не можна перевести «На розгляд».',
+          });
+        }
+      }
+
       const [updated] = await ctx.db.$transaction([
         ctx.db.standard.update({
           where: { id: input.id },
