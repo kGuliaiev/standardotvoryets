@@ -160,8 +160,29 @@ export function StandardDetail({ id }: { id: string }) {
   const changeStatus = trpc.standard.changeStatus.useMutation({
     onSuccess: invalidateStandardLists,
   });
-  const castVote = trpc.vote.cast.useMutation({ onSuccess: () => void refetch() });
-  const closeVoting = trpc.vote.closeVoting.useMutation({ onSuccess: invalidateStandardLists });
+  const castVote = trpc.vote.cast.useMutation({
+    onSuccess: () => {
+      void utils.vote.current.invalidate({ standardId: id });
+      void utils.vote.history.invalidate({ standardId: id });
+      void refetch();
+    },
+    onError: (e) => toast.error(e.message),
+  });
+  const closeVoting = trpc.vote.closeVoting.useMutation({
+    onSuccess: (result) => {
+      const verdict =
+        result?.status === 'ADOPTED'
+          ? 'прийнято'
+          : result?.status === 'REJECTED'
+            ? 'відхилено'
+            : 'завершено';
+      toast.success(`Голосування ${verdict}`);
+      void utils.vote.current.invalidate({ standardId: id });
+      void utils.vote.history.invalidate({ standardId: id });
+      invalidateStandardLists();
+    },
+    onError: (e) => toast.error(e.message),
+  });
   // Overdue votes used to auto-close inside the vote.current GET (B-9). Now the
   // page asks the server to close it once, via a privileged + race-safe
   // mutation. Non-leaders get FORBIDDEN here (harmless, swallowed); a leader's
@@ -1393,6 +1414,7 @@ export function StandardDetail({ id }: { id: string }) {
                 bodyText={doc.bodyHtml}
                 bodyUpdatedAt={doc.bodyUpdatedAt}
                 bodyUpdatedBy={doc.bodyUpdatedBy}
+                standardStatus={standard.status}
               />
             </Modal>
           );
