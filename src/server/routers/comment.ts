@@ -47,7 +47,10 @@ export const commentRouter = createTRPCRouter({
         include: {
           author: { select: { id: true, name: true, avatarUrl: true } },
         },
-        orderBy: { createdAt: 'asc' },
+        // Newest comments first (user request — старі залишаються знизу).
+        // Replies still build correctly client-side via parentId; the visible
+        // top-level thread now reads "fresh on top".
+        orderBy: { createdAt: 'desc' },
       });
     }),
 
