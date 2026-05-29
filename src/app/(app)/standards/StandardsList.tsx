@@ -268,6 +268,41 @@ export function StandardsList() {
             );
           })}
         </div>
+
+        {/* D-4: visible "filter active" indicator. The WG multi-select persists
+            in localStorage, so without this row the user could reopen
+            /standards and think the list is empty instead of filtered. */}
+        {selectedWgs.length > 0 && (
+          <div className="flex items-center gap-2 flex-wrap pt-2 border-t border-hairline">
+            <span className="text-[11px] text-mid font-semibold uppercase tracking-wider">
+              Фільтр:
+            </span>
+            {selectedWgs.map((g) => (
+              <span
+                key={g.id}
+                className="inline-flex items-center gap-1.5 rounded-md bg-pill px-2 py-1 text-xs"
+              >
+                <span className="w-2 h-2 rounded-full" style={{ backgroundColor: g.color }} />
+                <span className="font-mono text-mid">{g.code}</span>
+                <button
+                  type="button"
+                  onClick={() => toggleWg(g.id)}
+                  aria-label={`Прибрати ${g.code}`}
+                  className="text-light hover:text-red-600 transition-colors"
+                >
+                  <XIcon className="w-3 h-3" />
+                </button>
+              </span>
+            ))}
+            <button
+              type="button"
+              onClick={clearWgs}
+              className="text-[11px] text-mid hover:text-brand underline underline-offset-2 ml-1"
+            >
+              Скинути все
+            </button>
+          </div>
+        )}
       </div>
 
       {/* Table */}

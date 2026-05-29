@@ -314,13 +314,14 @@ export function WorkingGroupDetail({ id }: Props) {
             <span className="font-mono font-semibold text-ink shrink-0">{group.code}</span>
             <span className="text-light">·</span>
             <span className="font-semibold text-ink flex-1 min-w-0">{group.name}</span>
-            <span className="inline-flex items-center gap-1.5 shrink-0">
-              <span
-                className="w-4 h-4 rounded border border-hairline"
-                style={{ backgroundColor: group.color }}
-              />
-              <span className="font-mono text-[11px] text-light">{group.color}</span>
-            </span>
+            <span
+              className="w-4 h-4 rounded border border-hairline shrink-0"
+              style={{ backgroundColor: group.color }}
+              title={`Колір РГ: ${group.color}`}
+            />
+            {/* D-9: hex code was rendered next to the swatch as a mono code
+                block, which read as a debug leak. The swatch alone (with the
+                hex in a tooltip) is enough — admins still see it on hover. */}
           </div>
           {group.description && (
             <div>
