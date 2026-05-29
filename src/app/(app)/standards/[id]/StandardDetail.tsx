@@ -300,6 +300,13 @@ export function StandardDetail({ id }: { id: string }) {
   const againstVotes = currentVoting?.votes.filter((v) => v.choice === 'AGAINST').length ?? 0;
   const abstainVotes = currentVoting?.votes.filter((v) => v.choice === 'ABSTAIN').length ?? 0;
   const totalVotes = currentVoting?.votes.length ?? 0;
+  // Eligible voters = active WG members with role LEADER/DEPUTY/MEMBER.
+  // SECRETARY does not vote (organizes), GUEST does not vote (observer).
+  // This is the denominator for the >50% pass threshold — keep in sync
+  // with the server logic in vote.closeVoting / vote.closeOverdue.
+  const eligibleVoters = standard.workingGroup.members.filter(
+    (m) => (m.role === 'LEADER' || m.role === 'DEPUTY' || m.role === 'MEMBER') && m.user.isActive,
+  ).length;
 
   const openTasks = tasks?.filter((t) => t.status === 'OPEN' || t.status === 'IN_PROGRESS') ?? [];
   const doneTasks = tasks?.filter((t) => t.status === 'DONE') ?? [];
@@ -840,31 +847,46 @@ export function StandardDetail({ id }: { id: string }) {
                       )}
                     </div>
 
-                    {/* Results bar */}
+                    {/* Results bar. Width is computed against eligibleVoters
+                        (not just the votes cast) so the bar visually shows the
+                        >50% threshold of the WG, matching the close-rule. */}
                     <div className="mb-4">
-                      <div className="flex gap-1 h-3 rounded-full overflow-hidden bg-pill">
-                        {totalVotes > 0 && (
+                      <div className="flex gap-1 h-3 rounded-full overflow-hidden bg-pill relative">
+                        {eligibleVoters > 0 && (
                           <>
                             <div
                               className="bg-green-500 transition-all"
-                              style={{ width: `${(forVotes / totalVotes) * 100}%` }}
+                              style={{ width: `${(forVotes / eligibleVoters) * 100}%` }}
                             />
                             <div
                               className="bg-red-500 transition-all"
-                              style={{ width: `${(againstVotes / totalVotes) * 100}%` }}
+                              style={{ width: `${(againstVotes / eligibleVoters) * 100}%` }}
                             />
                             <div
                               className="bg-slate-300 transition-all"
-                              style={{ width: `${(abstainVotes / totalVotes) * 100}%` }}
+                              style={{ width: `${(abstainVotes / eligibleVoters) * 100}%` }}
                             />
                           </>
                         )}
+                        {/* 50% threshold marker */}
+                        {eligibleVoters > 0 && (
+                          <div
+                            className="absolute top-0 bottom-0 w-px bg-ink/40"
+                            style={{ left: '50%' }}
+                            title="Поріг 50%"
+                          />
+                        )}
                       </div>
-                      <div className="flex gap-4 mt-2 text-xs">
-                        <span className="text-green-700">✓ За: {forVotes}</span>
+                      <div className="flex gap-4 mt-2 text-xs flex-wrap">
+                        <span className="text-green-700">
+                          ✓ За: {forVotes} з {eligibleVoters}
+                        </span>
                         <span className="text-red-700">✗ Проти: {againstVotes}</span>
                         <span className="text-mid">○ Утрим.: {abstainVotes}</span>
-                        <span className="text-light ml-auto">Всього: {totalVotes}</span>
+                        <span className="text-light ml-auto">
+                          Проголосувало: {totalVotes}/{eligibleVoters}
+                          {' · '}для прийняття потрібно &gt;{Math.floor(eligibleVoters / 2)}
+                        </span>
                       </div>
                     </div>
 
@@ -910,8 +932,13 @@ export function StandardDetail({ id }: { id: string }) {
                         .map((v) => {
                           const f = v.votes.filter((x) => x.choice === 'FOR').length;
                           const a = v.votes.filter((x) => x.choice === 'AGAINST').length;
-                          const total = v.votes.length;
-                          const passed = total > 0 && f / (f + a) > 0.5;
+                          const ab = v.votes.filter((x) => x.choice === 'ABSTAIN').length;
+                          // Denominator = snapshot of eligible voters at close
+                          // (preferred). Falls back to current eligibleVoters
+                          // for pre-snapshot rows, then to f+a if neither is
+                          // available — old behaviour for the very oldest data.
+                          const denom = v.eligibleAtClose ?? (eligibleVoters || f + a);
+                          const passed = denom > 0 && f / denom > 0.5;
                           return (
                             <div key={v.id} className="px-5 py-4">
                               <div className="flex items-center gap-3 mb-1">
@@ -923,8 +950,7 @@ export function StandardDetail({ id }: { id: string }) {
                                 <span className="text-sm font-medium text-ink">{v.title}</span>
                               </div>
                               <p className="text-xs text-light">
-                                За: {f} / Проти: {a} / Утрим:{' '}
-                                {v.votes.filter((x) => x.choice === 'ABSTAIN').length} ·{' '}
+                                За: {f} з {denom} / Проти: {a} / Утрим: {ab} ·{' '}
                                 {v.closedAt ? formatDate(v.closedAt) : ''}
                               </p>
                             </div>

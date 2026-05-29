@@ -160,17 +160,34 @@ export const voteRouter = createTRPCRouter({
         throw new TRPCError({ code: 'BAD_REQUEST', message: 'Голосування вже завершено' });
       }
 
-      // Calculate result
+      // Pass threshold: forVotes / eligibleCount > 0.5
+      // eligibleCount = active WG members with role LEADER/DEPUTY/MEMBER.
+      // SECRETARY does NOT vote, GUEST does NOT vote — they're excluded
+      // from the denominator. ABSTAIN votes count as "не за" (so a vote
+      // with 1 abstain and 0 for/against gets REJECTED, which matches
+      // the spec "більшість усіх голосуючих").
+      const eligibleCount = await ctx.db.workingGroupMember.count({
+        where: {
+          workingGroupId: voting.standard.workingGroupId,
+          role: { in: ['LEADER', 'DEPUTY', 'MEMBER'] },
+          user: { isActive: true },
+        },
+      });
+
       const forVotes = voting.votes.filter((v) => v.choice === 'FOR').length;
       const againstVotes = voting.votes.filter((v) => v.choice === 'AGAINST').length;
       const total = forVotes + againstVotes;
-      const adopted = total > 0 ? forVotes / total > 0.5 : false;
+      const adopted = eligibleCount > 0 && forVotes / eligibleCount > 0.5;
       const newStatus = adopted ? 'ADOPTED' : 'REJECTED';
 
       await ctx.db.$transaction([
         ctx.db.voting.update({
           where: { id: input.votingId },
-          data: { status: 'CLOSED', closedAt: new Date() },
+          data: {
+            status: 'CLOSED',
+            closedAt: new Date(),
+            eligibleAtClose: eligibleCount,
+          },
         }),
         ctx.db.standard.update({
           where: { id: voting.standard.id },
@@ -182,7 +199,7 @@ export const voteRouter = createTRPCRouter({
             fromStatus: 'VOTING',
             toStatus: newStatus,
             changedById: ctx.session.user.id,
-            note: `Голосування завершено. За: ${forVotes}, Проти: ${againstVotes}`,
+            note: `Голосування завершено. За: ${forVotes} з ${eligibleCount}, Проти: ${againstVotes}`,
           },
         }),
       ]);
@@ -194,7 +211,7 @@ export const voteRouter = createTRPCRouter({
         entityId: input.votingId,
         before: { status: 'OPEN' },
         after: { status: 'CLOSED' },
-        note: `Завершено. За: ${forVotes}, проти: ${againstVotes}. Результат: ${newStatus}`,
+        note: `Завершено. За: ${forVotes} з ${eligibleCount}, проти: ${againstVotes}. Результат: ${newStatus}`,
       });
 
       await notifyVoteClosed(
@@ -204,7 +221,7 @@ export const voteRouter = createTRPCRouter({
         ctx.session.user.id,
       );
 
-      return { status: newStatus, forVotes, againstVotes, total };
+      return { status: newStatus, forVotes, againstVotes, total, eligibleCount };
     }),
 
   // ── results ───────────────────────────────────────────────────────────
@@ -270,10 +287,19 @@ export const voteRouter = createTRPCRouter({
         throw new TRPCError({ code: 'FORBIDDEN' });
       }
 
+      // Same denominator rule as closeVoting — see comments there.
+      const eligibleCount = await ctx.db.workingGroupMember.count({
+        where: {
+          workingGroupId: open.standard.workingGroupId,
+          role: { in: ['LEADER', 'DEPUTY', 'MEMBER'] },
+          user: { isActive: true },
+        },
+      });
+
       const forVotes = open.votes.filter((v) => v.choice === 'FOR').length;
       const againstVotes = open.votes.filter((v) => v.choice === 'AGAINST').length;
       const total = forVotes + againstVotes;
-      const adopted = total > 0 ? forVotes / total > 0.5 : false;
+      const adopted = eligibleCount > 0 && forVotes / eligibleCount > 0.5;
       const newStatus = adopted ? 'ADOPTED' : 'REJECTED';
 
       const didClose = await ctx.db.$transaction(
@@ -285,7 +311,11 @@ export const voteRouter = createTRPCRouter({
           if (!fresh) return false; // already closed by a concurrent request
           await tx.voting.update({
             where: { id: open.id },
-            data: { status: 'CLOSED', closedAt: new Date() },
+            data: {
+              status: 'CLOSED',
+              closedAt: new Date(),
+              eligibleAtClose: eligibleCount,
+            },
           });
           await tx.standard.update({
             where: { id: open.standard.id },
@@ -297,7 +327,7 @@ export const voteRouter = createTRPCRouter({
               fromStatus: 'VOTING',
               toStatus: newStatus,
               changedById: ctx.session.user.id,
-              note: `Автоматичне завершення за дедлайном. За: ${forVotes}, Проти: ${againstVotes}`,
+              note: `Автоматичне завершення за дедлайном. За: ${forVotes} з ${eligibleCount}, Проти: ${againstVotes}`,
             },
           });
           return true;
@@ -314,7 +344,7 @@ export const voteRouter = createTRPCRouter({
         entityId: open.id,
         before: { status: 'OPEN' },
         after: { status: 'CLOSED' },
-        note: `Авто-завершення за дедлайном. За: ${forVotes}, проти: ${againstVotes}. Результат: ${newStatus}`,
+        note: `Авто-завершення за дедлайном. За: ${forVotes} з ${eligibleCount}, проти: ${againstVotes}. Результат: ${newStatus}`,
       });
       await notifyVoteClosed(
         ctx.db,
@@ -323,7 +353,7 @@ export const voteRouter = createTRPCRouter({
         ctx.session.user.id,
       );
 
-      return { status: newStatus, forVotes, againstVotes, total };
+      return { status: newStatus, forVotes, againstVotes, total, eligibleCount };
     }),
 
   // ── history ───────────────────────────────────────────────────────────
@@ -339,5 +369,64 @@ export const voteRouter = createTRPCRouter({
         },
         orderBy: { openedAt: 'desc' },
       });
+    }),
+
+  // ── adminWipeAll ──────────────────────────────────────────────────────
+  // Emergency: wipe every Voting (and its Votes via cascade) across the
+  // whole system, and revert any standard currently sitting in
+  // VOTING / ADOPTED / REJECTED back to IN_REVIEW so it can be re-voted.
+  // ADMIN-only. Used to recover from buggy historical results — see the
+  // quorum-formula fix where pre-existing votings were closed under the
+  // wrong denominator.
+  adminWipeAll: protectedProcedure
+    .input(z.object({ confirm: z.literal('WIPE-ALL-VOTINGS') }))
+    .mutation(async ({ ctx }) => {
+      if (ctx.session.user.globalRole !== 'ADMIN') {
+        throw new TRPCError({ code: 'FORBIDDEN', message: 'Лише адміністратор' });
+      }
+
+      // Snapshot standards whose status we'll have to revert. We do this
+      // before deleting votings so the audit history is meaningful.
+      const affectedStandards = await ctx.db.standard.findMany({
+        where: { status: { in: ['VOTING', 'ADOPTED', 'REJECTED'] } },
+        select: { id: true, code: true, title: true, status: true },
+      });
+
+      const result = await ctx.db.$transaction(async (tx) => {
+        const votingCount = await tx.voting.count();
+        const voteCount = await tx.vote.count();
+
+        // Vote rows cascade off Voting; deleting Voting kills Votes too.
+        await tx.voting.deleteMany({});
+
+        // Revert standards back to IN_REVIEW so they can be re-voted.
+        if (affectedStandards.length > 0) {
+          await tx.standard.updateMany({
+            where: { id: { in: affectedStandards.map((s) => s.id) } },
+            data: { status: 'IN_REVIEW' },
+          });
+          await tx.standardStatusHistory.createMany({
+            data: affectedStandards.map((s) => ({
+              standardId: s.id,
+              fromStatus: s.status,
+              toStatus: 'IN_REVIEW' as const,
+              changedById: ctx.session.user.id,
+              note: 'Адміністративне очищення голосувань — повернуто на розгляд',
+            })),
+          });
+        }
+
+        return { votingCount, voteCount, revertedStandards: affectedStandards.length };
+      });
+
+      await logActivity(ctx.db, {
+        userId: ctx.session.user.id,
+        action: 'DELETE',
+        entity: 'Vote',
+        entityId: 'ALL',
+        note: `Очищено всі голосування: ${result.votingCount} голосувань, ${result.voteCount} голосів, повернуто ${result.revertedStandards} стандартів на розгляд`,
+      });
+
+      return result;
     }),
 });
