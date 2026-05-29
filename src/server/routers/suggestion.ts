@@ -525,6 +525,22 @@ export const suggestionRouter = createTRPCRouter({
       if (!can(userCtx(ctx.session), 'standard:editBody', target.workingGroupId)) {
         throw new TRPCError({ code: 'FORBIDDEN' });
       }
+      // Pack 1: a standard's body is read-only while it sits in IN_REVIEW
+      // ("На розгляді") — changes must go through Suggestions so the audit
+      // trail is preserved. ADMIN keeps an emergency escape.
+      if (target.kind === 'standard' && ctx.session.user.globalRole !== 'ADMIN') {
+        const std = await ctx.db.standard.findUnique({
+          where: { id: target.standardId },
+          select: { status: true },
+        });
+        if (std?.status === 'IN_REVIEW') {
+          throw new TRPCError({
+            code: 'BAD_REQUEST',
+            message:
+              'Стандарт на розгляді: пряма правка тіла недоступна. Створіть пропозицію або поверніть стандарт у Чернетку.',
+          });
+        }
+      }
       const before = { bodyText: target.body ?? '' };
       if (target.kind === 'standard') {
         const updated = await ctx.db.standard.update({
@@ -579,6 +595,22 @@ export const suggestionRouter = createTRPCRouter({
       const target = await resolveTarget(ctx.db, input);
       if (!can(userCtx(ctx.session), 'standard:editBody', target.workingGroupId)) {
         throw new TRPCError({ code: 'FORBIDDEN' });
+      }
+      // Pack 1: standard's body frozen on IN_REVIEW (the .docx import path
+      // would also wipe every existing suggestion / inline comment). ADMIN
+      // keeps an emergency escape.
+      if (target.kind === 'standard' && ctx.session.user.globalRole !== 'ADMIN') {
+        const std = await ctx.db.standard.findUnique({
+          where: { id: target.standardId },
+          select: { status: true },
+        });
+        if (std?.status === 'IN_REVIEW') {
+          throw new TRPCError({
+            code: 'BAD_REQUEST',
+            message:
+              'Стандарт на розгляді: імпорт/заміна тіла недоступні. Поверніть стандарт у Чернетку.',
+          });
+        }
       }
       const before = { bodyText: target.body ?? '' };
 

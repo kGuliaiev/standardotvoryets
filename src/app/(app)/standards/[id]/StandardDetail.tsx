@@ -601,6 +601,7 @@ export function StandardDetail({ id }: { id: string }) {
           bodyText={standard.bodyText}
           bodyUpdatedAt={standard.bodyUpdatedAt}
           bodyUpdatedBy={standard.bodyUpdatedBy}
+          standardStatus={standard.status}
         />
       )}
 
