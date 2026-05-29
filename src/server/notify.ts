@@ -939,12 +939,14 @@ export async function notifySuggestionNew(
         : null;
     if (!parent) return;
 
-    const leadership = await wgLeadershipRecipients(db, parent.workingGroupId);
-    if (leadership.length === 0) return;
+    // Broadcast new suggestions to the whole WG (leadership + members) —
+    // members need to know what's being proposed so they can react / discuss.
+    const recipients = await workingGroupRecipients(db, parent.workingGroupId);
+    if (recipients.length === 0) return;
 
     await emit({
       db,
-      recipients: leadership,
+      recipients,
       excludeUserId: actorUserId,
       type: 'SUGGESTION_NEW',
       title: `Нова правка від ${s.author.name}: ${parent.title}`,
@@ -958,8 +960,10 @@ export async function notifySuggestionNew(
 }
 
 /**
- * Fired when the leader accepts or rejects an edit suggestion. Notifies
- * the suggestion author so they know the outcome.
+ * Fired when a leader accepts or rejects an edit suggestion. Broadcast to the
+ * whole WG (leadership gets everything; members get suggestion status changes),
+ * minus the actor — the suggestion's author is still in the recipient list and
+ * gets the personal "ваш" wording via title fallback handled by the title text.
  */
 export async function notifySuggestionResolved(
   db: PrismaClient,
@@ -971,42 +975,46 @@ export async function notifySuggestionResolved(
     const s = await db.standardSuggestion.findUnique({
       where: { id: suggestionId },
       include: {
-        standard: { select: { id: true, code: true, title: true } },
+        standard: { select: { id: true, code: true, title: true, workingGroupId: true } },
         document: {
           select: {
             filename: true,
-            standard: { select: { id: true, code: true, title: true } },
+            standard: {
+              select: { id: true, code: true, title: true, workingGroupId: true },
+            },
           },
         },
       },
     });
     if (!s) return;
-    if (s.authorId === actorUserId) return; // resolved their own — no self-ping
 
     const parent = s.standard
       ? {
           title: s.standard.code,
           subject: `«${s.standard.title}»`,
           link: `/standards/${s.standard.id}?tab=body`,
+          wgId: s.standard.workingGroupId,
         }
       : s.document
         ? {
             title: s.document.standard.code,
             subject: `📎 «${s.document.filename}»`,
             link: `/standards/${s.document.standard.id}?tab=documents`,
+            wgId: s.document.standard.workingGroupId,
           }
         : null;
     if (!parent) return;
 
-    const recipients = await singleUserRecipient(db, s.authorId);
+    const recipients = await workingGroupRecipients(db, parent.wgId);
     if (recipients.length === 0) return;
 
     const label = outcome === 'ACCEPTED' ? 'Прийнято' : 'Відхилено';
     await emit({
       db,
       recipients,
+      excludeUserId: actorUserId,
       type: 'SUGGESTION_RESOLVED',
-      title: `${label} вашу правку: ${parent.title}`,
+      title: `${label} правку: ${parent.title}`,
       body: `${parent.subject} · параграф ${s.paragraphIndex + 1}${s.resolveNote ? `\n${s.resolveNote}` : ''}`,
       link: parent.link,
       channelEnabled: { inApp: true, email: false },
@@ -1328,11 +1336,9 @@ export async function notifyCommentNew(db: PrismaClient, commentId: string, acto
       },
     });
     if (!c) return;
-    const leadership = await wgLeadershipRecipients(db, c.standard.workingGroupId);
-    const responsible = c.standard.responsibleId
-      ? await singleUserRecipient(db, c.standard.responsibleId)
-      : [];
-    const recipients = dedupeRecipients([leadership, responsible]);
+    // Per the notification policy: leadership (LEADER/DEPUTY/SECRETARY) gets
+    // every comment; regular members don't get broadcast top-level comments.
+    const recipients = await wgLeadershipRecipients(db, c.standard.workingGroupId);
     if (recipients.length === 0) return;
     const snippet = c.body.slice(0, 280) + (c.body.length > 280 ? '…' : '');
     await emit({
@@ -1365,19 +1371,24 @@ export async function notifyCommentReply(
       include: {
         author: { select: { name: true } },
         parent: { select: { authorId: true } },
-        standard: { select: { id: true, code: true } },
+        standard: { select: { id: true, code: true, title: true, workingGroupId: true } },
       },
     });
     if (!c?.parent) return;
-    if (c.parent.authorId === actorUserId) return; // replied to self
-    const recipients = await singleUserRecipient(db, c.parent.authorId);
+    // Leadership gets every reply; the parent comment's author gets it too
+    // (the "reply to own comment" line in the notification policy). Dedupe;
+    // excludeUserId silently skips the replier when they're in either list.
+    const leadership = await wgLeadershipRecipients(db, c.standard.workingGroupId);
+    const parentAuthor = await singleUserRecipient(db, c.parent.authorId);
+    const recipients = dedupeRecipients([leadership, parentAuthor]);
     if (recipients.length === 0) return;
     const snippet = c.body.slice(0, 280) + (c.body.length > 280 ? '…' : '');
     await emit({
       db,
       recipients,
+      excludeUserId: actorUserId,
       type: 'COMMENT_ADDED',
-      title: `${c.author.name} відповів на ваш коментар: ${c.standard.code}`,
+      title: `${c.author.name}: відповідь у «${c.standard.title}»`,
       body: snippet,
       link: `/standards/${c.standard.id}?tab=comments`,
       channelEnabled: { inApp: true, email: false },
@@ -1432,7 +1443,6 @@ export async function notifyInlineCommentNew(
           code: c.standard.code,
           subject: `«${c.standard.title}»`,
           wgId: c.standard.workingGroupId,
-          responsibleId: c.standard.responsibleId,
           link: `/standards/${c.standard.id}?tab=body`,
         }
       : c.document
@@ -1440,17 +1450,15 @@ export async function notifyInlineCommentNew(
             code: c.document.standard.code,
             subject: `📎 «${c.document.filename}»`,
             wgId: c.document.standard.workingGroupId,
-            responsibleId: c.document.standard.responsibleId,
             link: `/standards/${c.document.standard.id}?tab=documents`,
           }
         : null;
     if (!parent) return;
 
-    const leadership = await wgLeadershipRecipients(db, parent.wgId);
-    const responsible = parent.responsibleId
-      ? await singleUserRecipient(db, parent.responsibleId)
-      : [];
-    const recipients = dedupeRecipients([leadership, responsible]);
+    // Per the notification policy: leadership only on broadcast inline-comment
+    // creation; members are pinged when someone replies to or resolves their
+    // own inline-comment (see notifyInlineCommentReply / Resolved).
+    const recipients = await wgLeadershipRecipients(db, parent.wgId);
     if (recipients.length === 0) return;
 
     const snippet = c.selectionText.slice(0, 120) + (c.selectionText.length > 120 ? '…' : '');
@@ -1487,9 +1495,13 @@ export async function notifyInlineCommentReply(
         comment: {
           include: {
             replies: { select: { authorId: true } },
-            standard: { select: { id: true, code: true, title: true } },
+            standard: { select: { id: true, code: true, title: true, workingGroupId: true } },
             document: {
-              select: { standard: { select: { id: true, code: true, title: true } } },
+              select: {
+                standard: {
+                  select: { id: true, code: true, title: true, workingGroupId: true },
+                },
+              },
             },
           },
         },
@@ -1501,30 +1513,34 @@ export async function notifyInlineCommentReply(
           code: r.comment.standard.code,
           subject: `«${r.comment.standard.title}»`,
           link: `/standards/${r.comment.standard.id}?tab=body`,
+          wgId: r.comment.standard.workingGroupId,
         }
       : r.comment.document
         ? {
             code: r.comment.document.standard.code,
             subject: `«${r.comment.document.standard.title}»`,
             link: `/standards/${r.comment.document.standard.id}?tab=documents`,
+            wgId: r.comment.document.standard.workingGroupId,
           }
         : null;
     if (!parent) return;
 
+    // Leadership broadcast + original inline-commenter + every previous
+    // replier. dedupeRecipients drops duplicates across the three groups;
+    // excludeUserId silently skips the actor.
+    const leadership = await wgLeadershipRecipients(db, parent.wgId);
     const ids = new Set<string>();
     ids.add(r.comment.authorId);
     for (const rep of r.comment.replies) ids.add(rep.authorId);
-    ids.delete(actorUserId);
-    if (ids.size === 0) return;
-
     const groups = await Promise.all(Array.from(ids).map((id) => singleUserRecipient(db, id)));
-    const recipients = dedupeRecipients(groups);
+    const recipients = dedupeRecipients([leadership, ...groups]);
     if (recipients.length === 0) return;
 
     const snippet = r.body.slice(0, 200) + (r.body.length > 200 ? '…' : '');
     await emit({
       db,
       recipients,
+      excludeUserId: actorUserId,
       type: 'COMMENT_ADDED',
       title: `${r.author.name} відповів у обговоренні: ${parent.code}`,
       body: `${parent.subject}\n${snippet}`,
@@ -1533,6 +1549,73 @@ export async function notifyInlineCommentReply(
     });
   } catch (e) {
     console.error('[notifyInlineCommentReply]', e);
+  }
+}
+
+/**
+ * Fired when an inline-comment is resolved or re-opened. Notifies WG
+ * leadership (they get every status change) and the original commenter (they
+ * get the status change on their own comment). Dedupe + skip the actor.
+ */
+export async function notifyInlineCommentResolved(
+  db: PrismaClient,
+  inlineCommentId: string,
+  resolved: boolean,
+  actorUserId: string,
+) {
+  try {
+    const c = await db.inlineComment.findUnique({
+      where: { id: inlineCommentId },
+      include: {
+        standard: {
+          select: { id: true, code: true, title: true, workingGroupId: true },
+        },
+        document: {
+          select: {
+            filename: true,
+            standard: {
+              select: { id: true, code: true, title: true, workingGroupId: true },
+            },
+          },
+        },
+      },
+    });
+    if (!c) return;
+    const parent = c.standard
+      ? {
+          code: c.standard.code,
+          subject: `«${c.standard.title}»`,
+          wgId: c.standard.workingGroupId,
+          link: `/standards/${c.standard.id}?tab=body`,
+        }
+      : c.document
+        ? {
+            code: c.document.standard.code,
+            subject: `📎 «${c.document.filename}»`,
+            wgId: c.document.standard.workingGroupId,
+            link: `/standards/${c.document.standard.id}?tab=documents`,
+          }
+        : null;
+    if (!parent) return;
+
+    const leadership = await wgLeadershipRecipients(db, parent.wgId);
+    const author = await singleUserRecipient(db, c.authorId);
+    const recipients = dedupeRecipients([leadership, author]);
+    if (recipients.length === 0) return;
+
+    const label = resolved ? 'Закрито' : 'Знов відкрито';
+    await emit({
+      db,
+      recipients,
+      excludeUserId: actorUserId,
+      type: 'COMMENT_ADDED',
+      title: `${label} inline-коментар: ${parent.code}`,
+      body: `${parent.subject} · параграф ${c.paragraphIndex + 1}`,
+      link: parent.link,
+      channelEnabled: { inApp: true, email: false },
+    });
+  } catch (e) {
+    console.error('[notifyInlineCommentResolved]', e);
   }
 }
 
