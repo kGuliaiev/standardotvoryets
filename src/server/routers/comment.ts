@@ -4,7 +4,12 @@ import { createTRPCRouter, protectedProcedure } from '@/server/trpc';
 import { can } from '@/lib/rbac';
 import { logActivity } from '@/server/audit';
 import { seesAllWorkingGroups } from '@/server/permissions';
-import { notifyMentioned, parseMentions } from '@/server/notify';
+import {
+  notifyMentioned,
+  parseMentions,
+  notifyCommentNew,
+  notifyCommentReply,
+} from '@/server/notify';
 import type { GlobalRole, WorkingGroupRole } from '@prisma/client';
 
 function userCtx(session: {
@@ -104,6 +109,13 @@ export const commentRouter = createTRPCRouter({
       const mentionedIds = parseMentions(created.body);
       if (mentionedIds.length > 0) {
         await notifyMentioned(ctx.db, created.id, mentionedIds, ctx.session.user.id);
+      }
+      // Notify the rest of the thread/standard about the new comment so it
+      // surfaces in the in-app popup (~30s polling) and in /notifications.
+      if (input.parentId) {
+        await notifyCommentReply(ctx.db, created.id, ctx.session.user.id);
+      } else {
+        await notifyCommentNew(ctx.db, created.id, ctx.session.user.id);
       }
 
       return created;
