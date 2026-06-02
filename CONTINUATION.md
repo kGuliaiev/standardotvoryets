@@ -9,26 +9,27 @@
 ## ▶ ПОТОЧНИЙ СТАН (оновлювати щоразу)
 
 - **Гілка:** `main`
-- **Останній коміт:** `c210d77` — merge `feat/qa-test-infra` (Vitest 48/48 + `qa-smoke.sh`).
-- **Цикл QA 2026-05-26 закрито:** security (B-1…B-9), designer (D-1/2/3/4/9 + захоплені D-15/F-6/F-7), frontend HIGH (F-2/F-10; F-1 був уже коректний), quick wins (D-5/7/10/18 + F-3/F-5), test infra (Vitest + qa-smoke). Залишок як backlog: B-15…B-34, D-6/8/11–14/16/17/19/20 (mobile), F-8/F-9/F-11 (mobile).
-- **Зараз у роботі:** security + admin-delete + week-nav + comment-delete-modal + **уніфікація confirm/alert (toast + ConfirmModal, F-4 done)**. Далі — Designer release-blockers (`fix/qa-designer-2026-05-26`).
-- **UI-патерн:** для підтверджень — `ConfirmModal` (`@/components/ui/ConfirmModal`, є type-to-confirm), для сповіщень — `toast` (`@/lib/toast`: `toast.success/error/info`). Нативні `confirm()/alert()` під забороною.
-- **Закрито за останній цикл:** Part 1 (`3429dba`); **Security hotfix B-1…B-9** (merge `29208de`); **адмін-видалення стандарту** з type-to-confirm + S3-cleanup та перенос `standard:editBody` у групу «Документи» (merge `bff4612`). Build/lint/typecheck — зелені.
-- **Останній QA-цикл:** `QA-tests/2026-05-26/` (34 backend / 20 designer / 11 frontend багів). Зведення — `QA-tests/2026-05-26/summary.md`.
+- **Останній коміт:** `8ca4bbb` — `fix(standard): IN_REVIEW gate keys off STANDARD doc, not TECH_SPEC`.
+- **Активний цикл:** voting + document lifecycle (рефакторинг типів документів + lock-on-close + clone-on-reject). Завершено: 5-пункт UX-пакет (TZ gate refined → STANDARD gate, auto-edit on create, smart default type, filled top-right toasts, VOTE_OPENED → WG + DIRECTOR). Voting quorum виправлений (`forVotes/eligibleCount > 0.5`).
+- **Цикл QA 2026-05-26 закрито:** security (B-1…B-9), designer (D-1/2/3/4/9 + D-15/F-6/F-7), frontend HIGH (F-2/F-10), quick wins (D-5/7/10/18 + F-3/F-5), test infra (Vitest 48/48 + qa-smoke). State machine (B-16) + IN_REVIEW body lock — у проді.
+- **UI-патерн:** підтвердження — `ConfirmModal` (type-to-confirm); сповіщення — `toast` (`success/error/info`/`notify`, всі top-right, filled cards). Нативні `confirm()/alert()` під забороною.
+- **Документна модель (новий стан):** `DocumentType` = `STANDARD` | `TECH_SPEC` | `FEEDBACK` | `AGENDA` | `ATTACHMENT` (+ legacy `MEETING_MINUTES`, ховається з пікера). Видалено: `DRAFT_STANDARD` (→ `STANDARD`), `FINAL` (→ `ATTACHMENT`). Bckфіл у `scripts/pre-db-push.sql` (запускається перед `prisma db push` через `scripts/pre-db-push.sh`). `isCurrent` працює тільки для `STANDARD` і `TECH_SPEC` (інші ховаються, бекенд forces false).
+- **Voting (новий стан):** ціль голосування — активний `STANDARD`-документ. На закриття: `Document.lockedAt`/`lockedByVotingId`, ім'я доповнюється `(Голосування №N, прийнято/відхилено DD.MM.YYYY)`, `Voting.documentId` тримає посилання. **REJECTED → standard.status = DRAFT** (не REJECTED) + клон документа з версією `vN+1` як новий editable. **ADOPTED → ADOPTED**, новий клон НЕ створюється. Голосування не видаляються. Поріг — `forVotes/eligibleCount > 0.5`, де `eligibleCount` = активні `LEADER/DEPUTY/MEMBER` (snapshot у `Voting.eligibleAtClose`).
+- **DRAFT → IN_REVIEW gate:** потрібен ≥1 активний `STANDARD`-документ (НЕ ТЗ — ТЗ опціональний). Server + UI. ADMIN bypass.
+- **Admin tools:** `/admin/settings` → «Небезпечна зона» → `vote.adminWipeAll` (type-to-confirm `WIPE-ALL-VOTINGS`) — видаляє всі Voting + Vote, повертає VOTING/ADOPTED/REJECTED стандарти у IN_REVIEW з аудит-історією.
+- **Останній QA-цикл:** `QA-tests/2026-05-26/` (34 backend / 20 designer / 11 frontend). Зведення — `QA-tests/2026-05-26/summary.md`. Наступний QA-pass — після стабілізації documents/voting циклу.
 
 ### Відкриті задачі (за пріоритетом)
 
-**✅ P0 — Security hotfix** — ЗРОБЛЕНО (merge `29208de`). Залишковий follow-up: B-8 (інвалідація активних JWT + maxAge), meeting.list/task.list мають той самий single-WG bypass що й B-1 (не в explicit-скоупі — у backlog), B-15…B-34.
+**🟢 P0 — Voting/documents lifecycle** — у роботі / стабілізація. Виконано: rename DRAFT_STANDARD→STANDARD, drop FINAL, lock-on-close, clone-on-reject, REJECT→DRAFT, eligibleAtClose, adminWipeAll, IN_REVIEW gate by STANDARD. Слідкуй за `Document.lockedAt`/`Voting.documentId` при роботі з документами.
 
-**🔴 P0 — Designer release-blockers** (`fix/qa-designer-2026-05-26`): D-1 (login завжди темна), D-2 (dashboard overdue ≠ /tasks), D-3 (sidebar count рассинхрон), D-4 (filter-active індикатор), D-9 (hex-колір як code-блок).
+**🟡 P1 — Product Tour / Онбординг** (`feat/onboarding-tour`, заплановано): guided walkthrough для нового користувача — overlay+spotlight+tooltip, role-aware кроки, кнопка «Навчання» в /profile або /admin/settings, флаг `onboarding_completed` у `User`. Бібліотека-кандидат: Driver.js або Shepherd.js (вибір — окремий ADR).
 
-**🟠 P1 — Frontend HIGH** (`fix/qa-frontend-2026-05-26`): F-1 (tRPC dev-logger у проді), F-2 (Modal focus-trap).
+**🟠 P1 — Frontend / UX backlog:** D-6/D-8/D-11–D-14/D-16/D-17/D-19/D-20 (mobile QA окремо), F-8/F-9/F-11 (mobile), F-4 (closed раніше — toast unification).
 
-**🟡 P2 — Quick wins** (`fix/qa-polish-2026-05-26`): D-5, D-7, D-10, D-15, D-18, F-3, F-4, F-5, F-6.
+**🟡 P2 — Backend security backlog:** B-8 follow-up (інвалідація активних JWT + `maxAge`), `meeting.list`/`task.list` single-WG bypass (як B-1), B-15…B-34 (last-leader guard B-18, транзакції B-20/B-25/B-27, cron-secret query B-28, `/api/version` leak B-29, CSP, iCal-token model B-32).
 
-**🧪 P2 — Test infra (Part 3):** Vitest setup + 44 unit-кейси (портувати з iCloud-копії), `scripts/qa-smoke.sh`, hard-delete тест-стандарту `cmpoc1qpm0001gb43j0h5nhrm`.
-
-**Backlog (не цей цикл):** B-15…B-34 (state-machine статусів B-16, last-leader guard B-18, транзакції B-20/B-25/B-27, cron-secret query B-28, /api/version leak B-29, CSP, iCal-token model B-32), D-6/D-8/D-11…D-20 (mobile QA окремо), F-7…F-11.
+**Backlog (не цей цикл):** перехід з `db push` на `prisma migrate deploy` (ADR-0004 risk зростає з кожним destructive change — bckфіл `pre-db-push.sql` — поточний обхід), CSP headers, MEETING_MINUTES → повний редирект на Протоколи модуль (зараз тільки picker hidden).
 
 ### Відомі блокери та обхідні шляхи
 

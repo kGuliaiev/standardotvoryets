@@ -9,6 +9,28 @@
 
 ---
 
+## ADR-0006 — Voting freezes the standard document; REJECT clones
+
+- **Дата:** 2026-05-29
+- **Контекст:** Голосування довго було "просто рядок" — голос за/проти, статус стандарту змінюється. Документ, який обговорювали, лишався редагованим після закриття → втрачали відповідь на питання «що саме голосували?» і непомітно правили "прийнятий" текст.
+- **Рішення:** На закриття голосування активний `STANDARD`-документ замикається (`Document.lockedAt`, `Document.lockedByVotingId`, `Voting.documentId`), у файлове ім'я додається суфікс `(Голосування №N, прийнято|відхилено DD.MM.YYYY)`, `isCurrent` знімається. Сервер (`document.update`/`updateMeta`/`setAsCurrent`/`suggestion.*`) і клієнт (`StandardBodyEditor` через проп `documentLocked`) відмовляють у будь-яких правках — навіть ADMIN. Голосування **ніколи не видаляються** (тільки `vote.adminWipeAll` як emergency escape hatch). При **REJECTED**: `standard.status = DRAFT` (а не REJECTED) + заблокований документ клонується у новий editable з версією `vN+1` — РГ продовжує ітерувати з чистого старту. При **ADOPTED**: статус ADOPTED, новий клон не створюється — заблокований снапшот і є фінал. Поріг голосування — `forVotes / eligibleAtClose > 0.5` (snapshot активних `LEADER/DEPUTY/MEMBER` на момент закриття).
+- **Альтернативи:**
+  - **Видаляти Voting при rejection** — втрачаємо аудит, неможливо пояснити «чому стандарт повернувся в чернетку».
+  - **Залишати документ editable** — той самий файл потім "правлять", і архівний вердикт стає неспівставним з вмістом.
+  - **Тримати lock-стан в окремій таблиці** — додатковий join у кожному запиті документів; nullable-FK на Document простіший і вистачає.
+- **Наслідки:** `Document.lockedAt != null` ⇒ read-only завжди й для всіх. Унікальність типу (1 STANDARD + 1 TECH_SPEC на стандарт) рахується тільки серед `lockedAt: null` — заблоковані снапшоти стекаются без обмежень. Архівні votings з історичних даних можуть мати `eligibleAtClose = null` → UI має fallback на поточний `eligibleVoters` або `(for+against)`. Усі нові процедури з document-target повинні перевіряти `lockedAt`.
+
+## ADR-0005 — Destructive enum changes via boot-time SQL backfill
+
+- **Дата:** 2026-05-29
+- **Контекст:** ADR-0004 фіксує `prisma db push --accept-data-loss` на старті — це нормально для nullable-додавання, але деструктивне для enum rename/drop: Prisma drop-and-recreates enum, а існуючі рядки з удаленим значенням блокують операцію. Конкретно: треба було перейменувати `DocumentType.DRAFT_STANDARD` → `STANDARD` і прибрати `FINAL`.
+- **Рішення:** Перед `prisma db push` запускати `scripts/pre-db-push.sh` (з `Dockerfile` CMD). Скрипт перевіряє `pg_type` на існування `DocumentType` (skip для fresh DB), потім виконує `scripts/pre-db-push.sql`: `ALTER TYPE "DocumentType" ADD VALUE IF NOT EXISTS 'STANDARD'`; `UPDATE documents SET type = 'STANDARD' WHERE type::text = 'DRAFT_STANDARD'`; `UPDATE documents SET type = 'ATTACHMENT' WHERE type::text = 'FINAL'`. Тільки після цього `prisma db push --accept-data-loss` безпечно дропає старі enum-значення. Скрипт ідемпотентний — `IF NOT EXISTS` + `type::text` comparison + рядки вже мігровані наступного разу.
+- **Альтернативи:**
+  - **Перейти на `prisma migrate deploy`** — правильне рішення довгостроково, але вимагає створення `prisma/migrations/`-історії з нуля; зараз = post-launch.
+  - **Прибрати `--accept-data-loss`** — Prisma відмовиться видалити enum value → деплой падає.
+  - **Ручна SQL-міграція через psql на проді** — несумісно з push-to-deploy моделлю.
+- **Наслідки:** Кожна наступна деструктивна enum-зміна потребує оновлення `pre-db-push.sql` + перевірки на ідемпотентність. Скрипт виконується **до** Prisma, тож DocumentType enum referenced rawly через `type::text`. Лосс семантики при `FINAL → ATTACHMENT` зафіксований відкрито. Перехід на справжні міграції лишається кандидатом на post-launch (ADR-0004 ризик зростає з кожним подібним кейсом).
+
 ## ADR-0004 — `db push` замість міграцій Prisma
 
 - **Дата:** 2026-05-26 (зафіксовано ретроспективно)

@@ -100,6 +100,38 @@ bash scripts/qa-smoke.sh   # (після Part-3) read-only smoke проти stag
 - **Логін для QA:** `admin@test.ua` (пароль — у seed `prisma/seed.ts` / `CONTINUATION.md`, тут не дублюємо).
 - **Секрети/ENV:** НЕ зберігаються в репо. Дивись `.env.example` (контракт) + Railway → Variables (реальні значення). `.env` у `.gitignore`.
 
+## Lifecycle моделі (читати ОБОВ'ЯЗКОВО перед роботою з документами/голосуваннями)
+
+**Standard.status** — машина станів (`STATUS_TRANSITIONS` у `src/server/routers/standard.ts`):
+
+```
+DRAFT  ──→  IN_REVIEW  ──→  VOTING  ──→  ADOPTED  ──→  ARCHIVED
+  ↑          ↑    ↓                  ↘
+  └──────────┘    └→ ARCHIVED          REJECTED → DRAFT (через vote.closeVoting)
+```
+
+- `VOTING` досягається ТІЛЬКИ через `vote.openVoting`; `ADOPTED`/`REJECTED` — ТІЛЬКИ через `vote.closeVoting` (не через `standard.changeStatus`).
+- `DRAFT → IN_REVIEW` потребує ≥1 активного `STANDARD`-документа (НЕ ТЗ). ADMIN — bypass.
+- Поза voting flow: `IN_REVIEW → DRAFT/ARCHIVED`, `REJECTED → DRAFT/ARCHIVED`, `ADOPTED → ARCHIVED`, `ARCHIVED` — кінцевий.
+- ADMIN bypass'ить state machine скрізь.
+
+**Document.lockedAt + Voting flow:**
+
+- Активний `STANDARD`-документ — це той, що `type='STANDARD'` + `lockedAt IS NULL`. Обмеження «1 STANDARD + 1 TECH_SPEC на стандарт» рахується ТІЛЬКИ серед unlocked.
+- На `vote.closeVoting`/`closeOverdue`: знаходимо unlocked STANDARD-доку, виставляємо `lockedAt`, `lockedByVotingId`, `isCurrent=false`, дописуємо у `filename` суфікс `(Голосування №N, прийнято/відхилено DD.MM.YYYY)`, прив'язуємо `Voting.documentId = doc.id`.
+- **REJECTED:** `standard.status = DRAFT` (не REJECTED!) + клонуємо документ у новий editable з `version = bumpVersion(prev)` (`v1 → v2`). РГ продовжує.
+- **ADOPTED:** `standard.status = ADOPTED`. Новий клон НЕ створюється — заблокований снапшот і є фінал.
+- Locked-документи — read-only для всіх, включно з ADMIN. `StandardBodyEditor` приймає `documentLocked` + `documentLockInfo` (seqNumber + closedAt) → банер + edit-blocked. Сервер (suggestion, document.update/setAsCurrent/updateMeta) теж відмовляє.
+- Голосування **не видаляються**. Emergency cleanup — `vote.adminWipeAll` (ADMIN-only, type-to-confirm `WIPE-ALL-VOTINGS`) у `/admin/settings` → «Небезпечна зона».
+
+**Voting quorum:** `forVotes / eligibleAtClose > 0.5`, де `eligibleAtClose` = snapshot активних `LEADER/DEPUTY/MEMBER` на момент закриття (SECRETARY і GUEST не голосують). Для архівних votings без snapshot — UI fallback на поточний `eligibleVoters` або `(for+against)`.
+
+**`DocumentType` (поточний enum):** `STANDARD` | `TECH_SPEC` | `FEEDBACK` | `AGENDA` | `ATTACHMENT` (+ legacy `MEETING_MINUTES` для історичних рядків, але не в upload picker). Видалено: `DRAFT_STANDARD` (→ `STANDARD`), `FINAL` (→ `ATTACHMENT`) — мігровано через `scripts/pre-db-push.sql` (ADR-0005). `isCurrent` працює тільки для `STANDARD`/`TECH_SPEC`.
+
+## IN_REVIEW body lock (Pack 1)
+
+Коли `Standard.status === 'IN_REVIEW'`, прямий WYSIWYG-edit body (тіла стандарту І `bodyHtml` прикріплених документів) заборонений для всіх крім ADMIN. Користувачі вносять зміни через Suggestions. Реалізовано через проп `standardStatus` у `StandardBodyEditor` + перевірки `lockedAt` у suggestion router. Не плутати з voting-lock (це окрема, абсолютна заборона після закриття голосування).
+
 ## Що зараз у роботі
 
 → `CONTINUATION.md` (живий документ): поточна гілка, останній коміт, що закрито/відкрито,
@@ -107,7 +139,7 @@ bash scripts/qa-smoke.sh   # (після Part-3) read-only smoke проти stag
 
 ## ⛔ Що НЕ робити без узгодження з Kir
 
-- **Не міняти Prisma schema** наосліп: Railway start-команда робить `prisma db push --accept-data-loss` на КОЖНОМУ деплої → необережна зміна = втрата даних на проді. Зміни схеми обговорювати окремо.
+- **Не міняти Prisma schema** наосліп: Railway start-команда робить `prisma db push --accept-data-loss` на КОЖНОМУ деплої → необережна зміна = втрата даних на проді. Зміни схеми обговорювати окремо. Деструктивні зміни enum'ів — через boot-time backfill у `scripts/pre-db-push.sql` (див. ADR-0005).
 - **Не перейменовувати ENV-змінні** — вони прив'язані в Railway Variables через reference (`${{Postgres.DATABASE_URL}}` тощо). Перейменування ламає прод-деплой.
 - **Не force-push у `main`**, не комітити `.env`/секрети.
 - **Не міняти базові порти** в `docker-compose.yml` (тільки локальний override).

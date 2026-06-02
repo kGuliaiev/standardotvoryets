@@ -5,6 +5,29 @@
 
 ## [Unreleased]
 
+### UX, notifications — 2026-05-29 (in-flight)
+
+- **DRAFT → IN_REVIEW gate.** Server (`standard.changeStatus`) rejects the transition unless the standard has ≥1 active (unlocked) document of type `STANDARD` (the actual standard text — ТЗ is NOT required). UI disables the button with tooltip «Спочатку завантажте документ типу «Стандарт»». ADMIN keeps the escape hatch. Error surfaces as a `toast.error` (was silent).
+- **Auto-edit on create.** After creating/uploading a `STANDARD` or `TECH_SPEC` document, the editor opens immediately in `'edit'` mode (`StandardBodyEditor` gained `initialMode` prop). Reopening later still lands in `'view'`. Other types behave as before.
+- **Smart default doc-type.** `DocumentUploadModal` takes an `initialType` prop; `StandardDetail` computes it: no STANDARD but has ТЗ → default `STANDARD`; nothing yet → default `TECH_SPEC`; both present → `ATTACHMENT`.
+- **Toasts — top-right + filled cards.** All `toast.success/error/info` now render top-right (matches the notification popup column). Filled colored backgrounds (`emerald-600` / `rose-600`; `info` stays neutral), `px-5 py-4`, `rounded-2xl`, `shadow-2xl`. Width 380px.
+- **`VOTE_OPENED`** now pings ALL WG members (including secretary + guests) PLUS DIRECTOR/ADMIN. `emit()` dedupes by user id so dual-membership users get one notification.
+- **Editor default mode = view.** `StandardBodyEditor` lands on `'view'` by default everywhere (was `'edit'` when the user had edit rights). Mode toggle still works. Override available via the new `initialMode` prop for fresh-create flows.
+- **Doc-delete: Enter submits.** The 6-digit-code modal on hard-delete now fires the delete on `Enter` when the typed code matches (same gating as the button).
+
+### Features — voting document lifecycle 2026-05-29 (`feat/documents-voting-lifecycle`)
+
+- **`DocumentType` rebuilt.** `DRAFT_STANDARD` → `STANDARD`; `FINAL` removed. Migration script `scripts/pre-db-push.sh` + `pre-db-push.sql` runs before `prisma db push` on every Railway boot — adds the new enum value, migrates rows (`DRAFT_STANDARD` → `STANDARD`, `FINAL` → `ATTACHMENT`). Idempotent and skips fresh DBs. `MEETING_MINUTES` kept in the enum (legacy rows) but removed from the upload picker — the Протоколи module is the new source of truth.
+- **Voting freezes the standard doc.** When a voting closes, the active `STANDARD` document is locked (`Document.lockedAt`, `Document.lockedByVotingId`, filename suffixed with `(Голосування №N, прийнято/відхилено DD.MM.YYYY)`, `isCurrent=false`). `Voting.documentId` records the snapshot — the voting itself is never deleted.
+- **REJECTED → DRAFT (not REJECTED).** A failed voting sends the standard back to `DRAFT` and clones the locked doc into a fresh editable version with bumped `vN+1` so the WG can iterate. ADOPTED keeps the standard at `ADOPTED` — the locked snapshot IS the final.
+- **Locked docs are immutable for everyone (incl. ADMIN).** `StandardBodyEditor` accepts `documentLocked` + `documentLockInfo`, renders a banner «Документ заблоковано — Голосування №N, завершено DD.MM.YYYY», disables edits and new suggestions/comments. Suggestion router (`updateBody`/`replaceBody`/`updateMeta`) and document router (`update`/`setAsCurrent`/`updateMeta`) reject writes server-side on locked docs.
+- **`isCurrent` only for `STANDARD` and `TECH_SPEC`.** Server-side coerced to `false` for other types in `createEmpty` / `registerMetadata` / `confirmUpload` / `updateMeta` / proxy upload route. UI hides the toggle when the picked type doesn't support it. `assertUniqueTypePerStandard` counts only `lockedAt: null` rows, so historical locked snapshots stack up freely under one «active» STANDARD/TECH_SPEC.
+- **Voting quorum fix.** Pass threshold is now `forVotes / eligibleCount > 0.5` where `eligibleCount` = active WG members with role `LEADER`/`DEPUTY`/`MEMBER` (SECRETARY and GUEST don't vote). 1 «за» in a 5-voter WG → REJECTED. `Voting.eligibleAtClose Int?` snapshots the denominator at close time so the archive verdict can't flip later if roster changes. UI bar shows «За X з Y» + 50% threshold marker.
+- **Admin wipe.** `vote.adminWipeAll` mutation + `/admin/settings` «Небезпечна зона» with type-to-confirm `WIPE-ALL-VOTINGS` deletes every Voting+Vote system-wide and reverts standards in VOTING/ADOPTED/REJECTED back to IN_REVIEW with audit history. ADMIN-only.
+- **`Voting.seqNumber`** assigned at open time (per-standard, 1, 2, 3…) — used in the locked-doc filename and the editor banner so historical references stay readable.
+- **Server-side state machine (Pack 3 / B-16).** `standard.changeStatus` enforces `STATUS_TRANSITIONS` (DRAFT↔IN_REVIEW↔ARCHIVED; VOTING→IN_REVIEW; ADOPTED→ARCHIVED; REJECTED→DRAFT/ARCHIVED). ADOPTED/REJECTED reachable only via `vote.closeVoting`. ADMIN bypasses.
+- **IN_REVIEW body lock (Pack 1).** Direct WYSIWYG editing of standard.bodyText AND attached document.bodyHtml is disabled while the parent standard is `IN_REVIEW` (suggestions only). ADMIN bypasses. Applied via `documentLocked` prop OR `standardStatus === 'IN_REVIEW'` gate.
+
 ### Security — QA-cycle 2026-05-26 hotfix (`fix/security-hotfix-2026-05-26`)
 
 - **B-1** `standard.list` now intersects client `workingGroupId(s)` with the user's visible groups (no foreign-WG enumeration).
