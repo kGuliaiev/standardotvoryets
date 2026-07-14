@@ -1076,19 +1076,28 @@ export function StandardDetail({ id }: { id: string }) {
 
             {activeTab === 'tasks' &&
               (() => {
-                // Mirrors the global /tasks list block: status filter pills,
-                // grouped Відкриті / Виконані sections, and a full-width
-                // dashed «+ Додати завдання» CTA. The standard-code pill on
-                // each row is suppressed (every row is under this standard).
+                // Wrapped in the same `card` + `card-head` chrome as the
+                // Обговорення tab (see CommentsThread) so the two tabs
+                // feel visually consistent — same rounded surface, same
+                // titled header with a running total, same padded body.
                 const myId = session?.user?.id;
                 const scoped = (list: typeof openTasks) =>
                   taskFilter === 'mine' ? list.filter((t) => t.assigneeId === myId) : list;
                 const fOpen = taskFilter === 'done' ? [] : scoped(openTasks);
                 const fDone = taskFilter === 'open' ? [] : scoped(doneTasks);
+                const totalCount = (tasks ?? []).length;
                 return (
-                  <div className="space-y-5">
-                    {/* Status filter — same pills as /tasks */}
-                    <div className="flex justify-end">
+                  <div className="card overflow-hidden">
+                    <div className="card-head flex items-center justify-between gap-3">
+                      <h3 className="font-bold text-ink">
+                        Завдання
+                        {totalCount > 0 && (
+                          <span className="ml-2 text-xs text-light font-normal">{totalCount}</span>
+                        )}
+                      </h3>
+                      {/* Status filter — same pills as /tasks. Sits in the
+                          card head so it lines up with the tab header
+                          just like Обговорення's counter. */}
                       <div className="inline-flex rounded-full border border-hairline p-0.5 bg-card">
                         {(
                           [
@@ -1113,41 +1122,52 @@ export function StandardDetail({ id }: { id: string }) {
                       </div>
                     </div>
 
-                    {/* Відкриті */}
-                    <section>
-                      <div className="text-[11px] font-bold uppercase tracking-[0.8px] text-light mb-2">
-                        Відкриті · {fOpen.length}
-                      </div>
-                      {fOpen.length === 0 ? (
-                        <p className="text-sm text-light px-1 py-3">Завдань немає</p>
+                    <div className="p-5 space-y-5">
+                      {totalCount === 0 ? (
+                        <p className="text-center text-light text-sm py-6">
+                          Завдань ще немає. Створіть перше!
+                        </p>
                       ) : (
-                        <ul className="space-y-2">
-                          {fOpen.map((task) => (
-                            <StandardTaskRow key={task.id} task={task} standardId={id} />
-                          ))}
-                        </ul>
+                        <>
+                          {/* Відкриті */}
+                          <section>
+                            <div className="text-[11px] font-bold uppercase tracking-[0.8px] text-light mb-2">
+                              Відкриті · {fOpen.length}
+                            </div>
+                            {fOpen.length === 0 ? (
+                              <p className="text-sm text-light px-1 py-3">Відкритих немає</p>
+                            ) : (
+                              <ul className="space-y-2">
+                                {fOpen.map((task) => (
+                                  <StandardTaskRow key={task.id} task={task} standardId={id} />
+                                ))}
+                              </ul>
+                            )}
+                          </section>
+
+                          {/* Виконані */}
+                          {fDone.length > 0 && (
+                            <section>
+                              <div className="text-[11px] font-bold uppercase tracking-[0.8px] text-light mb-2">
+                                Виконані · {fDone.length}
+                              </div>
+                              <ul className="space-y-2">
+                                {fDone.map((task) => (
+                                  <StandardTaskRow key={task.id} task={task} standardId={id} />
+                                ))}
+                              </ul>
+                            </section>
+                          )}
+                        </>
                       )}
+
                       <button
                         onClick={() => setTaskModalOpen(true)}
-                        className="mt-2 w-full text-center text-[13px] py-2.5 rounded-[10px] border border-dashed border-hairline text-mid hover:text-brand hover:border-brand transition-colors"
+                        className="w-full text-center text-[13px] py-2.5 rounded-[10px] border border-dashed border-hairline text-mid hover:text-brand hover:border-brand transition-colors"
                       >
                         + Додати завдання
                       </button>
-                    </section>
-
-                    {/* Виконані */}
-                    {fDone.length > 0 && (
-                      <section>
-                        <div className="text-[11px] font-bold uppercase tracking-[0.8px] text-light mb-2">
-                          Виконані · {fDone.length}
-                        </div>
-                        <ul className="space-y-2">
-                          {fDone.map((task) => (
-                            <StandardTaskRow key={task.id} task={task} standardId={id} />
-                          ))}
-                        </ul>
-                      </section>
-                    )}
+                    </div>
                   </div>
                 );
               })()}
