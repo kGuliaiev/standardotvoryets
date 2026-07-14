@@ -313,6 +313,15 @@ export const standardRouter = createTRPCRouter({
         programNumber: z.number().int().min(1).max(9999).optional().nullable(),
         indeks: z.string().max(120).optional().nullable(),
         oldTitle: z.string().max(300).optional().nullable(),
+        // Stage due dates — planned deadlines per program-plan stage.
+        // Editable post-create (previously only settable via /standards/new).
+        // Nullable so a stage can be cleared. `completedAt` fields stay
+        // out of this mutation — those go through confirmStage.
+        techSpecDueDate: z.date().optional().nullable(),
+        draftDueDate: z.date().optional().nullable(),
+        feedbackDueDate: z.date().optional().nullable(),
+        techReviewDueDate: z.date().optional().nullable(),
+        finalDueDate: z.date().optional().nullable(),
       }),
     )
     .mutation(async ({ ctx, input }) => {

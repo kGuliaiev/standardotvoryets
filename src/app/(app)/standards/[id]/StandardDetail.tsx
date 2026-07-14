@@ -241,6 +241,16 @@ export function StandardDetail({ id }: { id: string }) {
     indeks: '',
     oldTitle: '',
   });
+  // Separate small modal for editing the 5 planned stage due dates.
+  const [stageDatesOpen, setStageDatesOpen] = useState(false);
+  const [stageDatesForm, setStageDatesForm] = useState({
+    techSpecDueDate: '',
+    draftDueDate: '',
+    feedbackDueDate: '',
+    techReviewDueDate: '',
+    finalDueDate: '',
+  });
+  const [stageDatesError, setStageDatesError] = useState<string | null>(null);
   const [editError, setEditError] = useState<string | null>(null);
   const [taskModalOpen, setTaskModalOpen] = useState(false);
   const [taskFilter, setTaskFilter] = useState<'all' | 'open' | 'done' | 'mine'>('all');
@@ -491,36 +501,61 @@ export function StandardDetail({ id }: { id: string }) {
 
           {/* Collapsible stepper */}
           <div className="mt-4 pt-3 border-t border-hairline">
-            <button
-              type="button"
-              onClick={() => setStepperOpen((o) => !o)}
-              className="flex items-center justify-between gap-3 w-full text-left group"
-            >
-              <span className="text-xs text-mid font-semibold uppercase tracking-wide group-hover:text-ink transition-colors flex flex-col sm:flex-row sm:items-center sm:gap-2 min-w-0">
-                <span className="truncate">Поетапний план виконання</span>
-                <span className="text-[10px] font-normal normal-case text-light truncate">
-                  <span className="hidden sm:inline">· </span>
-                  оновлено {formatDateTime(standard.updatedAt)}
-                </span>
-              </span>
-              <div className="flex items-center gap-2 shrink-0">
-                {!stepperOpen && hasOverdueStage(standard) && (
-                  <span className="text-[11px] text-red-600 dark:text-red-400 font-semibold hidden sm:inline">
-                    є прострочений етап
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setStepperOpen((o) => !o)}
+                className="flex items-center justify-between gap-3 flex-1 text-left group min-w-0"
+              >
+                <span className="text-xs text-mid font-semibold uppercase tracking-wide group-hover:text-ink transition-colors flex flex-col sm:flex-row sm:items-center sm:gap-2 min-w-0">
+                  <span className="truncate">Поетапний план виконання</span>
+                  <span className="text-[10px] font-normal normal-case text-light truncate">
+                    <span className="hidden sm:inline">· </span>
+                    оновлено {formatDateTime(standard.updatedAt)}
                   </span>
-                )}
-                {!stepperOpen && hasOverdueStage(standard) && (
-                  <span
-                    className="sm:hidden w-2 h-2 rounded-full bg-red-500"
-                    title="Є прострочений етап"
+                </span>
+                <div className="flex items-center gap-2 shrink-0">
+                  {!stepperOpen && hasOverdueStage(standard) && (
+                    <span className="text-[11px] text-red-600 dark:text-red-400 font-semibold hidden sm:inline">
+                      є прострочений етап
+                    </span>
+                  )}
+                  {!stepperOpen && hasOverdueStage(standard) && (
+                    <span
+                      className="sm:hidden w-2 h-2 rounded-full bg-red-500"
+                      title="Є прострочений етап"
+                    />
+                  )}
+                  <ChevronDown
+                    size={16}
+                    className={`text-mid transition-transform ${stepperOpen ? 'rotate-180' : ''}`}
                   />
-                )}
-                <ChevronDown
-                  size={16}
-                  className={`text-mid transition-transform ${stepperOpen ? 'rotate-180' : ''}`}
-                />
-              </div>
-            </button>
+                </div>
+              </button>
+              {canEdit && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    const iso = (d: Date | string | null | undefined) =>
+                      d ? new Date(d).toISOString().slice(0, 10) : '';
+                    setStageDatesForm({
+                      techSpecDueDate: iso(standard.techSpecDueDate),
+                      draftDueDate: iso(standard.draftDueDate),
+                      feedbackDueDate: iso(standard.feedbackDueDate),
+                      techReviewDueDate: iso(standard.techReviewDueDate),
+                      finalDueDate: iso(standard.finalDueDate),
+                    });
+                    setStageDatesError(null);
+                    setStageDatesOpen(true);
+                  }}
+                  title="Редагувати планові дедлайни етапів"
+                  className="shrink-0 inline-flex items-center gap-1 text-[11px] text-mid hover:text-brand px-2 py-1 rounded border border-hairline hover:border-brand transition-colors"
+                >
+                  <Pencil className="w-3 h-3" />
+                  Терміни
+                </button>
+              )}
+            </div>
             {stepperOpen && (
               <div className="mt-3">
                 {!canChangeStatus && (
@@ -1426,6 +1461,87 @@ export function StandardDetail({ id }: { id: string }) {
                   indeks: strToNull(editForm.indeks),
                   oldTitle: strToNull(editForm.oldTitle),
                 });
+              }}
+              disabled={updateMutation.isPending}
+              className="flex-1 btn-primary"
+            >
+              {updateMutation.isPending ? 'Збереження…' : 'Зберегти'}
+            </button>
+          </div>
+        </div>
+      </Modal>
+
+      {/* Stage due dates — separate modal so the main edit form stays
+          focused on meta. Post-launch this could grow order validation
+          (each date ≥ previous), but for now they're independent. */}
+      <Modal
+        open={stageDatesOpen}
+        onClose={() => setStageDatesOpen(false)}
+        title="Терміни етапів"
+        subtitle={standard.code}
+        size="md"
+      >
+        <div className="space-y-4">
+          <p className="text-xs text-light">
+            Планові дедлайни за етапами програми стандартизації. Порожнє поле — етап без
+            запланованого дедлайну. Дати виконання (
+            <span className="text-emerald-600 dark:text-emerald-400">✓</span>) підтверджуються
+            окремо на діаграмі.
+          </p>
+          <div className="grid grid-cols-1 gap-3">
+            {(
+              [
+                { key: 'techSpecDueDate', label: '1 · ТЗ' },
+                { key: 'draftDueDate', label: '2 · Проєкт стандарту' },
+                { key: 'feedbackDueDate', label: '3 · Відгуки' },
+                { key: 'techReviewDueDate', label: '4 · Технічна перевірка' },
+                { key: 'finalDueDate', label: '5 · Фіналізація' },
+              ] as const
+            ).map((row) => (
+              <div key={row.key} className="grid grid-cols-[1fr_180px] items-center gap-3">
+                <label className="text-sm text-ink">{row.label}</label>
+                <input
+                  type="date"
+                  className="input"
+                  value={stageDatesForm[row.key]}
+                  onChange={(e) => setStageDatesForm((f) => ({ ...f, [row.key]: e.target.value }))}
+                />
+              </div>
+            ))}
+          </div>
+          {stageDatesError && (
+            <p className="text-sm text-red-600 bg-red-50 rounded-[10px] px-3 py-2">
+              {stageDatesError}
+            </p>
+          )}
+          <div className="flex gap-3 pt-2 border-t border-hairline">
+            <button
+              type="button"
+              onClick={() => setStageDatesOpen(false)}
+              className="flex-1 btn-secondary"
+              disabled={updateMutation.isPending}
+            >
+              Скасувати
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setStageDatesError(null);
+                const toDate = (v: string): Date | null => (v ? new Date(v) : null);
+                updateMutation.mutate(
+                  {
+                    id,
+                    techSpecDueDate: toDate(stageDatesForm.techSpecDueDate),
+                    draftDueDate: toDate(stageDatesForm.draftDueDate),
+                    feedbackDueDate: toDate(stageDatesForm.feedbackDueDate),
+                    techReviewDueDate: toDate(stageDatesForm.techReviewDueDate),
+                    finalDueDate: toDate(stageDatesForm.finalDueDate),
+                  },
+                  {
+                    onSuccess: () => setStageDatesOpen(false),
+                    onError: (e) => setStageDatesError(e.message),
+                  },
+                );
               }}
               disabled={updateMutation.isPending}
               className="flex-1 btn-primary"
