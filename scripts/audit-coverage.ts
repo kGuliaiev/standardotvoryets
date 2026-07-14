@@ -42,6 +42,14 @@ const EXEMPT = new Set<string>([
   // для ручного перегляду). Аудит відбувається при збереженні пунктів
   // через upsertAgendaItem.
   'meeting.generateProtocolDraft',
+  // Task checklist per-item ops — trivial per-tick actions (tick/rename/
+  // delete a single subtask). checklistAdd IS audited so the appearance
+  // of new subtasks is journaled; the follow-up ops would just flood
+  // the feed. Full checklist state is derivable from the parent Task's
+  // updatedAt + current snapshot.
+  'task.checklistToggle',
+  'task.checklistUpdate',
+  'task.checklistDelete',
 ]);
 
 interface Finding {
