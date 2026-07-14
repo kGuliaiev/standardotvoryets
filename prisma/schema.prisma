@@ -171,6 +171,7 @@ model User {
   votes           Vote[]
   tasksAssigned     Task[]         @relation("TaskAssignee")
   tasksCreated      Task[]         @relation("TaskCreator")
+  checklistItemsAssigned TaskChecklistItem[] @relation("ChecklistItemAssignee")
   tasksCompleted    Task[]         @relation("TaskCompleter")
   agendaSpoke       AgendaItem[]   @relation("AgendaSpeaker")
   agendaResponsible AgendaItem[]   @relation("AgendaResponsible")
@@ -779,23 +780,30 @@ model Task {
   @@map("tasks")
 }
 
-/// Lightweight checklist item under a Task — subtasks without their
-/// own deadlines / assignees / statuses. Just a title + done flag +
-/// order. Cascade-deleted with the parent task. Kept simple on
-/// purpose: if a subtask needs its own deadline or assignee, it
-/// probably deserves to be a real Task instead.
+/// Subtask under a Task — mirrors a proper Task's user-facing shape
+/// (title + description + assignee + due date + order + done flag) but
+/// intentionally stays lightweight: no status machine (only isDone),
+/// no notification pipeline, no comments. Cascade-deleted with the
+/// parent task. If a subtask needs its own audit trail or comment
+/// thread it should be promoted to a real Task under the same
+/// standard — this model is for quick, self-contained TODOs.
 model TaskChecklistItem {
-  id        String   @id @default(cuid())
-  taskId    String
-  title     String
-  isDone    Boolean  @default(false)
-  order     Int      @default(0)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id          String    @id @default(cuid())
+  taskId      String
+  title       String
+  description String?   @db.Text
+  isDone      Boolean   @default(false)
+  order       Int       @default(0)
+  dueDate     DateTime?
+  assigneeId  String?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
 
-  task Task @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  task     Task  @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  assignee User? @relation("ChecklistItemAssignee", fields: [assigneeId], references: [id])
 
   @@index([taskId, order])
+  @@index([assigneeId])
   @@map("task_checklist_items")
 }
 

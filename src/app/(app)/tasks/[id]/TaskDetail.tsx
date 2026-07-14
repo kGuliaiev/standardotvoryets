@@ -5,7 +5,19 @@ import { trpc } from '@/lib/trpc/client';
 import { useSession } from 'next-auth/react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { Pencil, Trash2, Check, Clock, AlertTriangle, User, Calendar, X, Plus } from 'lucide-react';
+import {
+  Pencil,
+  Trash2,
+  Check,
+  Clock,
+  AlertTriangle,
+  User,
+  Calendar,
+  X,
+  Plus,
+  ChevronDown,
+  ChevronUp,
+} from 'lucide-react';
 import { Avatar } from '@/components/ui/Avatar';
 import { ActivityFeed } from '@/components/ActivityFeed';
 import { TaskFormModal } from '@/components/TaskFormModal';
@@ -166,10 +178,16 @@ export function TaskDetail({ id }: { id: string }) {
           </div>
         )}
 
-        {/* Checklist — simple subtasks (title + done flag). No dates,
-            no assignees. Managed by task creator, assignee, or anyone
-            with task:editAny. */}
-        <TaskChecklist taskId={id} items={task.checklistItems ?? []} onChanged={invalidate} />
+        {/* Checklist — subtasks with full task-like fields (title +
+            description + isDone + dueDate + assignee + reorderable
+            order). Managed by task creator, assignee, or anyone with
+            task:editAny. */}
+        <TaskChecklist
+          taskId={id}
+          workingGroupId={task.standard.workingGroupId}
+          items={task.checklistItems ?? []}
+          onChanged={invalidate}
+        />
       </div>
 
       {/* Audit/meta grid */}
@@ -279,22 +297,36 @@ export function TaskDetail({ id }: { id: string }) {
 interface ChecklistItem {
   id: string;
   title: string;
+  description: string | null;
   isDone: boolean;
   order: number;
+  dueDate: Date | string | null;
+  assigneeId: string | null;
+  assignee: { id: string; name: string; avatarUrl: string | null } | null;
 }
 
 function TaskChecklist({
   taskId,
+  workingGroupId,
   items,
   onChanged,
 }: {
   taskId: string;
+  workingGroupId: string;
   items: ChecklistItem[];
   onChanged: () => void;
 }) {
   const [draft, setDraft] = useState('');
+  // Which row is expanded (showing extra fields).
+  const [expandedId, setExpandedId] = useState<string | null>(null);
+  // Which row is title-editing.
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editingDraft, setEditingDraft] = useState('');
+
+  // WG members for the assignee dropdown — same source as the parent
+  // task's edit modal.
+  const { data: wg } = trpc.workingGroup.byId.useQuery({ id: workingGroupId });
+  const members = wg?.members ?? [];
 
   const add = trpc.task.checklistAdd.useMutation({ onSuccess: onChanged });
   const toggle = trpc.task.checklistToggle.useMutation({ onSuccess: onChanged });
@@ -305,6 +337,7 @@ function TaskChecklist({
     },
   });
   const remove = trpc.task.checklistDelete.useMutation({ onSuccess: onChanged });
+  const reorder = trpc.task.checklistReorder.useMutation({ onSuccess: onChanged });
 
   const done = items.filter((i) => i.isDone).length;
   const total = items.length;
@@ -316,6 +349,18 @@ function TaskChecklist({
     add.mutate({ taskId, title: t });
     setDraft('');
   };
+
+  // Swap item[idx] with its neighbour (idx + delta), then persist.
+  const move = (idx: number, delta: -1 | 1) => {
+    const next = [...items];
+    const swap = idx + delta;
+    if (swap < 0 || swap >= next.length) return;
+    [next[idx], next[swap]] = [next[swap]!, next[idx]!];
+    reorder.mutate({ taskId, orderedIds: next.map((i) => i.id) });
+  };
+
+  const toIsoDate = (d: Date | string | null | undefined): string =>
+    d ? new Date(d).toISOString().slice(0, 10) : '';
 
   return (
     <div className="mt-5 pt-4 border-t border-hairline">
@@ -339,61 +384,181 @@ function TaskChecklist({
       </div>
 
       {items.length > 0 && (
-        <ul className="space-y-1.5 mb-3">
-          {items.map((item) => (
-            <li key={item.id} className="group flex items-start gap-2 py-1">
-              <input
-                type="checkbox"
-                checked={item.isDone}
-                disabled={toggle.isPending}
-                onChange={() => toggle.mutate({ id: item.id })}
-                className="mt-1 w-4 h-4 accent-brand cursor-pointer shrink-0"
-              />
-              {editingId === item.id ? (
-                <input
-                  type="text"
-                  value={editingDraft}
-                  autoFocus
-                  onChange={(e) => setEditingDraft(e.target.value)}
-                  onBlur={() => {
-                    const t = editingDraft.trim();
-                    if (t && t !== item.title) update.mutate({ id: item.id, title: t });
-                    else setEditingId(null);
-                  }}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') {
-                      e.preventDefault();
-                      e.currentTarget.blur();
-                    } else if (e.key === 'Escape') {
-                      setEditingId(null);
-                    }
-                  }}
-                  className="input flex-1 text-sm py-1"
-                />
-              ) : (
-                <span
-                  className={`flex-1 text-sm cursor-text leading-relaxed ${
-                    item.isDone ? 'line-through text-light' : 'text-ink'
-                  }`}
-                  onClick={() => {
-                    setEditingId(item.id);
-                    setEditingDraft(item.title);
-                  }}
-                >
-                  {item.title}
-                </span>
-              )}
-              <button
-                type="button"
-                onClick={() => remove.mutate({ id: item.id })}
-                disabled={remove.isPending}
-                title="Видалити підзадачу"
-                className="opacity-0 group-hover:opacity-100 p-1 rounded text-light hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/30 transition-all"
+        <ul className="space-y-1 mb-3">
+          {items.map((item, idx) => {
+            const isExpanded = expandedId === item.id;
+            const isTitleEditing = editingId === item.id;
+            const dueOverdue = !item.isDone && item.dueDate && new Date(item.dueDate) < new Date();
+            return (
+              <li
+                key={item.id}
+                className="group rounded-[10px] border border-hairline bg-card hover:border-brand/40 transition-colors"
               >
-                <X className="w-3.5 h-3.5" />
-              </button>
-            </li>
-          ))}
+                <div className="flex items-start gap-2 px-2.5 py-1.5">
+                  <input
+                    type="checkbox"
+                    checked={item.isDone}
+                    disabled={toggle.isPending}
+                    onChange={() => toggle.mutate({ id: item.id })}
+                    className="mt-1 w-4 h-4 accent-brand cursor-pointer shrink-0"
+                  />
+                  <div className="flex-1 min-w-0">
+                    {isTitleEditing ? (
+                      <input
+                        type="text"
+                        value={editingDraft}
+                        autoFocus
+                        onChange={(e) => setEditingDraft(e.target.value)}
+                        onBlur={() => {
+                          const t = editingDraft.trim();
+                          if (t && t !== item.title) update.mutate({ id: item.id, title: t });
+                          else setEditingId(null);
+                        }}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            e.preventDefault();
+                            e.currentTarget.blur();
+                          } else if (e.key === 'Escape') {
+                            setEditingId(null);
+                          }
+                        }}
+                        className="input w-full text-sm py-1"
+                      />
+                    ) : (
+                      <span
+                        className={`text-sm cursor-text leading-relaxed block ${
+                          item.isDone ? 'line-through text-light' : 'text-ink'
+                        }`}
+                        onClick={() => {
+                          setEditingId(item.id);
+                          setEditingDraft(item.title);
+                        }}
+                      >
+                        {item.title}
+                      </span>
+                    )}
+                    {/* Row meta — assignee chip + due chip. Only rendered
+                        when at least one is set, so a bare item stays
+                        compact. */}
+                    {!isTitleEditing && (item.assignee ?? item.dueDate) && (
+                      <div className="flex items-center gap-2 mt-0.5 flex-wrap">
+                        {item.assignee && (
+                          <span className="inline-flex items-center gap-1 text-[11px] text-mid">
+                            <Avatar
+                              name={item.assignee.name}
+                              avatarUrl={item.assignee.avatarUrl ?? undefined}
+                              size="xs"
+                            />
+                            <span className="truncate max-w-[160px]">{item.assignee.name}</span>
+                          </span>
+                        )}
+                        {item.dueDate && (
+                          <span
+                            className={`text-[11px] font-mono ${dueOverdue ? 'text-red-600 dark:text-red-400 font-bold' : 'text-mid'}`}
+                          >
+                            📅 {formatDate(item.dueDate)}
+                          </span>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                  {/* Reorder + expand + delete — appear on row hover. */}
+                  <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
+                    <button
+                      type="button"
+                      onClick={() => move(idx, -1)}
+                      disabled={idx === 0 || reorder.isPending}
+                      title="Вгору"
+                      className="p-1 rounded text-light hover:text-ink hover:bg-pill disabled:opacity-30 disabled:cursor-not-allowed"
+                    >
+                      <ChevronUp className="w-3.5 h-3.5" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => move(idx, 1)}
+                      disabled={idx === items.length - 1 || reorder.isPending}
+                      title="Вниз"
+                      className="p-1 rounded text-light hover:text-ink hover:bg-pill disabled:opacity-30 disabled:cursor-not-allowed"
+                    >
+                      <ChevronDown className="w-3.5 h-3.5" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setExpandedId(isExpanded ? null : item.id)}
+                      title={isExpanded ? 'Згорнути' : 'Розгорнути деталі'}
+                      className={`p-1 rounded transition-colors ${isExpanded ? 'text-brand bg-brand-soft/40' : 'text-light hover:text-ink hover:bg-pill'}`}
+                    >
+                      <Pencil className="w-3.5 h-3.5" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => remove.mutate({ id: item.id })}
+                      disabled={remove.isPending}
+                      title="Видалити підзадачу"
+                      className="p-1 rounded text-light hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/30"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                </div>
+                {/* Expanded editor — description / due / assignee.
+                    Autosave on blur (textarea) / change (date + select)
+                    so there's no explicit save button. */}
+                {isExpanded && (
+                  <div className="border-t border-hairline px-3 py-3 space-y-3 bg-page/30">
+                    <div>
+                      <label className="field-label">Опис</label>
+                      <textarea
+                        rows={2}
+                        className="textarea resize-none w-full text-sm"
+                        placeholder="Деталі, посилання…"
+                        defaultValue={item.description ?? ''}
+                        onBlur={(e) => {
+                          const v = e.target.value.trim();
+                          const norm = v === '' ? null : v;
+                          if (norm !== (item.description ?? null)) {
+                            update.mutate({ id: item.id, description: norm });
+                          }
+                        }}
+                      />
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <div>
+                        <label className="field-label">Термін</label>
+                        <input
+                          type="date"
+                          className="input"
+                          defaultValue={toIsoDate(item.dueDate)}
+                          onChange={(e) => {
+                            const v = e.target.value;
+                            update.mutate({ id: item.id, dueDate: v ? new Date(v) : null });
+                          }}
+                        />
+                      </div>
+                      <div>
+                        <label className="field-label">Виконавець</label>
+                        <select
+                          className="select"
+                          value={item.assigneeId ?? ''}
+                          onChange={(e) => {
+                            const v = e.target.value;
+                            update.mutate({ id: item.id, assigneeId: v === '' ? null : v });
+                          }}
+                        >
+                          <option value="">— не вказано —</option>
+                          {members.map((m) => (
+                            <option key={m.userId} value={m.userId}>
+                              {m.user.name}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </li>
+            );
+          })}
         </ul>
       )}
 

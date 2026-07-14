@@ -50,6 +50,7 @@ const EXEMPT = new Set<string>([
   'task.checklistToggle',
   'task.checklistUpdate',
   'task.checklistDelete',
+  'task.checklistReorder',
 ]);
 
 interface Finding {

@@ -87,7 +87,10 @@ export const taskRouter = createTRPCRouter({
           assignee: { select: { id: true, name: true, avatarUrl: true } },
           createdBy: { select: { id: true, name: true, avatarUrl: true } },
           completedBy: { select: { id: true, name: true, avatarUrl: true } },
-          checklistItems: { orderBy: [{ order: 'asc' }, { createdAt: 'asc' }] },
+          checklistItems: {
+            orderBy: [{ order: 'asc' }, { createdAt: 'asc' }],
+            include: { assignee: { select: { id: true, name: true, avatarUrl: true } } },
+          },
         },
       });
       if (!task) throw new TRPCError({ code: 'NOT_FOUND' });
@@ -341,7 +344,19 @@ export const taskRouter = createTRPCRouter({
     }),
 
   checklistUpdate: protectedProcedure
-    .input(z.object({ id: z.string().cuid(), title: z.string().min(1).max(500) }))
+    .input(
+      z.object({
+        id: z.string().cuid(),
+        // Every field is `optional`: partial patch. `null` is the
+        // explicit "clear" for the nullable fields (description /
+        // dueDate / assigneeId) so the client can disambiguate
+        // "unchanged" (undefined) from "erase" (null).
+        title: z.string().min(1).max(500).optional(),
+        description: z.string().max(5000).nullable().optional(),
+        dueDate: z.date().nullable().optional(),
+        assigneeId: z.string().cuid().nullable().optional(),
+      }),
+    )
     .mutation(async ({ ctx, input }) => {
       const item = await ctx.db.taskChecklistItem.findUniqueOrThrow({
         where: { id: input.id },
@@ -357,10 +372,60 @@ export const taskRouter = createTRPCRouter({
       ) {
         throw new TRPCError({ code: 'FORBIDDEN' });
       }
+      const data: {
+        title?: string;
+        description?: string | null;
+        dueDate?: Date | null;
+        assigneeId?: string | null;
+      } = {};
+      if (input.title !== undefined) data.title = input.title.trim();
+      if (input.description !== undefined) data.description = input.description;
+      if (input.dueDate !== undefined) data.dueDate = input.dueDate;
+      if (input.assigneeId !== undefined) data.assigneeId = input.assigneeId;
       return ctx.db.taskChecklistItem.update({
         where: { id: input.id },
-        data: { title: input.title.trim() },
+        data,
+        include: { assignee: { select: { id: true, name: true, avatarUrl: true } } },
       });
+    }),
+
+  // Reorder items within a task. Client sends the desired sequence
+  // (all item ids in the new order); server rewrites `order` in a
+  // single transaction. Missing ids keep their existing order — this
+  // keeps the RPC forgiving if a concurrent delete raced with the
+  // reorder.
+  checklistReorder: protectedProcedure
+    .input(
+      z.object({
+        taskId: z.string().cuid(),
+        orderedIds: z.array(z.string().cuid()).min(1).max(500),
+      }),
+    )
+    .mutation(async ({ ctx, input }) => {
+      const task = await ctx.db.task.findUniqueOrThrow({
+        where: { id: input.taskId },
+        include: { standard: { select: { workingGroupId: true } } },
+      });
+      const uctx = userCtx(ctx.session);
+      const isCreator = task.createdById === ctx.session.user.id;
+      const isAssignee = task.assigneeId === ctx.session.user.id;
+      if (!can(uctx, 'task:editAny', task.standard.workingGroupId) && !isCreator && !isAssignee) {
+        throw new TRPCError({ code: 'FORBIDDEN' });
+      }
+      // Only reorder items that actually belong to this task — silently
+      // ignore ids that don't (client desync, race with delete).
+      const own = await ctx.db.taskChecklistItem.findMany({
+        where: { taskId: input.taskId, id: { in: input.orderedIds } },
+        select: { id: true },
+      });
+      const ownSet = new Set(own.map((i) => i.id));
+      const finalOrder = input.orderedIds.filter((id) => ownSet.has(id));
+      await ctx.db.$transaction(
+        finalOrder.map((id, idx) =>
+          ctx.db.taskChecklistItem.update({ where: { id }, data: { order: idx + 1 } }),
+        ),
+      );
+      return { ok: true };
     }),
 
   checklistDelete: protectedProcedure
