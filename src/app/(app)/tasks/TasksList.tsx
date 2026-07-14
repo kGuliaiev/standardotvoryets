@@ -589,7 +589,15 @@ function TaskRowItem({
           {task.checklistItems.map((sub) => {
             const subDue = sub.dueDate ? new Date(sub.dueDate) : null;
             return (
-              <li key={sub.id} className="flex items-center gap-2 text-sm py-1">
+              <li
+                key={sub.id}
+                // Reserve a transparent bottom border so hover doesn't
+                // shift layout. On hover a dashed hairline appears
+                // under the row — visually anchors the meta on the
+                // right to the correct title on the left. Skipped on
+                // the last row (nothing to separate from).
+                className="group flex items-center gap-2 text-sm py-1 border-b border-transparent hover:border-hairline hover:border-dashed last:hover:border-transparent transition-colors"
+              >
                 <input
                   type="checkbox"
                   checked={sub.isDone}
