@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { trpc } from '@/lib/trpc/client';
 import { Modal } from '@/components/ui/Modal';
 import { Loader2 } from 'lucide-react';
@@ -55,8 +55,16 @@ export function TaskFormModal({
   });
   const [error, setError] = useState<string | null>(null);
 
+  // Seed the form ONCE per open-cycle — otherwise a parent re-render
+  // (e.g. `standard.byId` polling every 10s in StandardDetail) that
+  // passes a fresh `initial={{...}}` literal would wipe whatever the
+  // user has typed since opening the modal. Tracked via a ref so
+  // pending edits aren't clobbered by background invalidations.
+  const prevOpenRef = useRef(false);
   useEffect(() => {
-    if (open) {
+    const justOpened = open && !prevOpenRef.current;
+    prevOpenRef.current = open;
+    if (justOpened) {
       setForm({
         workingGroupId: initial?.workingGroupId ?? lockedWorkingGroupId ?? '',
         standardId: initial?.standardId ?? lockedStandardId ?? '',
