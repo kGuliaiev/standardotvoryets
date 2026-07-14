@@ -55,6 +55,11 @@ export const taskRouter = createTRPCRouter({
             select: {
               id: true,
               code: true,
+              // Real programme index-grif — surfaced on /tasks so the
+              // chip matches the standard's actual registry name
+              // instead of the shorter internal `code`. Nullable —
+              // client falls back to `code` when unset.
+              indeks: true,
               title: true,
               workingGroupId: true,
               workingGroup: { select: { id: true, code: true, color: true } },

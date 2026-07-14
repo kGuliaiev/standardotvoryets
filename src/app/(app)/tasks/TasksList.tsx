@@ -30,7 +30,13 @@ interface TaskRow {
   assigneeId: string | null;
   assignee: { id: string; name: string; avatarUrl: string | null } | null;
   standardId: string;
-  standard: { id: string; code: string; title: string; workingGroupId: string };
+  standard: {
+    id: string;
+    code: string;
+    indeks: string | null;
+    title: string;
+    workingGroupId: string;
+  };
   createdById: string;
 }
 
@@ -125,7 +131,13 @@ export function TasksList() {
       if (filter === 'mine' && t.assigneeId !== userId) return false;
       if (search.trim()) {
         const q = search.toLowerCase();
-        if (!t.title.toLowerCase().includes(q) && !t.standard.code.toLowerCase().includes(q))
+        // Match on task title, internal code, OR the visible indeks-grif —
+        // whichever the user typed, they find the task.
+        if (
+          !t.title.toLowerCase().includes(q) &&
+          !t.standard.code.toLowerCase().includes(q) &&
+          !(t.standard.indeks ?? '').toLowerCase().includes(q)
+        )
           return false;
       }
       return true;
@@ -483,9 +495,14 @@ function TaskRowItem({
       {showStandard && (
         <Link
           href={`/standards/${task.standardId}`}
-          className="text-[10px] font-mono font-bold px-2 py-0.5 rounded bg-pill text-mid hover:text-brand"
+          // Show the full indeks-grif when it's registered on the standard;
+          // otherwise fall back to the shorter internal `code`. Hover
+          // reveals whichever isn't in the label so both are always
+          // reachable.
+          title={task.standard.indeks ? `Внутрішній код: ${task.standard.code}` : undefined}
+          className="text-[10px] font-mono font-bold px-2 py-0.5 rounded bg-pill text-mid hover:text-brand max-w-[220px] truncate"
         >
-          {task.standard.code}
+          {task.standard.indeks ?? task.standard.code}
         </Link>
       )}
       {task.assignee && (

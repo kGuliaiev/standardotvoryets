@@ -79,9 +79,10 @@ export function TaskDetail({ id }: { id: string }) {
         <span>/</span>
         <Link
           href={`/standards/${task.standardId}`}
+          title={task.standard.indeks ? `Внутрішній код: ${task.standard.code}` : undefined}
           className="font-mono text-light hover:text-brand"
         >
-          {task.standard.code}
+          {task.standard.indeks ?? task.standard.code}
         </Link>
       </nav>
 
