@@ -1882,7 +1882,6 @@ function StandardTaskRow({
         <ul className="border-t border-hairline bg-page/30 px-4 py-2 space-y-1">
           {task.checklistItems.map((sub) => {
             const subDue = sub.dueDate ? new Date(sub.dueDate) : null;
-            const overdue = !sub.isDone && subDue && subDue < new Date();
             return (
               <li key={sub.id} className="flex items-center gap-2 text-sm py-1">
                 <input
@@ -1897,25 +1896,20 @@ function StandardTaskRow({
                 >
                   {sub.title}
                 </span>
+                {/* Meta right-aligned, matches parent task row visual. */}
                 {sub.assignee && (
-                  <span className="inline-flex items-center gap-1 text-[11px] text-mid shrink-0">
+                  <div className="inline-flex items-center gap-1.5 shrink-0">
                     <Avatar
                       name={sub.assignee.name}
                       avatarUrl={sub.assignee.avatarUrl ?? undefined}
                       size="xs"
                     />
-                    <span className="hidden md:inline max-w-[140px] truncate">
+                    <span className="text-[11px] text-mid hidden md:inline max-w-[140px] truncate">
                       {sub.assignee.name}
                     </span>
-                  </span>
+                  </div>
                 )}
-                {sub.dueDate && (
-                  <span
-                    className={`text-[11px] font-mono shrink-0 ${overdue ? 'text-red-600 dark:text-red-400 font-bold' : 'text-mid'}`}
-                  >
-                    📅 {formatDate(sub.dueDate)}
-                  </span>
-                )}
+                <DueDateChip due={subDue} isDone={sub.isDone} />
               </li>
             );
           })}

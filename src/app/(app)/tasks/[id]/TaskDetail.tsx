@@ -23,6 +23,7 @@ import { ActivityFeed } from '@/components/ActivityFeed';
 import { TaskFormModal } from '@/components/TaskFormModal';
 import { ConfirmModal } from '@/components/ui/ConfirmModal';
 import { formatDate, formatDateTime } from '@/lib/utils';
+import { DueDateChip } from '@/lib/dueDate';
 
 const STATUS_TONE: Record<string, { label: string; cls: string }> = {
   OPEN: { label: 'Відкрите', cls: 'bg-[#EEF4FF] text-[#1A3A8F]' },
@@ -388,19 +389,18 @@ function TaskChecklist({
           {items.map((item, idx) => {
             const isExpanded = expandedId === item.id;
             const isTitleEditing = editingId === item.id;
-            const dueOverdue = !item.isDone && item.dueDate && new Date(item.dueDate) < new Date();
             return (
               <li
                 key={item.id}
                 className="group rounded-[10px] border border-hairline bg-card hover:border-brand/40 transition-colors"
               >
-                <div className="flex items-start gap-2 px-2.5 py-1.5">
+                <div className="flex items-center gap-2 px-2.5 py-1.5">
                   <input
                     type="checkbox"
                     checked={item.isDone}
                     disabled={toggle.isPending}
                     onChange={() => toggle.mutate({ id: item.id })}
-                    className="mt-1 w-4 h-4 accent-brand cursor-pointer shrink-0"
+                    className="w-4 h-4 accent-brand cursor-pointer shrink-0"
                   />
                   <div className="flex-1 min-w-0">
                     {isTitleEditing ? (
@@ -426,7 +426,7 @@ function TaskChecklist({
                       />
                     ) : (
                       <span
-                        className={`text-sm cursor-text leading-relaxed block ${
+                        className={`text-sm cursor-text leading-relaxed block truncate ${
                           item.isDone ? 'line-through text-light' : 'text-ink'
                         }`}
                         onClick={() => {
@@ -437,31 +437,29 @@ function TaskChecklist({
                         {item.title}
                       </span>
                     )}
-                    {/* Row meta — assignee chip + due chip. Only rendered
-                        when at least one is set, so a bare item stays
-                        compact. */}
-                    {!isTitleEditing && (item.assignee ?? item.dueDate) && (
-                      <div className="flex items-center gap-2 mt-0.5 flex-wrap">
-                        {item.assignee && (
-                          <span className="inline-flex items-center gap-1 text-[11px] text-mid">
-                            <Avatar
-                              name={item.assignee.name}
-                              avatarUrl={item.assignee.avatarUrl ?? undefined}
-                              size="xs"
-                            />
-                            <span className="truncate max-w-[160px]">{item.assignee.name}</span>
-                          </span>
-                        )}
-                        {item.dueDate && (
-                          <span
-                            className={`text-[11px] font-mono ${dueOverdue ? 'text-red-600 dark:text-red-400 font-bold' : 'text-mid'}`}
-                          >
-                            📅 {formatDate(item.dueDate)}
-                          </span>
-                        )}
-                      </div>
-                    )}
                   </div>
+                  {/* Meta on the right — same visual as parent task row:
+                      Avatar+ім'я, потім DueDateChip з датою і «ще N днів»
+                      (або «прострочено»). Прибирається на час inline-edit
+                      title щоб не тіснитись під input. */}
+                  {!isTitleEditing && item.assignee && (
+                    <div className="inline-flex items-center gap-1.5 shrink-0">
+                      <Avatar
+                        name={item.assignee.name}
+                        avatarUrl={item.assignee.avatarUrl ?? undefined}
+                        size="xs"
+                      />
+                      <span className="text-[11px] text-mid hidden md:inline max-w-[140px] truncate">
+                        {item.assignee.name}
+                      </span>
+                    </div>
+                  )}
+                  {!isTitleEditing && (
+                    <DueDateChip
+                      due={item.dueDate ? new Date(item.dueDate) : null}
+                      isDone={item.isDone}
+                    />
+                  )}
                   {/* Reorder + expand + delete — appear on row hover. */}
                   <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
                     <button
