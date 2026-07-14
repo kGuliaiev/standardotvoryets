@@ -38,6 +38,13 @@ export function Modal({
   closeOnOverlay = true,
 }: ModalProps) {
   const panelRef = useRef<HTMLDivElement>(null);
+  // Tracks whether the pointer press that produced the pending click
+  // event started INSIDE the panel. If it did — the user is
+  // text-selecting or drag-scrolling and happened to release the
+  // button outside the panel; we must NOT treat that as a backdrop
+  // click. Cleared on every mouse-up so a real backdrop press-and-
+  // release still dismisses.
+  const mouseDownInside = useRef(false);
   // We render via createPortal to <body>. `mounted` keeps the first
   // SSR pass empty (no portal target yet) and renders client-side.
   const [mounted, setMounted] = useState(false);
@@ -126,10 +133,22 @@ export function Modal({
       role="dialog"
       aria-modal="true"
       className="fixed inset-0 z-[200] flex md:items-center justify-center bg-[rgba(8,14,33,0.55)] backdrop-blur-md md:p-4 animate-fade-in items-end"
-      // F-10: onClick (not onMouseDown) so selecting text inside the modal
-      // and accidentally releasing the mouse on the backdrop doesn't close it.
+      // F-10 + text-select-drag guard:
+      //   1. onMouseDown records whether the press landed inside the panel.
+      //   2. onClick only dismisses when BOTH (a) the click target is the
+      //      backdrop itself (e.target === e.currentTarget) AND (b) the
+      //      press did NOT start inside the panel. This blocks the case
+      //      where the user drags a text selection out of an input, since
+      //      the resulting `click` bubbles to the common ancestor (the
+      //      backdrop) and would otherwise satisfy the pre-existing
+      //      target-check.
+      onMouseDown={(e) => {
+        mouseDownInside.current = panelRef.current?.contains(e.target as Node) ?? false;
+      }}
       onClick={(e) => {
-        if (closeOnOverlay && e.target === e.currentTarget) onClose();
+        const started = mouseDownInside.current;
+        mouseDownInside.current = false;
+        if (closeOnOverlay && !started && e.target === e.currentTarget) onClose();
       }}
     >
       <div
