@@ -1837,27 +1837,34 @@ function StandardTaskRow({
                 : 'bg-slate-300'
           }`}
         />
-        <Link
-          href={`/tasks/${task.id}`}
-          className={`flex-1 text-left text-sm truncate transition-colors ${
-            isDone ? 'text-light line-through' : 'text-ink hover:text-brand'
-          }`}
-        >
-          {task.title}
-        </Link>
-        {hasChecklist && (
-          <button
-            type="button"
-            onClick={() => setExpanded((v) => !v)}
-            title={expanded ? 'Сховати підзадачі' : `Показати підзадачі (${doneSubs}/${totalSubs})`}
-            className="inline-flex items-center gap-1 text-[10px] font-mono px-1.5 py-0.5 rounded bg-pill text-mid hover:text-brand hover:bg-brand-soft/40 transition-colors shrink-0"
+        {/* Title + checklist chip in a shared min-w-0 flex row so the
+            chip sits snug against the title text (Linear/GitHub style),
+            and truncation stays title-first. */}
+        <div className="flex-1 min-w-0 flex items-center gap-2">
+          <Link
+            href={`/tasks/${task.id}`}
+            className={`min-w-0 text-left text-sm truncate transition-colors ${
+              isDone ? 'text-light line-through' : 'text-ink hover:text-brand'
+            }`}
           >
-            <ChevronDown
-              className={`w-3 h-3 transition-transform ${expanded ? 'rotate-180' : ''}`}
-            />
-            ☑ {doneSubs}/{totalSubs}
-          </button>
-        )}
+            {task.title}
+          </Link>
+          {hasChecklist && (
+            <button
+              type="button"
+              onClick={() => setExpanded((v) => !v)}
+              title={
+                expanded ? 'Сховати підзадачі' : `Показати підзадачі (${doneSubs}/${totalSubs})`
+              }
+              className="inline-flex items-center gap-1 text-[10px] font-mono px-1.5 py-0.5 rounded bg-pill text-mid hover:text-brand hover:bg-brand-soft/40 transition-colors shrink-0"
+            >
+              <ChevronDown
+                className={`w-3 h-3 transition-transform ${expanded ? 'rotate-180' : ''}`}
+              />
+              ☑ {doneSubs}/{totalSubs}
+            </button>
+          )}
+        </div>
         {task.assignee && (
           <div className="inline-flex items-center gap-1.5 shrink-0">
             <Avatar

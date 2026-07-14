@@ -507,31 +507,37 @@ function TaskRowItem({
         <span
           className={`w-2 h-2 rounded-full shrink-0 ${PRIORITY_DOT[task.priority] ?? 'bg-slate-300'}`}
         />
-        <Link
-          href={`/tasks/${task.id}`}
-          className={`flex-1 text-left text-sm truncate transition-colors ${
-            isDone ? 'text-light line-through' : 'text-ink hover:text-brand'
-          }`}
-        >
-          {task.title}
-        </Link>
-        {hasChecklist && (
-          <button
-            type="button"
-            onClick={() => setExpanded((v) => !v)}
-            title={
-              expanded
-                ? 'Сховати підзадачі'
-                : `Показати підзадачі (${doneSubtasks}/${totalSubtasks})`
-            }
-            className="inline-flex items-center gap-1 text-[10px] font-mono px-1.5 py-0.5 rounded bg-pill text-mid hover:text-brand hover:bg-brand-soft/40 transition-colors shrink-0"
+        {/* Title + checklist chip live in a shared flex container so the
+            chip sits snugly next to the title text (not on the far
+            right). `min-w-0` on the container lets the title truncate
+            when space is tight; the chip stays `shrink-0`. */}
+        <div className="flex-1 min-w-0 flex items-center gap-2">
+          <Link
+            href={`/tasks/${task.id}`}
+            className={`min-w-0 text-left text-sm truncate transition-colors ${
+              isDone ? 'text-light line-through' : 'text-ink hover:text-brand'
+            }`}
           >
-            <ChevronDown
-              className={`w-3 h-3 transition-transform ${expanded ? 'rotate-180' : ''}`}
-            />
-            ☑ {doneSubtasks}/{totalSubtasks}
-          </button>
-        )}
+            {task.title}
+          </Link>
+          {hasChecklist && (
+            <button
+              type="button"
+              onClick={() => setExpanded((v) => !v)}
+              title={
+                expanded
+                  ? 'Сховати підзадачі'
+                  : `Показати підзадачі (${doneSubtasks}/${totalSubtasks})`
+              }
+              className="inline-flex items-center gap-1 text-[10px] font-mono px-1.5 py-0.5 rounded bg-pill text-mid hover:text-brand hover:bg-brand-soft/40 transition-colors shrink-0"
+            >
+              <ChevronDown
+                className={`w-3 h-3 transition-transform ${expanded ? 'rotate-180' : ''}`}
+              />
+              ☑ {doneSubtasks}/{totalSubtasks}
+            </button>
+          )}
+        </div>
         {showStandard && (
           <Link
             href={`/standards/${task.standardId}`}
