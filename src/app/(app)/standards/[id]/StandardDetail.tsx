@@ -1783,6 +1783,7 @@ function StandardTaskRow({
     dueDate: Date | string | null;
     assigneeId: string | null;
     assignee?: { id: string; name: string; avatarUrl: string | null } | null;
+    checklistItems?: { id: string; isDone: boolean }[];
   };
   standardId: string;
 }) {
@@ -1824,6 +1825,14 @@ function StandardTaskRow({
       >
         {task.title}
       </Link>
+      {task.checklistItems && task.checklistItems.length > 0 && (
+        <span
+          className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-pill text-mid shrink-0"
+          title={`Підзадачі: ${task.checklistItems.filter((i) => i.isDone).length}/${task.checklistItems.length}`}
+        >
+          ☑ {task.checklistItems.filter((i) => i.isDone).length}/{task.checklistItems.length}
+        </span>
+      )}
       {task.assignee && (
         <div className="inline-flex items-center gap-1.5 shrink-0">
           <Avatar

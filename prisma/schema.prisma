@@ -770,12 +770,33 @@ model Task {
   createdAt     DateTime     @default(now())
   updatedAt     DateTime     @updatedAt
 
-  standard    Standard @relation(fields: [standardId], references: [id], onDelete: Cascade)
-  createdBy   User     @relation("TaskCreator", fields: [createdById], references: [id])
-  assignee    User?    @relation("TaskAssignee", fields: [assigneeId], references: [id])
-  completedBy User?    @relation("TaskCompleter", fields: [completedById], references: [id])
+  standard      Standard             @relation(fields: [standardId], references: [id], onDelete: Cascade)
+  createdBy     User                 @relation("TaskCreator", fields: [createdById], references: [id])
+  assignee      User?                @relation("TaskAssignee", fields: [assigneeId], references: [id])
+  completedBy   User?                @relation("TaskCompleter", fields: [completedById], references: [id])
+  checklistItems TaskChecklistItem[]
 
   @@map("tasks")
+}
+
+/// Lightweight checklist item under a Task — subtasks without their
+/// own deadlines / assignees / statuses. Just a title + done flag +
+/// order. Cascade-deleted with the parent task. Kept simple on
+/// purpose: if a subtask needs its own deadline or assignee, it
+/// probably deserves to be a real Task instead.
+model TaskChecklistItem {
+  id        String   @id @default(cuid())
+  taskId    String
+  title     String
+  isDone    Boolean  @default(false)
+  order     Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  task Task @relation(fields: [taskId], references: [id], onDelete: Cascade)
+
+  @@index([taskId, order])
+  @@map("task_checklist_items")
 }
 
 // ─────────────────────────────────────────

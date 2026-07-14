@@ -5,7 +5,7 @@ import { trpc } from '@/lib/trpc/client';
 import { useSession } from 'next-auth/react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { Pencil, Trash2, Check, Clock, AlertTriangle, User, Calendar } from 'lucide-react';
+import { Pencil, Trash2, Check, Clock, AlertTriangle, User, Calendar, X, Plus } from 'lucide-react';
 import { Avatar } from '@/components/ui/Avatar';
 import { ActivityFeed } from '@/components/ActivityFeed';
 import { TaskFormModal } from '@/components/TaskFormModal';
@@ -165,6 +165,11 @@ export function TaskDetail({ id }: { id: string }) {
             </p>
           </div>
         )}
+
+        {/* Checklist — simple subtasks (title + done flag). No dates,
+            no assignees. Managed by task creator, assignee, or anyone
+            with task:editAny. */}
+        <TaskChecklist taskId={id} items={task.checklistItems ?? []} onChanged={invalidate} />
       </div>
 
       {/* Audit/meta grid */}
@@ -267,6 +272,157 @@ export function TaskDetail({ id }: { id: string }) {
           deleteMutation.mutate({ id: task.id }, { onSuccess: () => setDeleteOpen(false) })
         }
       />
+    </div>
+  );
+}
+
+interface ChecklistItem {
+  id: string;
+  title: string;
+  isDone: boolean;
+  order: number;
+}
+
+function TaskChecklist({
+  taskId,
+  items,
+  onChanged,
+}: {
+  taskId: string;
+  items: ChecklistItem[];
+  onChanged: () => void;
+}) {
+  const [draft, setDraft] = useState('');
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editingDraft, setEditingDraft] = useState('');
+
+  const add = trpc.task.checklistAdd.useMutation({ onSuccess: onChanged });
+  const toggle = trpc.task.checklistToggle.useMutation({ onSuccess: onChanged });
+  const update = trpc.task.checklistUpdate.useMutation({
+    onSuccess: () => {
+      setEditingId(null);
+      onChanged();
+    },
+  });
+  const remove = trpc.task.checklistDelete.useMutation({ onSuccess: onChanged });
+
+  const done = items.filter((i) => i.isDone).length;
+  const total = items.length;
+  const pct = total > 0 ? Math.round((done / total) * 100) : 0;
+
+  const submitDraft = () => {
+    const t = draft.trim();
+    if (!t) return;
+    add.mutate({ taskId, title: t });
+    setDraft('');
+  };
+
+  return (
+    <div className="mt-5 pt-4 border-t border-hairline">
+      <div className="flex items-center justify-between mb-3">
+        <p className="field-label mb-0">
+          Підзадачі
+          {total > 0 && (
+            <span className="ml-2 text-xs text-light font-normal">
+              {done}/{total}
+            </span>
+          )}
+        </p>
+        {total > 0 && (
+          <div className="flex items-center gap-2 min-w-[120px]">
+            <div className="flex-1 h-1.5 rounded-full bg-pill overflow-hidden">
+              <div className="h-full bg-emerald-500 transition-all" style={{ width: `${pct}%` }} />
+            </div>
+            <span className="text-[11px] text-mid font-mono w-8 text-right">{pct}%</span>
+          </div>
+        )}
+      </div>
+
+      {items.length > 0 && (
+        <ul className="space-y-1.5 mb-3">
+          {items.map((item) => (
+            <li key={item.id} className="group flex items-start gap-2 py-1">
+              <input
+                type="checkbox"
+                checked={item.isDone}
+                disabled={toggle.isPending}
+                onChange={() => toggle.mutate({ id: item.id })}
+                className="mt-1 w-4 h-4 accent-brand cursor-pointer shrink-0"
+              />
+              {editingId === item.id ? (
+                <input
+                  type="text"
+                  value={editingDraft}
+                  autoFocus
+                  onChange={(e) => setEditingDraft(e.target.value)}
+                  onBlur={() => {
+                    const t = editingDraft.trim();
+                    if (t && t !== item.title) update.mutate({ id: item.id, title: t });
+                    else setEditingId(null);
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      e.currentTarget.blur();
+                    } else if (e.key === 'Escape') {
+                      setEditingId(null);
+                    }
+                  }}
+                  className="input flex-1 text-sm py-1"
+                />
+              ) : (
+                <span
+                  className={`flex-1 text-sm cursor-text leading-relaxed ${
+                    item.isDone ? 'line-through text-light' : 'text-ink'
+                  }`}
+                  onClick={() => {
+                    setEditingId(item.id);
+                    setEditingDraft(item.title);
+                  }}
+                >
+                  {item.title}
+                </span>
+              )}
+              <button
+                type="button"
+                onClick={() => remove.mutate({ id: item.id })}
+                disabled={remove.isPending}
+                title="Видалити підзадачу"
+                className="opacity-0 group-hover:opacity-100 p-1 rounded text-light hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/30 transition-all"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+
+      {/* Quick-add */}
+      <div className="flex items-center gap-2">
+        <input
+          type="text"
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') {
+              e.preventDefault();
+              submitDraft();
+            }
+          }}
+          placeholder="Нова підзадача…"
+          className="input flex-1 text-sm py-1.5"
+          disabled={add.isPending}
+        />
+        <button
+          type="button"
+          onClick={submitDraft}
+          disabled={!draft.trim() || add.isPending}
+          className="btn-secondary inline-flex items-center gap-1 py-1.5 px-3 text-sm disabled:opacity-50"
+        >
+          <Plus className="w-3.5 h-3.5" />
+          Додати
+        </button>
+      </div>
     </div>
   );
 }

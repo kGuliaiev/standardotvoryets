@@ -38,6 +38,9 @@ interface TaskRow {
     workingGroupId: string;
   };
   createdById: string;
+  // Present on task.list (server passes just the flags). Missing on
+  // rows that come from other queries — treat as empty.
+  checklistItems?: { id: string; isDone: boolean }[];
 }
 
 // Due chip + days-remaining label moved to @/lib/dueDate so the
@@ -492,6 +495,14 @@ function TaskRowItem({
       >
         {task.title}
       </Link>
+      {task.checklistItems && task.checklistItems.length > 0 && (
+        <span
+          className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-pill text-mid shrink-0"
+          title={`Підзадачі: ${task.checklistItems.filter((i) => i.isDone).length}/${task.checklistItems.length}`}
+        >
+          ☑ {task.checklistItems.filter((i) => i.isDone).length}/{task.checklistItems.length}
+        </span>
+      )}
       {showStandard && (
         <Link
           href={`/standards/${task.standardId}`}

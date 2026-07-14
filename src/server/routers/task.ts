@@ -67,6 +67,8 @@ export const taskRouter = createTRPCRouter({
           },
           assignee: { select: { id: true, name: true, avatarUrl: true } },
           createdBy: { select: { id: true, name: true } },
+          // Just the flags — the row-level badge only needs done/total.
+          checklistItems: { select: { id: true, isDone: true } },
         },
         orderBy: [{ status: 'asc' }, { dueDate: 'asc' }, { createdAt: 'desc' }],
       });
@@ -85,6 +87,7 @@ export const taskRouter = createTRPCRouter({
           assignee: { select: { id: true, name: true, avatarUrl: true } },
           createdBy: { select: { id: true, name: true, avatarUrl: true } },
           completedBy: { select: { id: true, name: true, avatarUrl: true } },
+          checklistItems: { orderBy: [{ order: 'asc' }, { createdAt: 'asc' }] },
         },
       });
       if (!task) throw new TRPCError({ code: 'NOT_FOUND' });
@@ -269,6 +272,116 @@ export const taskRouter = createTRPCRouter({
         before: task,
       });
       return deleted;
+    }),
+
+  // ── checklist ────────────────────────────────────────────────────────
+  // Subtasks under a Task: title + isDone + order. No dates, no
+  // assignees — kept intentionally simple. Anyone who can update the
+  // parent task can also manage its checklist. Deletes cascade with
+  // the parent (DB-side).
+
+  checklistAdd: protectedProcedure
+    .input(z.object({ taskId: z.string().cuid(), title: z.string().min(1).max(500) }))
+    .mutation(async ({ ctx, input }) => {
+      const task = await ctx.db.task.findUniqueOrThrow({
+        where: { id: input.taskId },
+        include: { standard: { select: { workingGroupId: true } } },
+      });
+      const uctx = userCtx(ctx.session);
+      const isCreator = task.createdById === ctx.session.user.id;
+      const isAssignee = task.assigneeId === ctx.session.user.id;
+      if (!can(uctx, 'task:editAny', task.standard.workingGroupId) && !isCreator && !isAssignee) {
+        throw new TRPCError({ code: 'FORBIDDEN' });
+      }
+      // Append at the end — cheapest and no reorder churn.
+      const last = await ctx.db.taskChecklistItem.aggregate({
+        where: { taskId: input.taskId },
+        _max: { order: true },
+      });
+      const created = await ctx.db.taskChecklistItem.create({
+        data: {
+          taskId: input.taskId,
+          title: input.title.trim(),
+          order: (last._max.order ?? 0) + 1,
+        },
+      });
+      await logActivity(ctx.db, {
+        userId: ctx.session.user.id,
+        action: 'CREATE',
+        entity: 'TaskChecklistItem',
+        entityId: created.id,
+        after: created,
+        note: `Додано підзадачу «${created.title}»`,
+      });
+      return created;
+    }),
+
+  checklistToggle: protectedProcedure
+    .input(z.object({ id: z.string().cuid() }))
+    .mutation(async ({ ctx, input }) => {
+      const item = await ctx.db.taskChecklistItem.findUniqueOrThrow({
+        where: { id: input.id },
+        include: { task: { include: { standard: { select: { workingGroupId: true } } } } },
+      });
+      const uctx2 = userCtx(ctx.session);
+      const isCreator2 = item.task.createdById === ctx.session.user.id;
+      const isAssignee2 = item.task.assigneeId === ctx.session.user.id;
+      if (
+        !can(uctx2, 'task:editAny', item.task.standard.workingGroupId) &&
+        !isCreator2 &&
+        !isAssignee2
+      ) {
+        throw new TRPCError({ code: 'FORBIDDEN' });
+      }
+      const updated = await ctx.db.taskChecklistItem.update({
+        where: { id: input.id },
+        data: { isDone: !item.isDone },
+      });
+      return updated;
+    }),
+
+  checklistUpdate: protectedProcedure
+    .input(z.object({ id: z.string().cuid(), title: z.string().min(1).max(500) }))
+    .mutation(async ({ ctx, input }) => {
+      const item = await ctx.db.taskChecklistItem.findUniqueOrThrow({
+        where: { id: input.id },
+        include: { task: { include: { standard: { select: { workingGroupId: true } } } } },
+      });
+      const uctx2 = userCtx(ctx.session);
+      const isCreator2 = item.task.createdById === ctx.session.user.id;
+      const isAssignee2 = item.task.assigneeId === ctx.session.user.id;
+      if (
+        !can(uctx2, 'task:editAny', item.task.standard.workingGroupId) &&
+        !isCreator2 &&
+        !isAssignee2
+      ) {
+        throw new TRPCError({ code: 'FORBIDDEN' });
+      }
+      return ctx.db.taskChecklistItem.update({
+        where: { id: input.id },
+        data: { title: input.title.trim() },
+      });
+    }),
+
+  checklistDelete: protectedProcedure
+    .input(z.object({ id: z.string().cuid() }))
+    .mutation(async ({ ctx, input }) => {
+      const item = await ctx.db.taskChecklistItem.findUniqueOrThrow({
+        where: { id: input.id },
+        include: { task: { include: { standard: { select: { workingGroupId: true } } } } },
+      });
+      const uctx2 = userCtx(ctx.session);
+      const isCreator2 = item.task.createdById === ctx.session.user.id;
+      const isAssignee2 = item.task.assigneeId === ctx.session.user.id;
+      if (
+        !can(uctx2, 'task:editAny', item.task.standard.workingGroupId) &&
+        !isCreator2 &&
+        !isAssignee2
+      ) {
+        throw new TRPCError({ code: 'FORBIDDEN' });
+      }
+      await ctx.db.taskChecklistItem.delete({ where: { id: input.id } });
+      return { ok: true };
     }),
 
   // ── overdue ───────────────────────────────────────────────────────────
