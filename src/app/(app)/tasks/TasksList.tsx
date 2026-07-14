@@ -10,7 +10,7 @@ import { TaskFormModal } from '@/components/TaskFormModal';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { ConfirmModal } from '@/components/ui/ConfirmModal';
 import { DueDateChip } from '@/lib/dueDate';
-import { getInitials } from '@/lib/utils';
+import { getInitials, formatDate } from '@/lib/utils';
 
 const PRIORITY_DOT: Record<string, string> = {
   HIGH: 'bg-red-500',
@@ -38,9 +38,17 @@ interface TaskRow {
     workingGroupId: string;
   };
   createdById: string;
-  // Present on task.list (server passes just the flags). Missing on
-  // rows that come from other queries — treat as empty.
-  checklistItems?: { id: string; isDone: boolean }[];
+  // Present on task.list (full subtask fields). Missing on rows that
+  // come from other queries — treat as empty.
+  checklistItems?: {
+    id: string;
+    title: string;
+    isDone: boolean;
+    dueDate: Date | string | null;
+    assigneeId: string | null;
+    order: number;
+    assignee: { id: string; name: string; avatarUrl: string | null } | null;
+  }[];
 }
 
 // Due chip + days-remaining label moved to @/lib/dueDate so the
@@ -468,85 +476,151 @@ function TaskRowItem({
   const isDone = task.status === 'DONE';
   const due = task.dueDate ? new Date(task.dueDate) : null;
   const dueLabel = <DueDateChip due={due} isDone={isDone} />;
+  const [expanded, setExpanded] = useState(false);
+  const hasChecklist = (task.checklistItems?.length ?? 0) > 0;
+  const utils = trpc.useUtils();
+  // Inline toggle for subtasks so ticking a subtask doesn't require
+  // opening the task card. Success re-fetches task.list so both the
+  // checklist chip and the row grouping update.
+  const toggleSubtask = trpc.task.checklistToggle.useMutation({
+    onSuccess: () => void utils.task.list.invalidate(),
+  });
+  const doneSubtasks = task.checklistItems?.filter((i) => i.isDone).length ?? 0;
+  const totalSubtasks = task.checklistItems?.length ?? 0;
 
   return (
-    <li className="group flex items-center gap-3 bg-card border border-hairline rounded-[10px] px-4 py-3 hover:border-brand/40 transition-colors">
-      <button
-        onClick={toggle}
-        className={`w-[18px] h-[18px] rounded-md border-[1.5px] inline-flex items-center justify-center transition shrink-0 ${
-          isDone ? 'bg-emerald-500 border-emerald-500' : 'border-hairline hover:border-brand'
-        }`}
-        aria-label={isDone ? 'Відновити' : 'Виконати'}
-      >
-        {isDone && (
-          <svg viewBox="0 0 12 12" className="w-3 h-3 fill-none stroke-white stroke-[2.5]">
-            <path d="M2.5 6.5 5 9l4.5-5.5" strokeLinecap="round" strokeLinejoin="round" />
-          </svg>
-        )}
-      </button>
-      <span
-        className={`w-2 h-2 rounded-full shrink-0 ${PRIORITY_DOT[task.priority] ?? 'bg-slate-300'}`}
-      />
-      <Link
-        href={`/tasks/${task.id}`}
-        className={`flex-1 text-left text-sm truncate transition-colors ${
-          isDone ? 'text-light line-through' : 'text-ink hover:text-brand'
-        }`}
-      >
-        {task.title}
-      </Link>
-      {task.checklistItems && task.checklistItems.length > 0 && (
-        <span
-          className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-pill text-mid shrink-0"
-          title={`Підзадачі: ${task.checklistItems.filter((i) => i.isDone).length}/${task.checklistItems.length}`}
-        >
-          ☑ {task.checklistItems.filter((i) => i.isDone).length}/{task.checklistItems.length}
-        </span>
-      )}
-      {showStandard && (
-        <Link
-          href={`/standards/${task.standardId}`}
-          // Show the full indeks-grif when it's registered on the standard;
-          // otherwise fall back to the shorter internal `code`. Hover
-          // reveals whichever isn't in the label so both are always
-          // reachable.
-          title={task.standard.indeks ? `Внутрішній код: ${task.standard.code}` : undefined}
-          className="text-[10px] font-mono font-bold px-2 py-0.5 rounded bg-pill text-mid hover:text-brand max-w-[220px] truncate"
-        >
-          {task.standard.indeks ?? task.standard.code}
-        </Link>
-      )}
-      {task.assignee && (
-        <div className="inline-flex items-center gap-1.5 shrink-0">
-          <Avatar
-            name={task.assignee.name}
-            avatarUrl={task.assignee.avatarUrl ?? undefined}
-            size="xs"
-          />
-          <span className="text-[11px] text-mid hidden md:inline">
-            {abbrevName(task.assignee.name)}
-          </span>
-        </div>
-      )}
-      {dueLabel}
-      <div className="ml-1 inline-flex gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+    <li className="group bg-card border border-hairline rounded-[10px] hover:border-brand/40 transition-colors">
+      <div className="flex items-center gap-3 px-4 py-3">
         <button
-          onClick={onEdit}
-          className="p-1 rounded hover:bg-pill text-mid hover:text-brand"
-          title="Редагувати"
+          onClick={toggle}
+          className={`w-[18px] h-[18px] rounded-md border-[1.5px] inline-flex items-center justify-center transition shrink-0 ${
+            isDone ? 'bg-emerald-500 border-emerald-500' : 'border-hairline hover:border-brand'
+          }`}
+          aria-label={isDone ? 'Відновити' : 'Виконати'}
         >
-          <Pencil className="w-3.5 h-3.5" />
+          {isDone && (
+            <svg viewBox="0 0 12 12" className="w-3 h-3 fill-none stroke-white stroke-[2.5]">
+              <path d="M2.5 6.5 5 9l4.5-5.5" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+          )}
         </button>
-        {canDelete && (
+        <span
+          className={`w-2 h-2 rounded-full shrink-0 ${PRIORITY_DOT[task.priority] ?? 'bg-slate-300'}`}
+        />
+        <Link
+          href={`/tasks/${task.id}`}
+          className={`flex-1 text-left text-sm truncate transition-colors ${
+            isDone ? 'text-light line-through' : 'text-ink hover:text-brand'
+          }`}
+        >
+          {task.title}
+        </Link>
+        {hasChecklist && (
           <button
-            onClick={onDelete}
-            className="p-1 rounded hover:bg-red-50 text-mid hover:text-red-600"
-            title="Видалити"
+            type="button"
+            onClick={() => setExpanded((v) => !v)}
+            title={
+              expanded
+                ? 'Сховати підзадачі'
+                : `Показати підзадачі (${doneSubtasks}/${totalSubtasks})`
+            }
+            className="inline-flex items-center gap-1 text-[10px] font-mono px-1.5 py-0.5 rounded bg-pill text-mid hover:text-brand hover:bg-brand-soft/40 transition-colors shrink-0"
           >
-            <Trash2 className="w-3.5 h-3.5" />
+            <ChevronDown
+              className={`w-3 h-3 transition-transform ${expanded ? 'rotate-180' : ''}`}
+            />
+            ☑ {doneSubtasks}/{totalSubtasks}
           </button>
         )}
+        {showStandard && (
+          <Link
+            href={`/standards/${task.standardId}`}
+            // Show the full indeks-grif when it's registered on the standard;
+            // otherwise fall back to the shorter internal `code`. Hover
+            // reveals whichever isn't in the label so both are always
+            // reachable.
+            title={task.standard.indeks ? `Внутрішній код: ${task.standard.code}` : undefined}
+            className="text-[10px] font-mono font-bold px-2 py-0.5 rounded bg-pill text-mid hover:text-brand max-w-[220px] truncate"
+          >
+            {task.standard.indeks ?? task.standard.code}
+          </Link>
+        )}
+        {task.assignee && (
+          <div className="inline-flex items-center gap-1.5 shrink-0">
+            <Avatar
+              name={task.assignee.name}
+              avatarUrl={task.assignee.avatarUrl ?? undefined}
+              size="xs"
+            />
+            <span className="text-[11px] text-mid hidden md:inline">
+              {abbrevName(task.assignee.name)}
+            </span>
+          </div>
+        )}
+        {dueLabel}
+        <div className="ml-1 inline-flex gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+          <button
+            onClick={onEdit}
+            className="p-1 rounded hover:bg-pill text-mid hover:text-brand"
+            title="Редагувати"
+          >
+            <Pencil className="w-3.5 h-3.5" />
+          </button>
+          {canDelete && (
+            <button
+              onClick={onDelete}
+              className="p-1 rounded hover:bg-red-50 text-mid hover:text-red-600"
+              title="Видалити"
+            >
+              <Trash2 className="w-3.5 h-3.5" />
+            </button>
+          )}
+        </div>
       </div>
+
+      {expanded && task.checklistItems && (
+        <ul className="border-t border-hairline bg-page/30 px-4 py-2 space-y-1">
+          {task.checklistItems.map((sub) => {
+            const subDue = sub.dueDate ? new Date(sub.dueDate) : null;
+            const overdue = !sub.isDone && subDue && subDue < new Date();
+            return (
+              <li key={sub.id} className="flex items-center gap-2 text-sm py-1">
+                <input
+                  type="checkbox"
+                  checked={sub.isDone}
+                  disabled={toggleSubtask.isPending}
+                  onChange={() => toggleSubtask.mutate({ id: sub.id })}
+                  className="w-3.5 h-3.5 accent-brand cursor-pointer shrink-0"
+                />
+                <span
+                  className={`flex-1 truncate ${sub.isDone ? 'line-through text-light' : 'text-ink'}`}
+                >
+                  {sub.title}
+                </span>
+                {sub.assignee && (
+                  <span className="inline-flex items-center gap-1 text-[11px] text-mid shrink-0">
+                    <Avatar
+                      name={sub.assignee.name}
+                      avatarUrl={sub.assignee.avatarUrl ?? undefined}
+                      size="xs"
+                    />
+                    <span className="hidden md:inline max-w-[140px] truncate">
+                      {sub.assignee.name}
+                    </span>
+                  </span>
+                )}
+                {sub.dueDate && (
+                  <span
+                    className={`text-[11px] font-mono shrink-0 ${overdue ? 'text-red-600 dark:text-red-400 font-bold' : 'text-mid'}`}
+                  >
+                    📅 {formatDate(sub.dueDate)}
+                  </span>
+                )}
+              </li>
+            );
+          })}
+        </ul>
+      )}
     </li>
   );
 }

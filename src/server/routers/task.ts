@@ -67,8 +67,13 @@ export const taskRouter = createTRPCRouter({
           },
           assignee: { select: { id: true, name: true, avatarUrl: true } },
           createdBy: { select: { id: true, name: true } },
-          // Just the flags — the row-level badge only needs done/total.
-          checklistItems: { select: { id: true, isDone: true } },
+          // Full subtask fields — the row can expand inline via a chevron
+          // and show titles + due dates + assignees without a follow-up
+          // fetch. Payload is bounded (typical task has <10 subtasks).
+          checklistItems: {
+            orderBy: [{ order: 'asc' }, { createdAt: 'asc' }],
+            include: { assignee: { select: { id: true, name: true, avatarUrl: true } } },
+          },
         },
         orderBy: [{ status: 'asc' }, { dueDate: 'asc' }, { createdAt: 'desc' }],
       });
