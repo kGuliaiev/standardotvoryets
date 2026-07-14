@@ -239,6 +239,14 @@ export const standardRouter = createTRPCRouter({
         category: z.string().optional(),
         deadline: z.date().optional(),
         responsibleId: z.string().cuid().optional(),
+        // Fields tied to the standardisation program report — surfaced
+        // both in /reports and on the standard card so leadership can
+        // register program metadata at creation time instead of editing
+        // right after.
+        partProgram: z.string().max(120).optional(),
+        programNumber: z.number().int().min(1).max(9999).optional(),
+        indeks: z.string().max(120).optional(),
+        oldTitle: z.string().max(300).optional(),
         // Stage deadlines collected upfront in the create form so the
         // poetap diagram on the standard page is populated from day one.
         techSpecDueDate: z.date().optional(),
@@ -298,6 +306,13 @@ export const standardRouter = createTRPCRouter({
         deadline: z.date().optional().nullable(),
         responsibleId: z.string().cuid().optional().nullable(),
         progress: z.number().min(0).max(100).optional(),
+        // Program-report fields — nullable so the edit modal can clear
+        // them explicitly. `''` → null in the client so we don't have
+        // to distinguish "empty" vs "unchanged" (undefined = untouched).
+        partProgram: z.string().max(120).optional().nullable(),
+        programNumber: z.number().int().min(1).max(9999).optional().nullable(),
+        indeks: z.string().max(120).optional().nullable(),
+        oldTitle: z.string().max(300).optional().nullable(),
       }),
     )
     .mutation(async ({ ctx, input }) => {

@@ -21,6 +21,11 @@ const schema = z.object({
   category: z.string().max(100).optional().or(z.literal('')),
   deadline: z.string().optional().or(z.literal('')),
   responsibleId: z.string().cuid().optional().or(z.literal('')),
+  // Program-report metadata (same fields as /reports).
+  partProgram: z.string().max(120).optional().or(z.literal('')),
+  programNumber: z.string().regex(/^\d*$/, 'Тільки цифри').optional().or(z.literal('')),
+  indeks: z.string().max(120).optional().or(z.literal('')),
+  oldTitle: z.string().max(300).optional().or(z.literal('')),
   techSpecDueDate: z.string().optional().or(z.literal('')),
   draftDueDate: z.string().optional().or(z.literal('')),
   feedbackDueDate: z.string().optional().or(z.literal('')),
@@ -69,6 +74,10 @@ export function StandardForm({ preselectedWgId }: { preselectedWgId?: string }) 
       category: '',
       deadline: '',
       responsibleId: '',
+      partProgram: '',
+      programNumber: '',
+      indeks: '',
+      oldTitle: '',
       techSpecDueDate: '',
       draftDueDate: '',
       feedbackDueDate: '',
@@ -98,6 +107,7 @@ export function StandardForm({ preselectedWgId }: { preselectedWgId?: string }) 
       return t === '' ? undefined : t;
     };
     const toDate = (v?: string) => (v ? new Date(v) : undefined);
+    const progNum = data.programNumber?.trim();
     createMutation.mutate({
       workingGroupId: data.workingGroupId,
       code: data.code.trim(),
@@ -107,6 +117,10 @@ export function StandardForm({ preselectedWgId }: { preselectedWgId?: string }) 
       category: trim(data.category),
       deadline: toDate(data.deadline),
       responsibleId: trim(data.responsibleId),
+      partProgram: trim(data.partProgram),
+      programNumber: progNum ? Number(progNum) : undefined,
+      indeks: trim(data.indeks),
+      oldTitle: trim(data.oldTitle),
       techSpecDueDate: toDate(data.techSpecDueDate),
       draftDueDate: toDate(data.draftDueDate),
       feedbackDueDate: toDate(data.feedbackDueDate),
@@ -268,6 +282,57 @@ export function StandardForm({ preselectedWgId }: { preselectedWgId?: string }) 
             {!selectedWgId && (
               <p className="text-xs text-light mt-1">Спочатку оберіть робочу групу</p>
             )}
+          </div>
+        </div>
+
+        {/* Program-report metadata — same fields as /reports Програма
+            стандартизації. Optional; can be added/edited later from the
+            standard card. */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div>
+            <label className="block text-sm font-medium text-ink mb-1">Частина програми</label>
+            <input
+              type="text"
+              placeholder="Частина 1"
+              {...register('partProgram')}
+              className="w-full px-3 py-2 text-sm border border-hairline rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-ink mb-1">№ у програмі</label>
+            <input
+              type="number"
+              inputMode="numeric"
+              min={1}
+              max={9999}
+              placeholder="42"
+              {...register('programNumber')}
+              className="w-full px-3 py-2 text-sm border border-hairline rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+            {errors.programNumber && (
+              <p className="mt-1 text-xs text-red-600">{errors.programNumber.message}</p>
+            )}
+          </div>
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div>
+            <label className="block text-sm font-medium text-ink mb-1">Індекс-гриф</label>
+            <input
+              type="text"
+              placeholder="СТД-100-200-001-2026-В"
+              {...register('indeks')}
+              className="w-full px-3 py-2 text-sm border border-hairline rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono"
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-ink mb-1">
+              Стара назва (за наявності)
+            </label>
+            <input
+              type="text"
+              {...register('oldTitle')}
+              className="w-full px-3 py-2 text-sm border border-hairline rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
           </div>
         </div>
 

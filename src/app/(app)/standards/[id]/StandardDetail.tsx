@@ -234,6 +234,12 @@ export function StandardDetail({ id }: { id: string }) {
     deadline: '',
     responsibleId: '',
     progress: 0,
+    partProgram: '',
+    // Kept as string in local state so the input field can be cleared
+    // fully; parsed back to number|null before sending to the server.
+    programNumber: '',
+    indeks: '',
+    oldTitle: '',
   });
   const [editError, setEditError] = useState<string | null>(null);
   const [taskModalOpen, setTaskModalOpen] = useState(false);
@@ -415,6 +421,11 @@ export function StandardDetail({ id }: { id: string }) {
                         : '',
                       responsibleId: standard.responsibleId ?? '',
                       progress: standard.progress,
+                      partProgram: standard.partProgram ?? '',
+                      programNumber:
+                        standard.programNumber != null ? String(standard.programNumber) : '',
+                      indeks: standard.indeks ?? '',
+                      oldTitle: standard.oldTitle ?? '',
                     });
                     setEditError(null);
                     setEditOpen(true);
@@ -1324,6 +1335,54 @@ export function StandardDetail({ id }: { id: string }) {
               className="w-full"
             />
           </div>
+
+          {/* Program-report fields — shown here so the metadata can be
+              set/tweaked without leaving the standard page. Same values
+              feed /reports "Програма стандартизації". */}
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="field-label">Частина програми</label>
+              <input
+                className="input"
+                placeholder="Частина 1"
+                value={editForm.partProgram}
+                onChange={(e) => setEditForm((f) => ({ ...f, partProgram: e.target.value }))}
+              />
+            </div>
+            <div>
+              <label className="field-label">№ у програмі</label>
+              <input
+                type="number"
+                min={1}
+                max={9999}
+                className="input"
+                placeholder="42"
+                value={editForm.programNumber}
+                onChange={(e) =>
+                  setEditForm((f) => ({ ...f, programNumber: e.target.value.replace(/\D/g, '') }))
+                }
+              />
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="field-label">Індекс-гриф</label>
+              <input
+                className="input font-mono"
+                placeholder="СТД-100-200-001-2026-В"
+                value={editForm.indeks}
+                onChange={(e) => setEditForm((f) => ({ ...f, indeks: e.target.value }))}
+              />
+            </div>
+            <div>
+              <label className="field-label">Стара назва (за наявності)</label>
+              <input
+                className="input"
+                value={editForm.oldTitle}
+                onChange={(e) => setEditForm((f) => ({ ...f, oldTitle: e.target.value }))}
+              />
+            </div>
+          </div>
           {editError && (
             <p className="text-sm text-red-600 bg-red-50 rounded-[10px] px-3 py-2">{editError}</p>
           )}
@@ -1346,6 +1405,13 @@ export function StandardDetail({ id }: { id: string }) {
                   const t = v.trim();
                   return t === '' ? undefined : t;
                 };
+                // Empty string → null so cleared inputs actually clear
+                // the field on the server (undefined would be "unchanged").
+                const strToNull = (v: string): string | null => {
+                  const t = v.trim();
+                  return t === '' ? null : t;
+                };
+                const progNum = editForm.programNumber.trim();
                 updateMutation.mutate({
                   id,
                   title: editForm.title.trim(),
@@ -1355,6 +1421,10 @@ export function StandardDetail({ id }: { id: string }) {
                   deadline: editForm.deadline ? new Date(editForm.deadline) : null,
                   responsibleId: editForm.responsibleId === '' ? null : editForm.responsibleId,
                   progress: editForm.progress,
+                  partProgram: strToNull(editForm.partProgram),
+                  programNumber: progNum === '' ? null : Number(progNum),
+                  indeks: strToNull(editForm.indeks),
+                  oldTitle: strToNull(editForm.oldTitle),
                 });
               }}
               disabled={updateMutation.isPending}

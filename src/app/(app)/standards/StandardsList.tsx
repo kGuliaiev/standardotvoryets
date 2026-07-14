@@ -394,6 +394,13 @@ export function StandardsList() {
                       Етапи
                     </SortableHeader>
                   </th>
+                  {/* Program-report metadata — same fields as /reports so
+                      leadership sees the same numbering scheme here.
+                      Hidden on md and below to keep the mobile table
+                      readable; the details are always in the standard
+                      card for narrow viewports. */}
+                  <th className="px-3 py-3 font-medium hidden xl:table-cell">Частина</th>
+                  <th className="px-3 py-3 font-medium hidden xl:table-cell">Індекс-гриф</th>
                   <th className="px-3 py-3 font-medium hidden lg:table-cell">
                     <SortableHeader columnKey="deadline" sort={sort} onSort={setSort}>
                       Дедлайн
@@ -514,6 +521,25 @@ export function StandardsList() {
                         techReviewCompletedAt={s.techReviewCompletedAt}
                         finalCompletedAt={s.finalCompletedAt}
                       />
+                    </td>
+                    <td className="px-3 py-3.5 hidden xl:table-cell">
+                      {s.partProgram || s.programNumber != null ? (
+                        <div className="text-xs">
+                          <div className="text-mid">{s.partProgram ?? '—'}</div>
+                          {s.programNumber != null && (
+                            <div className="text-light mt-0.5">№ {s.programNumber}</div>
+                          )}
+                        </div>
+                      ) : (
+                        <span className="text-xs text-light">—</span>
+                      )}
+                    </td>
+                    <td className="px-3 py-3.5 hidden xl:table-cell">
+                      {s.indeks ? (
+                        <span className="font-mono text-xs text-mid">{s.indeks}</span>
+                      ) : (
+                        <span className="text-xs text-light">—</span>
+                      )}
                     </td>
                     <td className="px-3 py-3.5 hidden lg:table-cell">
                       {s.deadline ? (
