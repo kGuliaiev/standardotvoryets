@@ -5,25 +5,31 @@ import { trpc } from '@/lib/trpc/client';
 import { useSession } from 'next-auth/react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import {
-  Pencil,
-  Trash2,
-  Check,
-  Clock,
-  AlertTriangle,
-  User,
-  Calendar,
-  X,
-  Plus,
-  ChevronDown,
-  ChevronUp,
-} from 'lucide-react';
+import { Pencil, Trash2, Check, Clock, AlertTriangle, User, Calendar, X, Plus } from 'lucide-react';
 import { Avatar } from '@/components/ui/Avatar';
 import { ActivityFeed } from '@/components/ActivityFeed';
 import { TaskFormModal } from '@/components/TaskFormModal';
 import { ConfirmModal } from '@/components/ui/ConfirmModal';
 import { formatDate, formatDateTime } from '@/lib/utils';
 import { DueDateChip } from '@/lib/dueDate';
+import {
+  DndContext,
+  closestCenter,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+} from '@dnd-kit/core';
+import {
+  SortableContext,
+  sortableKeyboardCoordinates,
+  useSortable,
+  verticalListSortingStrategy,
+  arrayMove,
+} from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
+import { GripVertical } from 'lucide-react';
 
 const STATUS_TONE: Record<string, { label: string; cls: string }> = {
   OPEN: { label: 'Відкрите', cls: 'bg-[#EEF4FF] text-[#1A3A8F]' },
@@ -351,12 +357,21 @@ function TaskChecklist({
     setDraft('');
   };
 
-  // Swap item[idx] with its neighbour (idx + delta), then persist.
-  const move = (idx: number, delta: -1 | 1) => {
-    const next = [...items];
-    const swap = idx + delta;
-    if (swap < 0 || swap >= next.length) return;
-    [next[idx], next[swap]] = [next[swap]!, next[idx]!];
+  // DnD sensors — Pointer with a small activation delay so a plain
+  // click on the row (checkbox tick, expand, delete) doesn't
+  // accidentally start a drag. Keyboard sensor provides accessibility:
+  // Space to lift, arrows to move, Space to drop.
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 4 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
+  );
+  const handleDragEnd = (e: DragEndEvent) => {
+    const { active, over } = e;
+    if (!over || active.id === over.id) return;
+    const oldIdx = items.findIndex((i) => i.id === active.id);
+    const newIdx = items.findIndex((i) => i.id === over.id);
+    if (oldIdx < 0 || newIdx < 0) return;
+    const next = arrayMove(items, oldIdx, newIdx);
     reorder.mutate({ taskId, orderedIds: next.map((i) => i.id) });
   };
 
@@ -385,179 +400,40 @@ function TaskChecklist({
       </div>
 
       {items.length > 0 && (
-        <ul className="space-y-1 mb-3">
-          {items.map((item, idx) => {
-            const isExpanded = expandedId === item.id;
-            const isTitleEditing = editingId === item.id;
-            return (
-              <li
-                key={item.id}
-                className="group rounded-[10px] border border-hairline bg-card hover:border-brand/40 transition-colors"
-              >
-                <div className="flex items-center gap-2 px-2.5 py-1.5">
-                  <input
-                    type="checkbox"
-                    checked={item.isDone}
-                    disabled={toggle.isPending}
-                    onChange={() => toggle.mutate({ id: item.id })}
-                    className="w-4 h-4 accent-brand cursor-pointer shrink-0"
-                  />
-                  <div className="flex-1 min-w-0">
-                    {isTitleEditing ? (
-                      <input
-                        type="text"
-                        value={editingDraft}
-                        autoFocus
-                        onChange={(e) => setEditingDraft(e.target.value)}
-                        onBlur={() => {
-                          const t = editingDraft.trim();
-                          if (t && t !== item.title) update.mutate({ id: item.id, title: t });
-                          else setEditingId(null);
-                        }}
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter') {
-                            e.preventDefault();
-                            e.currentTarget.blur();
-                          } else if (e.key === 'Escape') {
-                            setEditingId(null);
-                          }
-                        }}
-                        className="input w-full text-sm py-1"
-                      />
-                    ) : (
-                      <span
-                        className={`text-sm cursor-text leading-relaxed block truncate ${
-                          item.isDone ? 'line-through text-light' : 'text-ink'
-                        }`}
-                        onClick={() => {
-                          setEditingId(item.id);
-                          setEditingDraft(item.title);
-                        }}
-                      >
-                        {item.title}
-                      </span>
-                    )}
-                  </div>
-                  {/* Meta on the right — same visual as parent task row:
-                      Avatar+ім'я, потім DueDateChip з датою і «ще N днів»
-                      (або «прострочено»). Прибирається на час inline-edit
-                      title щоб не тіснитись під input. */}
-                  {!isTitleEditing && item.assignee && (
-                    <div className="inline-flex items-center gap-1.5 shrink-0">
-                      <Avatar
-                        name={item.assignee.name}
-                        avatarUrl={item.assignee.avatarUrl ?? undefined}
-                        size="xs"
-                      />
-                      <span className="text-[11px] text-mid hidden md:inline max-w-[140px] truncate">
-                        {item.assignee.name}
-                      </span>
-                    </div>
-                  )}
-                  {!isTitleEditing && (
-                    <DueDateChip
-                      due={item.dueDate ? new Date(item.dueDate) : null}
-                      isDone={item.isDone}
-                    />
-                  )}
-                  {/* Reorder + expand + delete — appear on row hover. */}
-                  <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
-                    <button
-                      type="button"
-                      onClick={() => move(idx, -1)}
-                      disabled={idx === 0 || reorder.isPending}
-                      title="Вгору"
-                      className="p-1 rounded text-light hover:text-ink hover:bg-pill disabled:opacity-30 disabled:cursor-not-allowed"
-                    >
-                      <ChevronUp className="w-3.5 h-3.5" />
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => move(idx, 1)}
-                      disabled={idx === items.length - 1 || reorder.isPending}
-                      title="Вниз"
-                      className="p-1 rounded text-light hover:text-ink hover:bg-pill disabled:opacity-30 disabled:cursor-not-allowed"
-                    >
-                      <ChevronDown className="w-3.5 h-3.5" />
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setExpandedId(isExpanded ? null : item.id)}
-                      title={isExpanded ? 'Згорнути' : 'Розгорнути деталі'}
-                      className={`p-1 rounded transition-colors ${isExpanded ? 'text-brand bg-brand-soft/40' : 'text-light hover:text-ink hover:bg-pill'}`}
-                    >
-                      <Pencil className="w-3.5 h-3.5" />
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => remove.mutate({ id: item.id })}
-                      disabled={remove.isPending}
-                      title="Видалити підзадачу"
-                      className="p-1 rounded text-light hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/30"
-                    >
-                      <X className="w-3.5 h-3.5" />
-                    </button>
-                  </div>
-                </div>
-                {/* Expanded editor — description / due / assignee.
-                    Autosave on blur (textarea) / change (date + select)
-                    so there's no explicit save button. */}
-                {isExpanded && (
-                  <div className="border-t border-hairline px-3 py-3 space-y-3 bg-page/30">
-                    <div>
-                      <label className="field-label">Опис</label>
-                      <textarea
-                        rows={2}
-                        className="textarea resize-none w-full text-sm"
-                        placeholder="Деталі, посилання…"
-                        defaultValue={item.description ?? ''}
-                        onBlur={(e) => {
-                          const v = e.target.value.trim();
-                          const norm = v === '' ? null : v;
-                          if (norm !== (item.description ?? null)) {
-                            update.mutate({ id: item.id, description: norm });
-                          }
-                        }}
-                      />
-                    </div>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                      <div>
-                        <label className="field-label">Термін</label>
-                        <input
-                          type="date"
-                          className="input"
-                          defaultValue={toIsoDate(item.dueDate)}
-                          onChange={(e) => {
-                            const v = e.target.value;
-                            update.mutate({ id: item.id, dueDate: v ? new Date(v) : null });
-                          }}
-                        />
-                      </div>
-                      <div>
-                        <label className="field-label">Виконавець</label>
-                        <select
-                          className="select"
-                          value={item.assigneeId ?? ''}
-                          onChange={(e) => {
-                            const v = e.target.value;
-                            update.mutate({ id: item.id, assigneeId: v === '' ? null : v });
-                          }}
-                        >
-                          <option value="">— не вказано —</option>
-                          {members.map((m) => (
-                            <option key={m.userId} value={m.userId}>
-                              {m.user.name}
-                            </option>
-                          ))}
-                        </select>
-                      </div>
-                    </div>
-                  </div>
-                )}
-              </li>
-            );
-          })}
-        </ul>
+        <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+          <SortableContext items={items.map((i) => i.id)} strategy={verticalListSortingStrategy}>
+            <ul className="space-y-1 mb-3">
+              {items.map((item) => (
+                <SortableChecklistRow
+                  key={item.id}
+                  item={item}
+                  isExpanded={expandedId === item.id}
+                  isTitleEditing={editingId === item.id}
+                  editingDraft={editingDraft}
+                  members={members}
+                  toIsoDate={toIsoDate}
+                  onCheckbox={() => toggle.mutate({ id: item.id })}
+                  onStartEdit={() => {
+                    setEditingId(item.id);
+                    setEditingDraft(item.title);
+                  }}
+                  onEditChange={setEditingDraft}
+                  onEditCommit={() => {
+                    const t = editingDraft.trim();
+                    if (t && t !== item.title) update.mutate({ id: item.id, title: t });
+                    else setEditingId(null);
+                  }}
+                  onEditCancel={() => setEditingId(null)}
+                  onToggleExpand={() => setExpandedId(expandedId === item.id ? null : item.id)}
+                  onDelete={() => remove.mutate({ id: item.id })}
+                  onUpdate={(patch) => update.mutate({ id: item.id, ...patch })}
+                  togglePending={toggle.isPending}
+                  removePending={remove.isPending}
+                />
+              ))}
+            </ul>
+          </SortableContext>
+        </DndContext>
       )}
 
       {/* Quick-add */}
@@ -587,6 +463,205 @@ function TaskChecklist({
         </button>
       </div>
     </div>
+  );
+}
+
+interface SortableRowProps {
+  item: ChecklistItem;
+  isExpanded: boolean;
+  isTitleEditing: boolean;
+  editingDraft: string;
+  members: { userId: string; user: { name: string } }[];
+  toIsoDate: (d: Date | string | null | undefined) => string;
+  onCheckbox: () => void;
+  onStartEdit: () => void;
+  onEditChange: (v: string) => void;
+  onEditCommit: () => void;
+  onEditCancel: () => void;
+  onToggleExpand: () => void;
+  onDelete: () => void;
+  onUpdate: (patch: {
+    title?: string;
+    description?: string | null;
+    dueDate?: Date | null;
+    assigneeId?: string | null;
+  }) => void;
+  togglePending: boolean;
+  removePending: boolean;
+}
+
+function SortableChecklistRow({
+  item,
+  isExpanded,
+  isTitleEditing,
+  editingDraft,
+  members,
+  toIsoDate,
+  onCheckbox,
+  onStartEdit,
+  onEditChange,
+  onEditCommit,
+  onEditCancel,
+  onToggleExpand,
+  onDelete,
+  onUpdate,
+  togglePending,
+  removePending,
+}: SortableRowProps) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
+    id: item.id,
+  });
+  const style: React.CSSProperties = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.5 : undefined,
+    zIndex: isDragging ? 20 : undefined,
+  };
+  return (
+    <li
+      ref={setNodeRef}
+      style={style}
+      className={`group rounded-[10px] border bg-card transition-colors ${
+        isDragging ? 'border-brand shadow-lg' : 'border-hairline hover:border-brand/40'
+      }`}
+    >
+      <div className="flex items-center gap-2 px-2.5 py-1.5">
+        {/* Drag handle — the ONLY element that starts a drag. Everything
+            else on the row (checkbox, title, buttons) stays clickable. */}
+        <button
+          type="button"
+          {...attributes}
+          {...listeners}
+          title="Перетягнути для зміни порядку"
+          className="cursor-grab active:cursor-grabbing p-1 -ml-1 rounded text-light hover:text-mid hover:bg-pill shrink-0 opacity-0 group-hover:opacity-100 transition-opacity"
+          aria-label="Перетягнути"
+        >
+          <GripVertical className="w-3.5 h-3.5" />
+        </button>
+        <input
+          type="checkbox"
+          checked={item.isDone}
+          disabled={togglePending}
+          onChange={onCheckbox}
+          className="w-4 h-4 accent-brand cursor-pointer shrink-0"
+        />
+        <div className="flex-1 min-w-0">
+          {isTitleEditing ? (
+            <input
+              type="text"
+              value={editingDraft}
+              autoFocus
+              onChange={(e) => onEditChange(e.target.value)}
+              onBlur={onEditCommit}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  e.preventDefault();
+                  e.currentTarget.blur();
+                } else if (e.key === 'Escape') {
+                  onEditCancel();
+                }
+              }}
+              className="input w-full text-sm py-1"
+            />
+          ) : (
+            <span
+              className={`text-sm cursor-text leading-relaxed block truncate ${
+                item.isDone ? 'line-through text-light' : 'text-ink'
+              }`}
+              onClick={onStartEdit}
+            >
+              {item.title}
+            </span>
+          )}
+        </div>
+        {!isTitleEditing && item.assignee && (
+          <div className="inline-flex items-center gap-1.5 shrink-0">
+            <Avatar
+              name={item.assignee.name}
+              avatarUrl={item.assignee.avatarUrl ?? undefined}
+              size="xs"
+            />
+            <span className="text-[11px] text-mid hidden md:inline max-w-[140px] truncate">
+              {item.assignee.name}
+            </span>
+          </div>
+        )}
+        {!isTitleEditing && (
+          <DueDateChip due={item.dueDate ? new Date(item.dueDate) : null} isDone={item.isDone} />
+        )}
+        <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
+          <button
+            type="button"
+            onClick={onToggleExpand}
+            title={isExpanded ? 'Згорнути' : 'Розгорнути деталі'}
+            className={`p-1 rounded transition-colors ${
+              isExpanded ? 'text-brand bg-brand-soft/40' : 'text-light hover:text-ink hover:bg-pill'
+            }`}
+          >
+            <Pencil className="w-3.5 h-3.5" />
+          </button>
+          <button
+            type="button"
+            onClick={onDelete}
+            disabled={removePending}
+            title="Видалити підзадачу"
+            className="p-1 rounded text-light hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/30"
+          >
+            <X className="w-3.5 h-3.5" />
+          </button>
+        </div>
+      </div>
+      {isExpanded && (
+        <div className="border-t border-hairline px-3 py-3 space-y-3 bg-page/30">
+          <div>
+            <label className="field-label">Опис</label>
+            <textarea
+              rows={2}
+              className="textarea resize-none w-full text-sm"
+              placeholder="Деталі, посилання…"
+              defaultValue={item.description ?? ''}
+              onBlur={(e) => {
+                const v = e.target.value.trim();
+                const norm = v === '' ? null : v;
+                if (norm !== (item.description ?? null)) onUpdate({ description: norm });
+              }}
+            />
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label className="field-label">Термін</label>
+              <input
+                type="date"
+                className="input"
+                defaultValue={toIsoDate(item.dueDate)}
+                onChange={(e) => {
+                  const v = e.target.value;
+                  onUpdate({ dueDate: v ? new Date(v) : null });
+                }}
+              />
+            </div>
+            <div>
+              <label className="field-label">Виконавець</label>
+              <select
+                className="select"
+                value={item.assigneeId ?? ''}
+                onChange={(e) => {
+                  const v = e.target.value;
+                  onUpdate({ assigneeId: v === '' ? null : v });
+                }}
+              >
+                <option value="">— не вказано —</option>
+                {members.map((m) => (
+                  <option key={m.userId} value={m.userId}>
+                    {m.user.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+        </div>
+      )}
+    </li>
   );
 }
 
