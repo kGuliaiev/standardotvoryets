@@ -24,6 +24,7 @@ import { RankBadge } from '@/components/ui/RankBadge';
 import { rankLabel, rankWeight, extractSurname } from '@/lib/ranks';
 import { formatDate, formatDateTime, formatBytes } from '@/lib/utils';
 import { useLocalStorageState } from '@/lib/useLocalStorageState';
+import { useExpandedTasks } from '@/lib/useExpandedTasks';
 import { can } from '@/lib/rbac';
 import type { GlobalRole, WorkingGroupRole } from '@prisma/client';
 
@@ -120,6 +121,9 @@ export function StandardDetail({ id }: { id: string }) {
     `standard.${id}.stepperOpen`,
     false,
   );
+  // Shared with /tasks so expanding a task on one page keeps it open
+  // on the other (both keyed off the same localStorage set).
+  const { isExpanded: isTaskExpanded, toggle: toggleTaskExpanded } = useExpandedTasks();
 
   // If the URL changes (e.g. user clicks another notification while on the
   // same standard page), follow it.
@@ -1139,7 +1143,13 @@ export function StandardDetail({ id }: { id: string }) {
                             ) : (
                               <ul className="space-y-2">
                                 {fOpen.map((task) => (
-                                  <StandardTaskRow key={task.id} task={task} standardId={id} />
+                                  <StandardTaskRow
+                                    key={task.id}
+                                    task={task}
+                                    standardId={id}
+                                    expanded={isTaskExpanded(task.id)}
+                                    onToggleExpand={() => toggleTaskExpanded(task.id)}
+                                  />
                                 ))}
                               </ul>
                             )}
@@ -1153,7 +1163,13 @@ export function StandardDetail({ id }: { id: string }) {
                               </div>
                               <ul className="space-y-2">
                                 {fDone.map((task) => (
-                                  <StandardTaskRow key={task.id} task={task} standardId={id} />
+                                  <StandardTaskRow
+                                    key={task.id}
+                                    task={task}
+                                    standardId={id}
+                                    expanded={isTaskExpanded(task.id)}
+                                    onToggleExpand={() => toggleTaskExpanded(task.id)}
+                                  />
                                 ))}
                               </ul>
                             </section>
@@ -1774,6 +1790,8 @@ export function StandardDetail({ id }: { id: string }) {
 function StandardTaskRow({
   task,
   standardId: _standardId,
+  expanded,
+  onToggleExpand,
 }: {
   task: {
     id: string;
@@ -1794,6 +1812,8 @@ function StandardTaskRow({
     }[];
   };
   standardId: string;
+  expanded: boolean;
+  onToggleExpand: () => void;
 }) {
   const isDone = task.status === 'DONE';
   const due = task.dueDate ? new Date(task.dueDate) : null;
@@ -1801,7 +1821,6 @@ function StandardTaskRow({
   const toggle = trpc.task.changeStatus.useMutation({
     onSuccess: () => void utils.task.list.invalidate(),
   });
-  const [expanded, setExpanded] = useState(false);
   const hasChecklist = (task.checklistItems?.length ?? 0) > 0;
   const doneSubs = task.checklistItems?.filter((i) => i.isDone).length ?? 0;
   const totalSubs = task.checklistItems?.length ?? 0;
@@ -1852,7 +1871,7 @@ function StandardTaskRow({
           {hasChecklist && (
             <button
               type="button"
-              onClick={() => setExpanded((v) => !v)}
+              onClick={onToggleExpand}
               title={
                 expanded ? 'Сховати підзадачі' : `Показати підзадачі (${doneSubs}/${totalSubs})`
               }

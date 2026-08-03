@@ -10,7 +10,7 @@ import { TaskFormModal } from '@/components/TaskFormModal';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { ConfirmModal } from '@/components/ui/ConfirmModal';
 import { DueDateChip } from '@/lib/dueDate';
-import { getInitials } from '@/lib/utils';
+import { useExpandedTasks } from '@/lib/useExpandedTasks';
 
 const PRIORITY_DOT: Record<string, string> = {
   HIGH: 'bg-red-500',
@@ -58,6 +58,7 @@ interface TaskRow {
 export function TasksList() {
   const { data: session } = useSession();
   const userId = session?.user?.id;
+  const { isExpanded, toggle: toggleExpanded, setAll: setExpandedAll } = useExpandedTasks();
 
   const [filter, setFilter] = useState<FilterMode>('all');
   const [search, setSearch] = useState('');
@@ -313,25 +314,54 @@ export function TasksList() {
               </p>
               <h2 className="text-[15px] font-bold text-ink truncate">{scopeLabel}</h2>
             </div>
-            <div className="inline-flex rounded-full border border-hairline p-0.5 bg-card self-start sm:self-auto shrink-0">
-              {(
-                [
-                  ['all', 'Всі'],
-                  ['open', 'Відкриті'],
-                  ['done', 'Виконані'],
-                  ['mine', 'Мої'],
-                ] as const
-              ).map(([k, label]) => (
-                <button
-                  key={k}
-                  onClick={() => setFilter(k)}
-                  className={`text-[12px] font-semibold px-3 py-1 rounded-full transition-colors whitespace-nowrap ${
-                    filter === k ? 'bg-brand-soft text-brand' : 'text-mid hover:text-ink'
-                  }`}
-                >
-                  {label}
-                </button>
-              ))}
+            <div className="flex items-center gap-2 self-start sm:self-auto shrink-0 flex-wrap">
+              {/* Expand-all / collapse-all — visible only when at least
+                  one visible task has subtasks. Otherwise the buttons
+                  would just be no-ops. */}
+              {tasks?.some((t) => (t.checklistItems?.length ?? 0) > 0) && (
+                <div className="inline-flex rounded-full border border-hairline p-0.5 bg-card">
+                  <button
+                    onClick={() =>
+                      setExpandedAll(
+                        (tasks ?? [])
+                          .filter((t) => (t.checklistItems?.length ?? 0) > 0)
+                          .map((t) => t.id),
+                      )
+                    }
+                    title="Розгорнути всі підзадачі"
+                    className="text-[12px] font-semibold px-3 py-1 rounded-full text-mid hover:text-ink whitespace-nowrap"
+                  >
+                    Розгорнути все
+                  </button>
+                  <button
+                    onClick={() => setExpandedAll([])}
+                    title="Згорнути всі підзадачі"
+                    className="text-[12px] font-semibold px-3 py-1 rounded-full text-mid hover:text-ink whitespace-nowrap"
+                  >
+                    Згорнути все
+                  </button>
+                </div>
+              )}
+              <div className="inline-flex rounded-full border border-hairline p-0.5 bg-card">
+                {(
+                  [
+                    ['all', 'Всі'],
+                    ['open', 'Відкриті'],
+                    ['done', 'Виконані'],
+                    ['mine', 'Мої'],
+                  ] as const
+                ).map(([k, label]) => (
+                  <button
+                    key={k}
+                    onClick={() => setFilter(k)}
+                    className={`text-[12px] font-semibold px-3 py-1 rounded-full transition-colors whitespace-nowrap ${
+                      filter === k ? 'bg-brand-soft text-brand' : 'text-mid hover:text-ink'
+                    }`}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
             </div>
           </div>
 
@@ -357,6 +387,8 @@ export function TasksList() {
                         onDelete={() => setDeleteCandidate(t)}
                         showStandard={selectedScope.kind !== 'std'}
                         canDelete={t.createdById === userId || session?.user.globalRole === 'ADMIN'}
+                        expanded={isExpanded(t.id)}
+                        onToggleExpand={() => toggleExpanded(t.id)}
                       />
                     ))}
                   </ul>
@@ -385,6 +417,8 @@ export function TasksList() {
                         onDelete={() => setDeleteCandidate(t)}
                         showStandard={selectedScope.kind !== 'std'}
                         canDelete={t.createdById === userId || session?.user.globalRole === 'ADMIN'}
+                        expanded={isExpanded(t.id)}
+                        onToggleExpand={() => toggleExpanded(t.id)}
                       />
                     ))}
                   </ul>
@@ -465,6 +499,8 @@ function TaskRowItem({
   onDelete,
   showStandard,
   canDelete,
+  expanded,
+  onToggleExpand,
 }: {
   task: TaskRow;
   toggle: () => void;
@@ -472,11 +508,12 @@ function TaskRowItem({
   onDelete: () => void;
   showStandard: boolean;
   canDelete: boolean;
+  expanded: boolean;
+  onToggleExpand: () => void;
 }) {
   const isDone = task.status === 'DONE';
   const due = task.dueDate ? new Date(task.dueDate) : null;
   const dueLabel = <DueDateChip due={due} isDone={isDone} />;
-  const [expanded, setExpanded] = useState(false);
   const hasChecklist = (task.checklistItems?.length ?? 0) > 0;
   const utils = trpc.useUtils();
   // Inline toggle for subtasks so ticking a subtask doesn't require
@@ -523,7 +560,7 @@ function TaskRowItem({
           {hasChecklist && (
             <button
               type="button"
-              onClick={() => setExpanded((v) => !v)}
+              onClick={onToggleExpand}
               title={
                 expanded
                   ? 'Сховати підзадачі'
@@ -558,8 +595,8 @@ function TaskRowItem({
               avatarUrl={task.assignee.avatarUrl ?? undefined}
               size="xs"
             />
-            <span className="text-[11px] text-mid hidden md:inline">
-              {abbrevName(task.assignee.name)}
+            <span className="text-[11px] text-mid hidden md:inline max-w-[200px] truncate">
+              {task.assignee.name}
             </span>
           </div>
         )}
@@ -632,10 +669,4 @@ function TaskRowItem({
       )}
     </li>
   );
-}
-
-function abbrevName(full: string) {
-  const parts = full.trim().split(/\s+/);
-  if (parts.length < 2) return full;
-  return `${parts[0]} ${getInitials(parts.slice(1).join(' '))}.`;
 }
