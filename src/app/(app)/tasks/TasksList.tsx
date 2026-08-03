@@ -3,7 +3,16 @@
 import { useMemo, useState } from 'react';
 import { trpc } from '@/lib/trpc/client';
 import Link from 'next/link';
-import { ChevronRight, ChevronDown, Plus, Pencil, Trash2, AlertTriangle } from 'lucide-react';
+import {
+  ChevronRight,
+  ChevronDown,
+  Plus,
+  Pencil,
+  Trash2,
+  AlertTriangle,
+  LayoutList,
+  ListTree,
+} from 'lucide-react';
 import { useSession } from 'next-auth/react';
 import { Avatar } from '@/components/ui/Avatar';
 import { TaskFormModal } from '@/components/TaskFormModal';
@@ -11,6 +20,7 @@ import { PageHeader } from '@/components/ui/PageHeader';
 import { ConfirmModal } from '@/components/ui/ConfirmModal';
 import { DueDateChip } from '@/lib/dueDate';
 import { useExpandedTasks } from '@/lib/useExpandedTasks';
+import { useLocalStorageState } from '@/lib/useLocalStorageState';
 
 const PRIORITY_DOT: Record<string, string> = {
   HIGH: 'bg-red-500',
@@ -59,6 +69,13 @@ export function TasksList() {
   const { data: session } = useSession();
   const userId = session?.user?.id;
   const { isExpanded, toggle: toggleExpanded, setAll: setExpandedAll } = useExpandedTasks();
+  // Tree view groups tasks by РГ → Стандарт when scope is 'all' or
+  // 'wg'; flat view keeps the current single-list rendering. Persisted
+  // per browser so returning to /tasks lands in the preferred mode.
+  const [viewMode, setViewMode] = useLocalStorageState<'tree' | 'flat'>(
+    'tasks.viewMode.v1',
+    'tree',
+  );
 
   const [filter, setFilter] = useState<FilterMode>('all');
   const [search, setSearch] = useState('');
@@ -158,6 +175,81 @@ export function TasksList() {
 
   const openTasks = filteredTasks.filter((t) => t.status !== 'DONE' && t.status !== 'CANCELLED');
   const doneTasks = filteredTasks.filter((t) => t.status === 'DONE');
+
+  // Tree grouping only meaningful for 'all' / 'wg' scopes. A specific
+  // standard doesn't need a header hierarchy — the flat list is
+  // already precisely scoped.
+  const treeAvailable = selectedScope.kind !== 'std';
+  const effectiveView = treeAvailable ? viewMode : 'flat';
+
+  // Groups the given task set by РГ → Стандарт. Sorted by РГ code,
+  // then standard code, then original task order within each std.
+  interface StandardGroup {
+    stdId: string;
+    stdCode: string;
+    stdTitle: string;
+    stdIndeks: string | null;
+    tasks: TaskRow[];
+  }
+  interface WgGroup {
+    wgId: string;
+    wgCode: string;
+    wgName: string;
+    wgColor: string;
+    standards: StandardGroup[];
+  }
+  const groupTasks = useMemo(() => {
+    return (list: TaskRow[]): WgGroup[] => {
+      const wgMap = new Map<
+        string,
+        Omit<WgGroup, 'standards'> & { standards: Map<string, StandardGroup> }
+      >();
+      for (const t of list) {
+        const std = standardsResp?.items.find((s) => s.id === t.standardId);
+        const wgId = std?.workingGroupId ?? t.standard.workingGroupId;
+        const wg = groups?.find((g) => g.id === wgId);
+        if (!wg) continue;
+        if (!wgMap.has(wg.id)) {
+          wgMap.set(wg.id, {
+            wgId: wg.id,
+            wgCode: wg.code,
+            wgName: wg.name,
+            wgColor: wg.color,
+            standards: new Map(),
+          });
+        }
+        const wgEntry = wgMap.get(wg.id)!;
+        const stdId = t.standardId;
+        if (!wgEntry.standards.has(stdId)) {
+          wgEntry.standards.set(stdId, {
+            stdId,
+            stdCode: std?.code ?? t.standard.code,
+            stdTitle: std?.title ?? t.standard.title,
+            stdIndeks: std?.indeks ?? t.standard.indeks,
+            tasks: [],
+          });
+        }
+        wgEntry.standards.get(stdId)!.tasks.push(t);
+      }
+      return Array.from(wgMap.values())
+        .map((w) => ({
+          ...w,
+          standards: Array.from(w.standards.values()).sort((a, b) =>
+            a.stdCode.localeCompare(b.stdCode, 'uk'),
+          ),
+        }))
+        .sort((a, b) => a.wgCode.localeCompare(b.wgCode, 'uk'));
+    };
+  }, [groups, standardsResp]);
+
+  const openTree = useMemo(
+    () => (effectiveView === 'tree' ? groupTasks(openTasks) : null),
+    [effectiveView, groupTasks, openTasks],
+  );
+  const doneTree = useMemo(
+    () => (effectiveView === 'tree' ? groupTasks(doneTasks) : null),
+    [effectiveView, groupTasks, doneTasks],
+  );
 
   // Right-pane breadcrumb
   const scopeLabel = useMemo(() => {
@@ -335,6 +427,33 @@ export function TasksList() {
               </h2>
             </div>
             <div className="flex items-center gap-2 self-start sm:self-auto shrink-0 flex-wrap">
+              {/* View toggle — only meaningful when tree grouping has
+                  something to group (i.e., scope isn't a single
+                  standard). */}
+              {treeAvailable && (
+                <div className="inline-flex rounded-full border border-hairline p-0.5 bg-card">
+                  <button
+                    onClick={() => setViewMode('tree')}
+                    title="Дерево: групувати за РГ + Стандартом"
+                    className={`text-[12px] font-semibold px-3 py-1 rounded-full transition-colors whitespace-nowrap inline-flex items-center gap-1.5 ${
+                      viewMode === 'tree' ? 'bg-brand-soft text-brand' : 'text-mid hover:text-ink'
+                    }`}
+                  >
+                    <ListTree className="w-3.5 h-3.5" />
+                    Дерево
+                  </button>
+                  <button
+                    onClick={() => setViewMode('flat')}
+                    title="Список: усі задачі одним потоком"
+                    className={`text-[12px] font-semibold px-3 py-1 rounded-full transition-colors whitespace-nowrap inline-flex items-center gap-1.5 ${
+                      viewMode === 'flat' ? 'bg-brand-soft text-brand' : 'text-mid hover:text-ink'
+                    }`}
+                  >
+                    <LayoutList className="w-3.5 h-3.5" />
+                    Список
+                  </button>
+                </div>
+              )}
               {/* Expand-all / collapse-all — visible only when at least
                   one visible task has subtasks. Otherwise the buttons
                   would just be no-ops. */}
@@ -389,61 +508,120 @@ export function TasksList() {
             <div className="py-16 text-center text-light text-sm">Завантаження…</div>
           ) : (
             <div className="p-5 space-y-5">
-              {/* OPEN */}
-              <section>
-                <div className="text-[11px] font-bold uppercase tracking-[0.8px] text-light mb-2">
-                  Відкриті · {openTasks.length}
-                </div>
-                {openTasks.length === 0 ? (
-                  <p className="text-sm text-light px-1 py-3">Завдань немає</p>
-                ) : (
-                  <ul className="space-y-2">
-                    {openTasks.map((t) => (
-                      <TaskRowItem
-                        key={t.id}
-                        task={t}
-                        toggle={() => toggleTask.mutate({ id: t.id, status: 'DONE' })}
-                        onEdit={() => setEditingTask(t)}
-                        onDelete={() => setDeleteCandidate(t)}
-                        showStandard={selectedScope.kind !== 'std'}
-                        canDelete={t.createdById === userId || session?.user.globalRole === 'ADMIN'}
-                        expanded={isExpanded(t.id)}
-                        onToggleExpand={() => toggleExpanded(t.id)}
-                      />
-                    ))}
-                  </ul>
-                )}
-                <button
-                  onClick={() => setShowCreate(true)}
-                  className="mt-2 w-full text-center text-[13px] py-2.5 rounded-[10px] border border-dashed border-hairline text-mid hover:text-brand hover:border-brand transition-colors"
-                >
-                  + Додати завдання
-                </button>
-              </section>
+              {/* Helper: single-task row — used both flat and inside
+                  the tree so the row markup stays in one place. */}
+              {(() => {
+                const renderRow = (t: TaskRow, targetStatus: 'OPEN' | 'DONE') => (
+                  <TaskRowItem
+                    key={t.id}
+                    task={t}
+                    toggle={() => toggleTask.mutate({ id: t.id, status: targetStatus })}
+                    onEdit={() => setEditingTask(t)}
+                    onDelete={() => setDeleteCandidate(t)}
+                    // Standard code chip on the row is redundant inside
+                    // the tree (the section header already says which
+                    // standard). Show it only in flat mode with
+                    // 'all'/'wg' scope, matching pre-tree behavior.
+                    showStandard={effectiveView === 'flat' && selectedScope.kind !== 'std'}
+                    canDelete={t.createdById === userId || session?.user.globalRole === 'ADMIN'}
+                    expanded={isExpanded(t.id)}
+                    onToggleExpand={() => toggleExpanded(t.id)}
+                  />
+                );
 
-              {/* DONE */}
-              {doneTasks.length > 0 && (
-                <section>
-                  <div className="text-[11px] font-bold uppercase tracking-[0.8px] text-light mb-2">
-                    Виконані · {doneTasks.length}
+                const renderTree = (tree: WgGroup[], targetStatus: 'OPEN' | 'DONE') => (
+                  <div className="space-y-4">
+                    {tree.map((wg) => {
+                      const wgCount = wg.standards.reduce((s, x) => s + x.tasks.length, 0);
+                      return (
+                        <div key={wg.wgId} className="space-y-2">
+                          {/* WG header — hidden when scope is a single
+                              РГ (redundant with the panel scope label). */}
+                          {selectedScope.kind === 'all' && (
+                            <div className="flex items-center gap-2 pt-1">
+                              <span
+                                className="w-2.5 h-2.5 rounded-full shrink-0"
+                                style={{ backgroundColor: wg.wgColor }}
+                              />
+                              <Link
+                                href={`/working-groups/${wg.wgId}`}
+                                className="text-sm font-bold text-ink hover:text-brand truncate"
+                              >
+                                {wg.wgCode}
+                                <span className="text-mid font-normal ml-1.5">· {wg.wgName}</span>
+                              </Link>
+                              <span className="text-[11px] text-light shrink-0">{wgCount}</span>
+                            </div>
+                          )}
+                          <div
+                            className={
+                              selectedScope.kind === 'all' ? 'pl-4 space-y-3' : 'space-y-3'
+                            }
+                          >
+                            {wg.standards.map((std) => (
+                              <div key={std.stdId} className="space-y-1.5">
+                                <div className="flex items-center gap-1.5 text-[11px]">
+                                  <Link
+                                    href={`/standards/${std.stdId}`}
+                                    className="font-mono text-mid hover:text-brand"
+                                  >
+                                    {std.stdIndeks ?? std.stdCode}
+                                  </Link>
+                                  <span className="text-light truncate">— {std.stdTitle}</span>
+                                  <span className="text-light shrink-0">· {std.tasks.length}</span>
+                                </div>
+                                <ul className="space-y-1.5">
+                                  {std.tasks.map((t) => renderRow(t, targetStatus))}
+                                </ul>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      );
+                    })}
                   </div>
-                  <ul className="space-y-2">
-                    {doneTasks.map((t) => (
-                      <TaskRowItem
-                        key={t.id}
-                        task={t}
-                        toggle={() => toggleTask.mutate({ id: t.id, status: 'OPEN' })}
-                        onEdit={() => setEditingTask(t)}
-                        onDelete={() => setDeleteCandidate(t)}
-                        showStandard={selectedScope.kind !== 'std'}
-                        canDelete={t.createdById === userId || session?.user.globalRole === 'ADMIN'}
-                        expanded={isExpanded(t.id)}
-                        onToggleExpand={() => toggleExpanded(t.id)}
-                      />
-                    ))}
-                  </ul>
-                </section>
-              )}
+                );
+
+                return (
+                  <>
+                    {/* OPEN */}
+                    <section>
+                      <div className="text-[11px] font-bold uppercase tracking-[0.8px] text-light mb-2">
+                        Відкриті · {openTasks.length}
+                      </div>
+                      {openTasks.length === 0 ? (
+                        <p className="text-sm text-light px-1 py-3">Завдань немає</p>
+                      ) : effectiveView === 'tree' && openTree ? (
+                        renderTree(openTree, 'DONE')
+                      ) : (
+                        <ul className="space-y-2">{openTasks.map((t) => renderRow(t, 'DONE'))}</ul>
+                      )}
+                      <button
+                        onClick={() => setShowCreate(true)}
+                        className="mt-2 w-full text-center text-[13px] py-2.5 rounded-[10px] border border-dashed border-hairline text-mid hover:text-brand hover:border-brand transition-colors"
+                      >
+                        + Додати завдання
+                      </button>
+                    </section>
+
+                    {/* DONE */}
+                    {doneTasks.length > 0 && (
+                      <section>
+                        <div className="text-[11px] font-bold uppercase tracking-[0.8px] text-light mb-2">
+                          Виконані · {doneTasks.length}
+                        </div>
+                        {effectiveView === 'tree' && doneTree ? (
+                          renderTree(doneTree, 'OPEN')
+                        ) : (
+                          <ul className="space-y-2">
+                            {doneTasks.map((t) => renderRow(t, 'OPEN'))}
+                          </ul>
+                        )}
+                      </section>
+                    )}
+                  </>
+                );
+              })()}
             </div>
           )}
         </main>
