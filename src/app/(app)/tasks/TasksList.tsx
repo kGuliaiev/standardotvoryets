@@ -312,7 +312,27 @@ export function TasksList() {
                     ? groups?.find((g) => g.id === selectedScope.id)?.code
                     : groups?.find((g) => g.id === selectedScope.wgId)?.code}
               </p>
-              <h2 className="text-[15px] font-bold text-ink truncate">{scopeLabel}</h2>
+              <h2 className="text-[15px] font-bold text-ink truncate">
+                {selectedScope.kind === 'std' ? (
+                  <Link
+                    href={`/standards/${selectedScope.id}`}
+                    className="hover:text-brand transition-colors"
+                    title="Відкрити картку стандарту"
+                  >
+                    {scopeLabel}
+                  </Link>
+                ) : selectedScope.kind === 'wg' ? (
+                  <Link
+                    href={`/working-groups/${selectedScope.id}`}
+                    className="hover:text-brand transition-colors"
+                    title="Відкрити картку робочої групи"
+                  >
+                    {scopeLabel}
+                  </Link>
+                ) : (
+                  scopeLabel
+                )}
+              </h2>
             </div>
             <div className="flex items-center gap-2 self-start sm:self-auto shrink-0 flex-wrap">
               {/* Expand-all / collapse-all — visible only when at least
