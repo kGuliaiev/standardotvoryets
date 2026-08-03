@@ -454,6 +454,171 @@ export const taskRouter = createTRPCRouter({
       return { ok: true };
     }),
 
+  // ── copyFromTemplate ────────────────────────────────────────────────
+  // Clone every task (+ its subtasks) from a source standard into a
+  // target one. Task and subtask due dates are rebased against the
+  // target's stage plan: each source date is bound to its closest
+  // source stage (by absolute distance), then a new date is placed
+  // relative to the SAME stage on the target (same day-offset).
+  //   - If a source date has no set stages to bind to → keep as-is
+  //   - If the target's matched stage is null           → clear
+  //     (a stage-anchored task without a target anchor cannot be
+  //     placed meaningfully)
+  // Assignees are dropped (cleared) by default — copying between WGs
+  // means source assignees may not be members of the target WG.
+  copyFromTemplate: protectedProcedure
+    .input(
+      z.object({
+        sourceStandardId: z.string().cuid(),
+        targetStandardId: z.string().cuid(),
+        // 'append' — add cloned tasks alongside existing ones
+        // 'replace' — delete the target's existing tasks first
+        mode: z.enum(['append', 'replace']).default('append'),
+        resetAssignees: z.boolean().default(true),
+      }),
+    )
+    .mutation(async ({ ctx, input }) => {
+      if (input.sourceStandardId === input.targetStandardId) {
+        throw new TRPCError({
+          code: 'BAD_REQUEST',
+          message: 'Джерело і ціль співпадають — оберіть інший стандарт',
+        });
+      }
+
+      const [source, target] = await Promise.all([
+        ctx.db.standard.findUniqueOrThrow({
+          where: { id: input.sourceStandardId },
+          include: {
+            tasks: {
+              include: {
+                checklistItems: { orderBy: [{ order: 'asc' }, { createdAt: 'asc' }] },
+              },
+              orderBy: { createdAt: 'asc' },
+            },
+          },
+        }),
+        ctx.db.standard.findUniqueOrThrow({
+          where: { id: input.targetStandardId },
+          select: {
+            id: true,
+            workingGroupId: true,
+            techSpecDueDate: true,
+            draftDueDate: true,
+            feedbackDueDate: true,
+            techReviewDueDate: true,
+            finalDueDate: true,
+          },
+        }),
+      ]);
+
+      const uctx = userCtx(ctx.session);
+      if (!can(uctx, 'task:create', target.workingGroupId)) {
+        throw new TRPCError({ code: 'FORBIDDEN' });
+      }
+
+      type StageKey = 'techSpec' | 'draft' | 'feedback' | 'techReview' | 'final';
+      const STAGE_FIELDS: Record<StageKey, keyof typeof source> = {
+        techSpec: 'techSpecDueDate',
+        draft: 'draftDueDate',
+        feedback: 'feedbackDueDate',
+        techReview: 'techReviewDueDate',
+        final: 'finalDueDate',
+      };
+
+      function stageDate(std: Record<string, unknown>, k: StageKey): Date | null {
+        const v = std[STAGE_FIELDS[k]] as Date | null | undefined;
+        return v ? new Date(v) : null;
+      }
+
+      // Bind a date to the nearest source stage. Returns null if no
+      // source stage has a date (fully unstructured template).
+      function nearestStage(due: Date): StageKey | null {
+        let bestKey: StageKey | null = null;
+        let bestDiff = Number.POSITIVE_INFINITY;
+        for (const k of Object.keys(STAGE_FIELDS) as StageKey[]) {
+          const d = stageDate(source, k);
+          if (!d) continue;
+          const diff = Math.abs(due.getTime() - d.getTime());
+          if (diff < bestDiff) {
+            bestKey = k;
+            bestDiff = diff;
+          }
+        }
+        return bestKey;
+      }
+
+      function rebase(due: Date | null): Date | null {
+        if (!due) return null;
+        const k = nearestStage(due);
+        if (!k) return due; // template with no stages — leave the raw date
+        const srcAnchor = stageDate(source, k);
+        const tgtAnchor = stageDate(target, k);
+        if (!srcAnchor || !tgtAnchor) return null;
+        const offsetMs = due.getTime() - srcAnchor.getTime();
+        return new Date(tgtAnchor.getTime() + offsetMs);
+      }
+
+      // Perform the copy inside a single transaction so a partial
+      // failure (bad rebase, race with delete) leaves neither side
+      // half-copied.
+      const result = await ctx.db.$transaction(
+        async (tx) => {
+          let replaced = 0;
+          if (input.mode === 'replace') {
+            const del = await tx.task.deleteMany({ where: { standardId: target.id } });
+            replaced = del.count;
+          }
+          let createdTasks = 0;
+          let createdSubtasks = 0;
+          for (const src of source.tasks) {
+            const clonedTask = await tx.task.create({
+              data: {
+                standardId: target.id,
+                createdById: ctx.session.user.id,
+                assigneeId: input.resetAssignees ? null : src.assigneeId,
+                title: src.title,
+                description: src.description,
+                priority: src.priority,
+                // Status resets to OPEN — a cloned template item is fresh
+                // work, not a mirror of the source's completion state.
+                status: 'OPEN',
+                dueDate: src.dueDate ? rebase(new Date(src.dueDate)) : null,
+              },
+            });
+            createdTasks += 1;
+            for (const sub of src.checklistItems) {
+              await tx.taskChecklistItem.create({
+                data: {
+                  taskId: clonedTask.id,
+                  title: sub.title,
+                  description: sub.description,
+                  order: sub.order,
+                  isDone: false,
+                  dueDate: sub.dueDate ? rebase(new Date(sub.dueDate)) : null,
+                  assigneeId: input.resetAssignees ? null : sub.assigneeId,
+                },
+              });
+              createdSubtasks += 1;
+            }
+          }
+          return { createdTasks, createdSubtasks, replaced };
+        },
+        { timeout: 30_000 },
+      );
+
+      await logActivity(ctx.db, {
+        userId: ctx.session.user.id,
+        action: 'CREATE',
+        entity: 'Task',
+        entityId: target.id,
+        note:
+          `Скопійовано з шаблону: ${result.createdTasks} задач, ${result.createdSubtasks} підзадач` +
+          (input.mode === 'replace' ? `, видалено попередніх: ${result.replaced}` : ''),
+      });
+
+      return result;
+    }),
+
   // ── overdue ───────────────────────────────────────────────────────────
   overdue: protectedProcedure.query(async ({ ctx }) => {
     const memberGroupIds = ctx.session.user.memberships?.map((m) => m.workingGroupId) ?? [];

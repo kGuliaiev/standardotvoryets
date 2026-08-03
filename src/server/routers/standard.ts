@@ -322,6 +322,9 @@ export const standardRouter = createTRPCRouter({
         feedbackDueDate: z.date().optional().nullable(),
         techReviewDueDate: z.date().optional().nullable(),
         finalDueDate: z.date().optional().nullable(),
+        // Marks this standard as a reusable task template — its tasks +
+        // subtasks are eligible sources for task.copyFromTemplate.
+        isTaskTemplate: z.boolean().optional(),
       }),
     )
     .mutation(async ({ ctx, input }) => {
@@ -683,5 +686,35 @@ export const standardRouter = createTRPCRouter({
       }
 
       return { updated, skipped };
+    }),
+
+  // ── templates ─────────────────────────────────────────────────────────
+  // Lightweight list of every standard marked isTaskTemplate=true —
+  // used by the "Створити з шаблону" picker. Excludes the target
+  // standard (client passes exclude to avoid seeing "copy myself into
+  // myself"). RBAC: any authed user who can create tasks somewhere
+  // can browse templates; we filter to what the user actually sees.
+  templates: protectedProcedure
+    .input(z.object({ exclude: z.string().cuid().optional() }))
+    .query(async ({ ctx, input }) => {
+      const seesAll = seesAllWorkingGroups(ctx.session.user);
+      const memberGroupIds = ctx.session.user.memberships?.map((m) => m.workingGroupId) ?? [];
+      const wgFilter = seesAll ? {} : { workingGroupId: { in: memberGroupIds } };
+      return ctx.db.standard.findMany({
+        where: {
+          isTaskTemplate: true,
+          ...(input.exclude ? { NOT: { id: input.exclude } } : {}),
+          ...wgFilter,
+        },
+        select: {
+          id: true,
+          code: true,
+          title: true,
+          indeks: true,
+          workingGroup: { select: { code: true, color: true } },
+          _count: { select: { tasks: true } },
+        },
+        orderBy: { code: 'asc' },
+      });
     }),
 });

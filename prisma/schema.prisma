@@ -352,6 +352,12 @@ model Standard {
   indeks        String?  // "СТД-100-200-001-2026-В"
   oldTitle      String?  // Стара назва стандарту
 
+  // When true, this standard's tasks + subtasks act as a reusable
+  // template: any other standard's "Створити з шаблону" flow can
+  // clone them, with due dates rebased against the target's stage
+  // plan (see task.copyFromTemplate).
+  isTaskTemplate Boolean @default(false)
+
   techSpecCompletedAt   DateTime?
   draftCompletedAt      DateTime?
   feedbackCompletedAt   DateTime?

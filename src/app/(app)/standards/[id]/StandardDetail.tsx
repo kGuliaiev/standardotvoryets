@@ -14,6 +14,7 @@ import { ConfirmModal } from '@/components/ui/ConfirmModal';
 import { toast } from '@/lib/toast';
 import { ActivityFeed } from '@/components/ActivityFeed';
 import { TaskFormModal } from '@/components/TaskFormModal';
+import { TaskCopyFromTemplateModal } from '@/components/TaskCopyFromTemplateModal';
 import { DocumentUploadModal } from '@/components/DocumentUploadModal';
 import { DocumentEditMetaModal } from '@/components/DocumentEditMetaModal';
 import { CommentsThread } from '@/components/CommentsThread';
@@ -244,6 +245,7 @@ export function StandardDetail({ id }: { id: string }) {
     programNumber: '',
     indeks: '',
     oldTitle: '',
+    isTaskTemplate: false,
   });
   // Separate small modal for editing the 5 planned stage due dates.
   const [stageDatesOpen, setStageDatesOpen] = useState(false);
@@ -257,6 +259,7 @@ export function StandardDetail({ id }: { id: string }) {
   const [stageDatesError, setStageDatesError] = useState<string | null>(null);
   const [editError, setEditError] = useState<string | null>(null);
   const [taskModalOpen, setTaskModalOpen] = useState(false);
+  const [copyTemplateOpen, setCopyTemplateOpen] = useState(false);
   const [taskFilter, setTaskFilter] = useState<'all' | 'open' | 'done' | 'mine'>('all');
   const [docModalOpen, setDocModalOpen] = useState(false);
   // Pre-checks the "Дозволити правки" toggle when the upload modal
@@ -440,6 +443,7 @@ export function StandardDetail({ id }: { id: string }) {
                         standard.programNumber != null ? String(standard.programNumber) : '',
                       indeks: standard.indeks ?? '',
                       oldTitle: standard.oldTitle ?? '',
+                      isTaskTemplate: standard.isTaskTemplate ?? false,
                     });
                     setEditError(null);
                     setEditOpen(true);
@@ -1177,12 +1181,20 @@ export function StandardDetail({ id }: { id: string }) {
                         </>
                       )}
 
-                      <button
-                        onClick={() => setTaskModalOpen(true)}
-                        className="w-full text-center text-[13px] py-2.5 rounded-[10px] border border-dashed border-hairline text-mid hover:text-brand hover:border-brand transition-colors"
-                      >
-                        + Додати завдання
-                      </button>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                        <button
+                          onClick={() => setTaskModalOpen(true)}
+                          className="w-full text-center text-[13px] py-2.5 rounded-[10px] border border-dashed border-hairline text-mid hover:text-brand hover:border-brand transition-colors"
+                        >
+                          + Додати завдання
+                        </button>
+                        <button
+                          onClick={() => setCopyTemplateOpen(true)}
+                          className="w-full text-center text-[13px] py-2.5 rounded-[10px] border border-dashed border-hairline text-mid hover:text-brand hover:border-brand transition-colors"
+                        >
+                          ⎘ Створити з шаблону
+                        </button>
+                      </div>
                     </div>
                   </div>
                 );
@@ -1454,6 +1466,21 @@ export function StandardDetail({ id }: { id: string }) {
               />
             </div>
           </div>
+          <label className="flex items-start gap-2 text-sm cursor-pointer p-3 rounded-[10px] border border-hairline bg-page/40">
+            <input
+              type="checkbox"
+              checked={editForm.isTaskTemplate}
+              onChange={(e) => setEditForm((f) => ({ ...f, isTaskTemplate: e.target.checked }))}
+              className="w-4 h-4 accent-brand mt-0.5 shrink-0"
+            />
+            <span className="flex-1">
+              <span className="text-ink font-medium block">Шаблон задач для інших стандартів</span>
+              <span className="text-[11px] text-mid block mt-0.5">
+                Задачі та підзадачі цього стандарту стануть доступні у формі «Створити з шаблону».
+                Дати перераховуються за поетапним планом цільового стандарту.
+              </span>
+            </span>
+          </label>
           {editError && (
             <p className="text-sm text-red-600 bg-red-50 rounded-[10px] px-3 py-2">{editError}</p>
           )}
@@ -1496,6 +1523,7 @@ export function StandardDetail({ id }: { id: string }) {
                   programNumber: progNum === '' ? null : Number(progNum),
                   indeks: strToNull(editForm.indeks),
                   oldTitle: strToNull(editForm.oldTitle),
+                  isTaskTemplate: editForm.isTaskTemplate,
                 });
               }}
               disabled={updateMutation.isPending}
@@ -1594,6 +1622,14 @@ export function StandardDetail({ id }: { id: string }) {
         initial={{ workingGroupId: standard.workingGroupId, standardId: id }}
         lockedStandardId={id}
         onSaved={() => void refetch()}
+      />
+
+      <TaskCopyFromTemplateModal
+        open={copyTemplateOpen}
+        onClose={() => setCopyTemplateOpen(false)}
+        targetStandardId={id}
+        targetHasExistingTasks={(tasks?.length ?? 0) > 0}
+        onSuccess={() => void refetch()}
       />
 
       <DocumentUploadModal
