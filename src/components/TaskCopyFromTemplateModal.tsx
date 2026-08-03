@@ -56,7 +56,19 @@ export function TaskCopyFromTemplateModal({
 
   return (
     <Modal open={open} onClose={onClose} title="Створити задачі з шаблону" size="md">
-      <div className="space-y-4">
+      <form
+        onSubmit={(e) => {
+          e.preventDefault();
+          if (!sourceId || copy.isPending) return;
+          copy.mutate({
+            sourceStandardId: sourceId,
+            targetStandardId,
+            mode,
+            resetAssignees: true,
+          });
+        }}
+        className="space-y-4"
+      >
         <p className="text-sm text-mid">
           Обрана з шаблону структура задач і підзадач буде скопійована у цей стандарт. Дедлайни
           автоматично зміщуються так, щоб зберегти відношення до відповідного етапу поетапного
@@ -154,15 +166,7 @@ export function TaskCopyFromTemplateModal({
             Скасувати
           </button>
           <button
-            type="button"
-            onClick={() =>
-              copy.mutate({
-                sourceStandardId: sourceId,
-                targetStandardId,
-                mode,
-                resetAssignees: true,
-              })
-            }
+            type="submit"
             disabled={!sourceId || copy.isPending}
             className="flex-1 btn-primary disabled:opacity-50"
           >
@@ -174,7 +178,7 @@ export function TaskCopyFromTemplateModal({
                 : 'Скопіювати'}
           </button>
         </div>
-      </div>
+      </form>
     </Modal>
   );
 }

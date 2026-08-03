@@ -174,7 +174,17 @@ export function TaskFormModal({
       }
       size="md"
     >
-      <div className="space-y-4">
+      {/* Wrap in a <form> so Enter in any single-line input submits
+          (textareas keep newline behavior). The primary button is
+          type="submit"; cancel stays type="button". */}
+      <form
+        onSubmit={(e) => {
+          e.preventDefault();
+          if (isPending) return;
+          submit();
+        }}
+        className="space-y-4"
+      >
         {!editing && lockedStandardId ? (
           // Locked-to-standard mode: render read-only context line instead
           // of dropdowns. Caller already knows the WG + Standard, asking
@@ -327,12 +337,12 @@ export function TaskFormModal({
           <button type="button" onClick={onClose} className="btn-secondary">
             Скасувати
           </button>
-          <button type="button" onClick={submit} disabled={isPending} className="btn-primary">
+          <button type="submit" disabled={isPending} className="btn-primary">
             {isPending && <Loader2 className="w-4 h-4 animate-spin" />}
             {editing ? 'Зберегти' : 'Створити'}
           </button>
         </div>
-      </div>
+      </form>
     </Modal>
   );
 }

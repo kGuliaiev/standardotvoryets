@@ -112,7 +112,14 @@ export function DocumentEditMetaModal({ open, onClose, doc, onSaved }: Props) {
       subtitle={doc.filename}
       size="md"
     >
-      <div className="space-y-4">
+      <form
+        onSubmit={(e) => {
+          e.preventDefault();
+          if (update.isPending) return;
+          save();
+        }}
+        className="space-y-4"
+      >
         <div className="grid grid-cols-2 gap-3">
           <div>
             <label className="field-label">Тип *</label>
@@ -200,12 +207,12 @@ export function DocumentEditMetaModal({ open, onClose, doc, onSaved }: Props) {
           >
             Скасувати
           </button>
-          <button type="button" onClick={save} disabled={update.isPending} className="btn-primary">
+          <button type="submit" disabled={update.isPending} className="btn-primary">
             {update.isPending && <Loader2 className="w-4 h-4 animate-spin" />}
             Зберегти
           </button>
         </div>
-      </div>
+      </form>
     </Modal>
   );
 }

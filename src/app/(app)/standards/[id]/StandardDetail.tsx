@@ -1333,7 +1333,41 @@ export function StandardDetail({ id }: { id: string }) {
         subtitle={standard.code}
         size="lg"
       >
-        <div className="space-y-4">
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            if (updateMutation.isPending) return;
+            if (!editForm.title.trim()) {
+              setEditError('Введіть назву');
+              return;
+            }
+            const trim = (v: string): string | undefined => {
+              const t = v.trim();
+              return t === '' ? undefined : t;
+            };
+            const strToNull = (v: string): string | null => {
+              const t = v.trim();
+              return t === '' ? null : t;
+            };
+            const progNum = editForm.programNumber.trim();
+            updateMutation.mutate({
+              id,
+              title: editForm.title.trim(),
+              description: trim(editForm.description),
+              isoAnalog: trim(editForm.isoAnalog),
+              category: trim(editForm.category),
+              deadline: editForm.deadline ? new Date(editForm.deadline) : null,
+              responsibleId: editForm.responsibleId === '' ? null : editForm.responsibleId,
+              progress: editForm.progress,
+              partProgram: strToNull(editForm.partProgram),
+              programNumber: progNum === '' ? null : Number(progNum),
+              indeks: strToNull(editForm.indeks),
+              oldTitle: strToNull(editForm.oldTitle),
+              isTaskTemplate: editForm.isTaskTemplate,
+            });
+          }}
+          className="space-y-4"
+        >
           <div>
             <label className="field-label">Назва *</label>
             <input
@@ -1493,46 +1527,14 @@ export function StandardDetail({ id }: { id: string }) {
               Скасувати
             </button>
             <button
-              type="button"
-              onClick={() => {
-                if (!editForm.title.trim()) {
-                  setEditError('Введіть назву');
-                  return;
-                }
-                const trim = (v: string): string | undefined => {
-                  const t = v.trim();
-                  return t === '' ? undefined : t;
-                };
-                // Empty string → null so cleared inputs actually clear
-                // the field on the server (undefined would be "unchanged").
-                const strToNull = (v: string): string | null => {
-                  const t = v.trim();
-                  return t === '' ? null : t;
-                };
-                const progNum = editForm.programNumber.trim();
-                updateMutation.mutate({
-                  id,
-                  title: editForm.title.trim(),
-                  description: trim(editForm.description),
-                  isoAnalog: trim(editForm.isoAnalog),
-                  category: trim(editForm.category),
-                  deadline: editForm.deadline ? new Date(editForm.deadline) : null,
-                  responsibleId: editForm.responsibleId === '' ? null : editForm.responsibleId,
-                  progress: editForm.progress,
-                  partProgram: strToNull(editForm.partProgram),
-                  programNumber: progNum === '' ? null : Number(progNum),
-                  indeks: strToNull(editForm.indeks),
-                  oldTitle: strToNull(editForm.oldTitle),
-                  isTaskTemplate: editForm.isTaskTemplate,
-                });
-              }}
+              type="submit"
               disabled={updateMutation.isPending}
               className="flex-1 btn-primary"
             >
               {updateMutation.isPending ? 'Збереження…' : 'Зберегти'}
             </button>
           </div>
-        </div>
+        </form>
       </Modal>
 
       {/* Stage due dates — separate modal so the main edit form stays
@@ -1545,7 +1547,29 @@ export function StandardDetail({ id }: { id: string }) {
         subtitle={standard.code}
         size="md"
       >
-        <div className="space-y-4">
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            if (updateMutation.isPending) return;
+            setStageDatesError(null);
+            const toDate = (v: string): Date | null => (v ? new Date(v) : null);
+            updateMutation.mutate(
+              {
+                id,
+                techSpecDueDate: toDate(stageDatesForm.techSpecDueDate),
+                draftDueDate: toDate(stageDatesForm.draftDueDate),
+                feedbackDueDate: toDate(stageDatesForm.feedbackDueDate),
+                techReviewDueDate: toDate(stageDatesForm.techReviewDueDate),
+                finalDueDate: toDate(stageDatesForm.finalDueDate),
+              },
+              {
+                onSuccess: () => setStageDatesOpen(false),
+                onError: (er) => setStageDatesError(er.message),
+              },
+            );
+          }}
+          className="space-y-4"
+        >
           <p className="text-xs text-light">
             Планові дедлайни за етапами програми стандартизації. Порожнє поле — етап без
             запланованого дедлайну. Дати виконання (
@@ -1588,32 +1612,14 @@ export function StandardDetail({ id }: { id: string }) {
               Скасувати
             </button>
             <button
-              type="button"
-              onClick={() => {
-                setStageDatesError(null);
-                const toDate = (v: string): Date | null => (v ? new Date(v) : null);
-                updateMutation.mutate(
-                  {
-                    id,
-                    techSpecDueDate: toDate(stageDatesForm.techSpecDueDate),
-                    draftDueDate: toDate(stageDatesForm.draftDueDate),
-                    feedbackDueDate: toDate(stageDatesForm.feedbackDueDate),
-                    techReviewDueDate: toDate(stageDatesForm.techReviewDueDate),
-                    finalDueDate: toDate(stageDatesForm.finalDueDate),
-                  },
-                  {
-                    onSuccess: () => setStageDatesOpen(false),
-                    onError: (e) => setStageDatesError(e.message),
-                  },
-                );
-              }}
+              type="submit"
               disabled={updateMutation.isPending}
               className="flex-1 btn-primary"
             >
               {updateMutation.isPending ? 'Збереження…' : 'Зберегти'}
             </button>
           </div>
-        </div>
+        </form>
       </Modal>
 
       <TaskFormModal

@@ -226,7 +226,16 @@ export function DocumentUploadModal({
 
   return (
     <Modal open={open} onClose={onClose} title="Новий документ" size="md">
-      <div className="space-y-4">
+      {/* Wrap in a <form> so Enter in single-line fields (filename /
+          version) submits; textareas (note) keep newline behavior. */}
+      <form
+        onSubmit={(e) => {
+          e.preventDefault();
+          if (busy) return;
+          void submit();
+        }}
+        className="space-y-4"
+      >
         {/* Mode toggle: pick a file from disk or start with a blank
             document and write straight into the WYSIWYG editor. */}
         <div className="grid grid-cols-2 gap-2 p-1 bg-page rounded-[10px] border border-hairline">
@@ -392,7 +401,7 @@ export function DocumentUploadModal({
           <button type="button" onClick={onClose} className="btn-secondary" disabled={busy}>
             Скасувати
           </button>
-          <button type="button" onClick={submit} disabled={busy} className="btn-primary">
+          <button type="submit" disabled={busy} className="btn-primary">
             {busy && <Loader2 className="w-4 h-4 animate-spin" />}
             {progress === 'getting-url'
               ? 'Отримуємо URL…'
@@ -405,7 +414,7 @@ export function DocumentUploadModal({
                     : 'Завантажити'}
           </button>
         </div>
-      </div>
+      </form>
     </Modal>
   );
 }
