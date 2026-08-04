@@ -1982,18 +1982,17 @@ function StandardTaskRow({
                     onChange={() => toggleSub.mutate({ id: sub.id })}
                     className="w-3.5 h-3.5 accent-brand cursor-pointer shrink-0"
                   />
-                  <span
-                    className={`min-w-0 flex-1 truncate ${sub.isDone ? 'line-through text-light' : 'text-ink'}`}
-                  >
-                    {sub.title}
-                  </span>
-                  {sub.description && (
-                    <InfoToggle
-                      open={subDescOpened}
-                      onToggle={() => toggleSubDesc(sub.id)}
-                      className="-ml-1"
-                    />
-                  )}
+                  {/* Назва + (i) разом — іконка впритул до тексту, як у /tasks. */}
+                  <div className="flex-1 min-w-0 flex items-center gap-1.5">
+                    <span
+                      className={`min-w-0 truncate ${sub.isDone ? 'line-through text-light' : 'text-ink'}`}
+                    >
+                      {sub.title}
+                    </span>
+                    {sub.description && (
+                      <InfoToggle open={subDescOpened} onToggle={() => toggleSubDesc(sub.id)} />
+                    )}
+                  </div>
                   {/* Meta right-aligned, matches parent task row visual. */}
                   {sub.assignee && (
                     <div className="inline-flex items-center gap-1.5 shrink-0">

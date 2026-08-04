@@ -546,7 +546,7 @@ function SortableChecklistRow({
           onChange={onCheckbox}
           className="w-4 h-4 accent-brand cursor-pointer shrink-0"
         />
-        <div className="flex-1 min-w-0">
+        <div className="flex-1 min-w-0 flex items-center gap-1.5">
           {isTitleEditing ? (
             <input
               type="text"
@@ -562,24 +562,25 @@ function SortableChecklistRow({
                   onEditCancel();
                 }
               }}
-              className="input w-full text-sm py-1"
+              className="input flex-1 min-w-0 text-sm py-1"
             />
           ) : (
-            <span
-              className={`text-sm cursor-text leading-relaxed block truncate ${
-                item.isDone ? 'line-through text-light' : 'text-ink'
-              }`}
-              onClick={onStartEdit}
-            >
-              {item.title}
-            </span>
+            <>
+              <span
+                className={`text-sm cursor-text leading-relaxed min-w-0 truncate ${
+                  item.isDone ? 'line-through text-light' : 'text-ink'
+                }`}
+                onClick={onStartEdit}
+              >
+                {item.title}
+              </span>
+              {/* Опис не влазить у рядок — (i) сигналізує, що він є, і
+                  розгортає ту саму панель деталей, що й олівець.
+                  Тримається впритул до назви, не біля правого краю. */}
+              {item.description && <InfoToggle open={isExpanded} onToggle={onToggleExpand} />}
+            </>
           )}
         </div>
-        {/* Опис підзадачі не влазить у рядок — (i) сигналізує, що він є,
-            і розгортає ту саму панель деталей, що й олівець. */}
-        {!isTitleEditing && item.description && (
-          <InfoToggle open={isExpanded} onToggle={onToggleExpand} />
-        )}
         {!isTitleEditing && item.assignee && (
           <div className="inline-flex items-center gap-1.5 shrink-0">
             <Avatar

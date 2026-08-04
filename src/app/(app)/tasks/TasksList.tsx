@@ -864,18 +864,19 @@ function TaskRowItem({
                     onChange={() => toggleSubtask.mutate({ id: sub.id })}
                     className="w-3.5 h-3.5 accent-brand cursor-pointer shrink-0"
                   />
-                  <span
-                    className={`min-w-0 flex-1 truncate ${sub.isDone ? 'line-through text-light' : 'text-ink'}`}
-                  >
-                    {sub.title}
-                  </span>
-                  {sub.description && (
-                    <InfoToggle
-                      open={subDescOpened}
-                      onToggle={() => toggleSubDesc(sub.id)}
-                      className="-ml-1"
-                    />
-                  )}
+                  {/* Назва + (i) в спільному flex-контейнері, щоб іконка
+                      трималася впритул до тексту, а не відлітала до
+                      правого краю разом із метою. */}
+                  <div className="flex-1 min-w-0 flex items-center gap-1.5">
+                    <span
+                      className={`min-w-0 truncate ${sub.isDone ? 'line-through text-light' : 'text-ink'}`}
+                    >
+                      {sub.title}
+                    </span>
+                    {sub.description && (
+                      <InfoToggle open={subDescOpened} onToggle={() => toggleSubDesc(sub.id)} />
+                    )}
+                  </div>
                   {/* Meta on the right — mirrors the parent task row:
                       Avatar+name, then DueDateChip (date + «ще N днів»). */}
                   {sub.assignee && (
