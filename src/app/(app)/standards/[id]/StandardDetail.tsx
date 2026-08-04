@@ -7,6 +7,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { Pencil, ChevronDown, FileText, Trash2 } from 'lucide-react';
 import { DueDateChip } from '@/lib/dueDate';
+import { InfoToggle, DescriptionNote } from '@/components/ui/DescriptionNote';
 import { StatusBadge, type StandardStatus } from '@/components/ui/StatusBadge';
 import { Avatar } from '@/components/ui/Avatar';
 import { Modal } from '@/components/ui/Modal';
@@ -1841,11 +1842,13 @@ function StandardTaskRow({
     status: 'OPEN' | 'IN_PROGRESS' | 'DONE' | 'CANCELLED';
     priority: 'HIGH' | 'MEDIUM' | 'LOW';
     dueDate: Date | string | null;
+    description?: string | null;
     assigneeId: string | null;
     assignee?: { id: string; name: string; avatarUrl: string | null } | null;
     checklistItems?: {
       id: string;
       title: string;
+      description: string | null;
       isDone: boolean;
       dueDate: Date | string | null;
       assigneeId: string | null;
@@ -1872,6 +1875,16 @@ function StandardTaskRow({
       void utils.standard.byId.invalidate();
     },
   });
+  // Опис — під (i), як у глобальному списку /tasks.
+  const [descOpen, setDescOpen] = useState(false);
+  const [subDescOpen, setSubDescOpen] = useState<Set<string>>(new Set());
+  const toggleSubDesc = (sid: string) =>
+    setSubDescOpen((prev) => {
+      const next = new Set(prev);
+      if (next.has(sid)) next.delete(sid);
+      else next.add(sid);
+      return next;
+    });
 
   return (
     <li className="group bg-card border border-hairline rounded-[10px] hover:border-brand/40 transition-colors">
@@ -1910,6 +1923,9 @@ function StandardTaskRow({
           >
             {task.title}
           </Link>
+          {task.description && (
+            <InfoToggle open={descOpen} onToggle={() => setDescOpen((v) => !v)} />
+          )}
           {hasChecklist && (
             <button
               type="button"
@@ -1939,44 +1955,63 @@ function StandardTaskRow({
         <DueDateChip due={due} isDone={isDone} />
       </div>
 
+      {descOpen && task.description && (
+        <div className="px-4 pb-3 -mt-1">
+          <DescriptionNote text={task.description} />
+        </div>
+      )}
+
       {expanded && task.checklistItems && (
         <ul className="border-t border-hairline bg-page/30 px-4 py-2 space-y-1">
           {task.checklistItems.map((sub) => {
             const subDue = sub.dueDate ? new Date(sub.dueDate) : null;
+            const subDescOpened = subDescOpen.has(sub.id);
             return (
               <li
                 key={sub.id}
                 // Same hover underline as /tasks — a dashed hairline
                 // appears at the bottom of the row on hover and skips
                 // the last row (nothing to separate from).
-                className="group flex items-center gap-2 text-sm py-1 border-b border-transparent hover:border-hairline hover:border-dashed last:hover:border-transparent transition-colors"
+                className="group border-b border-transparent hover:border-hairline hover:border-dashed last:hover:border-transparent transition-colors"
               >
-                <input
-                  type="checkbox"
-                  checked={sub.isDone}
-                  disabled={toggleSub.isPending}
-                  onChange={() => toggleSub.mutate({ id: sub.id })}
-                  className="w-3.5 h-3.5 accent-brand cursor-pointer shrink-0"
-                />
-                <span
-                  className={`flex-1 truncate ${sub.isDone ? 'line-through text-light' : 'text-ink'}`}
-                >
-                  {sub.title}
-                </span>
-                {/* Meta right-aligned, matches parent task row visual. */}
-                {sub.assignee && (
-                  <div className="inline-flex items-center gap-1.5 shrink-0">
-                    <Avatar
-                      name={sub.assignee.name}
-                      avatarUrl={sub.assignee.avatarUrl ?? undefined}
-                      size="xs"
+                <div className="flex items-center gap-2 text-sm py-1">
+                  <input
+                    type="checkbox"
+                    checked={sub.isDone}
+                    disabled={toggleSub.isPending}
+                    onChange={() => toggleSub.mutate({ id: sub.id })}
+                    className="w-3.5 h-3.5 accent-brand cursor-pointer shrink-0"
+                  />
+                  <span
+                    className={`min-w-0 flex-1 truncate ${sub.isDone ? 'line-through text-light' : 'text-ink'}`}
+                  >
+                    {sub.title}
+                  </span>
+                  {sub.description && (
+                    <InfoToggle
+                      open={subDescOpened}
+                      onToggle={() => toggleSubDesc(sub.id)}
+                      className="-ml-1"
                     />
-                    <span className="text-[11px] text-mid hidden md:inline max-w-[140px] truncate">
-                      {sub.assignee.name}
-                    </span>
-                  </div>
+                  )}
+                  {/* Meta right-aligned, matches parent task row visual. */}
+                  {sub.assignee && (
+                    <div className="inline-flex items-center gap-1.5 shrink-0">
+                      <Avatar
+                        name={sub.assignee.name}
+                        avatarUrl={sub.assignee.avatarUrl ?? undefined}
+                        size="xs"
+                      />
+                      <span className="text-[11px] text-mid hidden md:inline max-w-[140px] truncate">
+                        {sub.assignee.name}
+                      </span>
+                    </div>
+                  )}
+                  <DueDateChip due={subDue} isDone={sub.isDone} />
+                </div>
+                {subDescOpened && sub.description && (
+                  <DescriptionNote text={sub.description} className="ml-[22px] mb-1.5" />
                 )}
-                <DueDateChip due={subDue} isDone={sub.isDone} />
               </li>
             );
           })}

@@ -19,6 +19,7 @@ import { TaskFormModal } from '@/components/TaskFormModal';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { ConfirmModal } from '@/components/ui/ConfirmModal';
 import { DueDateChip } from '@/lib/dueDate';
+import { InfoToggle, DescriptionNote } from '@/components/ui/DescriptionNote';
 import { useExpandedTasks } from '@/lib/useExpandedTasks';
 import { useLocalStorageState } from '@/lib/useLocalStorageState';
 
@@ -53,6 +54,7 @@ interface TaskRow {
   checklistItems?: {
     id: string;
     title: string;
+    description: string | null;
     isDone: boolean;
     dueDate: Date | string | null;
     assigneeId: string | null;
@@ -722,6 +724,17 @@ function TaskRowItem({
   });
   const doneSubtasks = task.checklistItems?.filter((i) => i.isDone).length ?? 0;
   const totalSubtasks = task.checklistItems?.length ?? 0;
+  // Опис показуємо по кліку на (i) — і для самої задачі, і для будь-якої
+  // з підзадач (набір відкритих id, бо рядки рендеряться у map).
+  const [descOpen, setDescOpen] = useState(false);
+  const [subDescOpen, setSubDescOpen] = useState<Set<string>>(new Set());
+  const toggleSubDesc = (id: string) =>
+    setSubDescOpen((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
 
   return (
     <li className="group bg-card border border-hairline rounded-[10px] hover:border-brand/40 transition-colors">
@@ -755,6 +768,9 @@ function TaskRowItem({
           >
             {task.title}
           </Link>
+          {task.description && (
+            <InfoToggle open={descOpen} onToggle={() => setDescOpen((v) => !v)} />
+          )}
           {hasChecklist && (
             <button
               type="button"
@@ -819,10 +835,17 @@ function TaskRowItem({
         </div>
       </div>
 
+      {descOpen && task.description && (
+        <div className="px-4 pb-3 -mt-1">
+          <DescriptionNote text={task.description} />
+        </div>
+      )}
+
       {expanded && task.checklistItems && (
         <ul className="border-t border-hairline bg-page/30 px-4 py-2 space-y-1">
           {task.checklistItems.map((sub) => {
             const subDue = sub.dueDate ? new Date(sub.dueDate) : null;
+            const subDescOpened = subDescOpen.has(sub.id);
             return (
               <li
                 key={sub.id}
@@ -831,35 +854,47 @@ function TaskRowItem({
                 // under the row — visually anchors the meta on the
                 // right to the correct title on the left. Skipped on
                 // the last row (nothing to separate from).
-                className="group flex items-center gap-2 text-sm py-1 border-b border-transparent hover:border-hairline hover:border-dashed last:hover:border-transparent transition-colors"
+                className="group border-b border-transparent hover:border-hairline hover:border-dashed last:hover:border-transparent transition-colors"
               >
-                <input
-                  type="checkbox"
-                  checked={sub.isDone}
-                  disabled={toggleSubtask.isPending}
-                  onChange={() => toggleSubtask.mutate({ id: sub.id })}
-                  className="w-3.5 h-3.5 accent-brand cursor-pointer shrink-0"
-                />
-                <span
-                  className={`flex-1 truncate ${sub.isDone ? 'line-through text-light' : 'text-ink'}`}
-                >
-                  {sub.title}
-                </span>
-                {/* Meta on the right — mirrors the parent task row:
-                    Avatar+name, then DueDateChip (date + «ще N днів»). */}
-                {sub.assignee && (
-                  <div className="inline-flex items-center gap-1.5 shrink-0">
-                    <Avatar
-                      name={sub.assignee.name}
-                      avatarUrl={sub.assignee.avatarUrl ?? undefined}
-                      size="xs"
+                <div className="flex items-center gap-2 text-sm py-1">
+                  <input
+                    type="checkbox"
+                    checked={sub.isDone}
+                    disabled={toggleSubtask.isPending}
+                    onChange={() => toggleSubtask.mutate({ id: sub.id })}
+                    className="w-3.5 h-3.5 accent-brand cursor-pointer shrink-0"
+                  />
+                  <span
+                    className={`min-w-0 flex-1 truncate ${sub.isDone ? 'line-through text-light' : 'text-ink'}`}
+                  >
+                    {sub.title}
+                  </span>
+                  {sub.description && (
+                    <InfoToggle
+                      open={subDescOpened}
+                      onToggle={() => toggleSubDesc(sub.id)}
+                      className="-ml-1"
                     />
-                    <span className="text-[11px] text-mid hidden md:inline max-w-[140px] truncate">
-                      {sub.assignee.name}
-                    </span>
-                  </div>
+                  )}
+                  {/* Meta on the right — mirrors the parent task row:
+                      Avatar+name, then DueDateChip (date + «ще N днів»). */}
+                  {sub.assignee && (
+                    <div className="inline-flex items-center gap-1.5 shrink-0">
+                      <Avatar
+                        name={sub.assignee.name}
+                        avatarUrl={sub.assignee.avatarUrl ?? undefined}
+                        size="xs"
+                      />
+                      <span className="text-[11px] text-mid hidden md:inline max-w-[140px] truncate">
+                        {sub.assignee.name}
+                      </span>
+                    </div>
+                  )}
+                  <DueDateChip due={subDue} isDone={sub.isDone} />
+                </div>
+                {subDescOpened && sub.description && (
+                  <DescriptionNote text={sub.description} className="ml-[22px] mb-1.5" />
                 )}
-                <DueDateChip due={subDue} isDone={sub.isDone} />
               </li>
             );
           })}

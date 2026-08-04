@@ -12,6 +12,7 @@ import { TaskFormModal } from '@/components/TaskFormModal';
 import { ConfirmModal } from '@/components/ui/ConfirmModal';
 import { formatDate, formatDateTime } from '@/lib/utils';
 import { DueDateChip } from '@/lib/dueDate';
+import { InfoToggle } from '@/components/ui/DescriptionNote';
 import {
   DndContext,
   closestCenter,
@@ -574,6 +575,11 @@ function SortableChecklistRow({
             </span>
           )}
         </div>
+        {/* Опис підзадачі не влазить у рядок — (i) сигналізує, що він є,
+            і розгортає ту саму панель деталей, що й олівець. */}
+        {!isTitleEditing && item.description && (
+          <InfoToggle open={isExpanded} onToggle={onToggleExpand} />
+        )}
         {!isTitleEditing && item.assignee && (
           <div className="inline-flex items-center gap-1.5 shrink-0">
             <Avatar
