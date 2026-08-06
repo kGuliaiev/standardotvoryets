@@ -276,7 +276,11 @@ export function TasksList() {
   ).length;
 
   return (
-    <div className="pg-enter space-y-5">
+    // На lg+ сторінка займає рівно висоту вікна: шапка і панель фільтрів
+    // лишаються на місці, а прокручується тільки список завдань (і дерево
+    // РГ у лівій колонці — кожне у своєму скролері). На вузьких екранах
+    // усе повертається до звичайного потоку сторінки.
+    <div className="pg-enter space-y-5 lg:h-full lg:flex lg:flex-col">
       <PageHeader
         title="Завдання"
         subtitle={
@@ -294,10 +298,10 @@ export function TasksList() {
         }
       />
 
-      <div className="grid grid-cols-1 lg:grid-cols-[260px_1fr] gap-5 items-start">
+      <div className="grid grid-cols-1 lg:grid-cols-[260px_1fr] gap-5 items-start lg:items-stretch lg:flex-1 lg:min-h-0">
         {/* LEFT: Tree (full-width on mobile, fixed sidebar on lg+) */}
-        <aside className="card overflow-hidden self-stretch lg:sticky lg:top-0">
-          <div className="p-3 border-b border-hairline">
+        <aside className="card overflow-hidden self-stretch flex flex-col lg:min-h-0">
+          <div className="p-3 border-b border-hairline shrink-0">
             <input
               type="search"
               value={search}
@@ -306,7 +310,7 @@ export function TasksList() {
               className="w-full px-3 py-2 text-[13px] bg-page border border-hairline rounded-[10px] text-ink placeholder:text-light focus:outline-none focus:border-brand"
             />
           </div>
-          <div className="py-2 max-h-[calc(100vh-260px)] overflow-y-auto scrollbar-thin">
+          <div className="py-2 flex-1 min-h-0 max-h-[60vh] lg:max-h-none overflow-y-auto scrollbar-thin">
             <button
               onClick={() => setSelectedScope({ kind: 'all' })}
               className={`w-full text-left flex items-center gap-2 px-3 py-1.5 text-[13px] font-semibold transition-colors ${
@@ -396,8 +400,8 @@ export function TasksList() {
         </aside>
 
         {/* RIGHT: List */}
-        <main className="card overflow-hidden">
-          <div className="card-head flex-col items-stretch sm:flex-row sm:items-center gap-3">
+        <main className="card overflow-hidden flex flex-col lg:min-h-0">
+          <div className="card-head shrink-0 flex-col items-stretch sm:flex-row sm:items-center gap-3">
             <div className="min-w-0">
               <p className="text-[11px] font-bold uppercase tracking-wide text-light">
                 {selectedScope.kind === 'all'
@@ -509,7 +513,9 @@ export function TasksList() {
           {!tasks ? (
             <div className="py-16 text-center text-light text-sm">Завантаження…</div>
           ) : (
-            <div className="p-5 space-y-5">
+            // Власний скролер: заголовок картки з фільтрами лишається
+            // видимим, гортається лише перелік завдань.
+            <div className="p-5 space-y-5 lg:flex-1 lg:min-h-0 lg:overflow-y-auto lg:scrollbar-thin">
               {/* Helper: single-task row — used both flat and inside
                   the tree so the row markup stays in one place. */}
               {(() => {
