@@ -227,6 +227,17 @@ If the Railway URL behaves correctly but the custom-domain URL doesn't, it's Clo
 
 ## 6. Schema migration cheatsheet
 
+> ⚠️ **Послідовність старту на Railway:**
+> `scripts/pre-db-push.sh` → `prisma db push --accept-data-loss` → `prisma:seed` → `start`.
+>
+> `pre-db-push.sh` виконує `scripts/pre-db-push.sql` **до** `db push` — саме там
+> живуть деструктивні зміни enum'ів, які `db push` сам зробити не може
+> (`ALTER TYPE … ADD VALUE IF NOT EXISTS` + перенесення рядків на нове значення).
+> Скрипт ідемпотентний і пропускає свіжу БД. Якщо додаєш/прибираєш значення
+> enum — бекфіл пишеться туди, інакше деплой впаде або мовчки втратить рядки
+> (ADR-0005).
+
+
 We use `prisma db push`, not migrations. The rule:
 
 | Change                        | Safe to push directly?                                                               |

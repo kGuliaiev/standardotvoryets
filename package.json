@@ -27,6 +27,7 @@
     "test:audit-coverage": "tsx scripts/audit-coverage.ts",
     "test:modules": "tsx scripts/test-modules.ts",
     "qa:smoke": "bash scripts/qa-smoke.sh",
+    "docs:pdf": "bash scripts/docs-to-pdf.sh",
     "prepare": "husky"
   },
   "dependencies": {

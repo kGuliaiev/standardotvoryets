@@ -11,8 +11,9 @@
 завдання → документи → аудит-лог. Веб-застосунок Next.js, multi-RBAC, темна/світла
 тема, кирилиця.
 
-**Етап:** працює на staging/prod (Railway). Після QA-циклу 2026-05-26 — фаза
-hardening: серія security-хотфіксів (B-1…B-9) + UI release-blockers перед demo.
+**Етап:** працює на staging/prod (Railway). Циклі hardening (B-1…B-9) і
+voting/documents lifecycle закриті. Останній закритий цикл — «Завдання»
+(підзадачі, шаблони, дерево), 2026-07-14 → 2026-08-06, **без формального QA-прогону**.
 Поточний стан і пріоритети — у `CONTINUATION.md`.
 
 ## Технічний стек
@@ -41,19 +42,30 @@ src/
 │   ├── (auth)/        # публічна зона (login, invite)
 │   └── api/           # REST routes (auth, trpc, health, db-status, version, cron×3, meetings, documents, …)
 ├── server/
-│   ├── routers/       # tRPC роутери (user, workingGroup, standard, document, vote, meeting, task, notification, dashboard, activityLog, comment, search, admin, suggestion, inlineComment, permission)
+│   ├── routers/       # 16 tRPC роутерів: user, workingGroup, standard, document, vote, meeting, task,
+│   │                  #   notification, dashboard, activityLog, comment, search, admin, suggestion,
+│   │                  #   inlineComment, permission
 │   ├── auth.ts        # NextAuth config (authorize/jwt/session callbacks)
 │   ├── trpc.ts        # tRPC init + protectedProcedure + permissions middleware
 │   ├── audit.ts       # logActivity() helper
 │   ├── notify.ts, email.ts, s3.ts, ai/protocol.ts
-├── lib/               # rbac.ts, env.ts, cron-jobs.ts, utils, i18n, __tests__/ (unit)
-├── components/        # ui/ (Modal, ConfirmModal…), layout/ (Sidebar, TopBar), auth/, dashboard/, standards/, meetings/, providers/ (ThemeProvider)
+├── lib/               # rbac.ts, env.ts, cron-jobs.ts, sanitizeHtml.ts, dueDate.tsx, toast.tsx,
+│                      #   useLocalStorageState.ts, useExpandedTasks.ts, wordDiff.ts, ranks.ts,
+│                      #   docxToHtml.ts, htmlToDocx.ts, ical.ts, __tests__/ (unit)
+├── components/        # ui/ (Modal, ConfirmModal, DescriptionNote, Avatar, PageHeader…),
+│                      #   layout/ (Sidebar, TopBar), auth/, dashboard/, standards/, meetings/,
+│                      #   providers/ (ThemeProvider)
 └── middleware.ts      # route gate (auth)
-prisma/                # schema.prisma (~804 рядки), seed.ts, indexes.sql (немає migrations/)
+prisma/                # schema.prisma (882 рядки), seed.ts, indexes.sql (migrations/ НЕМАЄ — ADR-0004)
+scripts/               # audit-coverage.ts, test-modules.ts, qa-smoke.sh, pre-db-push.{sh,sql}
 workers/               # BullMQ воркери
 QA-tests/              # архів QA-прогонів (див. QA-tests/README.md)
-docs/                  # SPEC-document-editor.md, DECISIONS.md (ADR)
+docs/                  # ARCHITECTURE.md (поточний стан), DECISIONS.md (ADR),
+                       #   SPEC-document-editor.md, PORTABLE-SPEC-…md
 ```
+
+> ⚠️ Одноразові скрипти (разові прогони проти прода з реальними даними) **не комітити** —
+> репозиторій публічний, а історію git без force-push не вичистити.
 
 ## Як запустити локально
 
@@ -83,15 +95,13 @@ pnpm worker                          # (опційно) BullMQ воркери; �
 ## Як прогнати тести
 
 ```bash
-pnpm test                  # Vitest unit (після Part-3 setup) — очікувано 44 кейси (5 файлів у src/lib/__tests__/)
+pnpm test                  # Vitest unit — 48 кейсів, 5 файлів у src/lib/__tests__/
 pnpm test:coverage         # + HTML-звіт у ./coverage/
-pnpm test:audit-coverage   # ts-morph: кожна tRPC-мутація має logActivity() → 41 covered / 6 exempt / 0 uncovered (потрібна жива БД)
+pnpm test:audit-coverage   # ts-morph: кожна tRPC-мутація має logActivity(); checklist*-процедури — у exempt-списку (потрібна жива БД)
 pnpm test:modules          # integration CRUD по всіх сутностях через appRouter.createCaller (потрібна dev/test БД!)
 pnpm typecheck && pnpm lint && pnpm build   # pre-push gate (ESLint --max-warnings 0)
-bash scripts/qa-smoke.sh   # (після Part-3) read-only smoke проти staging: NextAuth логін + ~12 перевірок
+bash scripts/qa-smoke.sh   # read-only smoke проти staging: NextAuth логін + ~12 перевірок
 ```
-
-> На момент написання Vitest ще встановлюється (Part 3). До цього `pnpm test` відсутній.
 
 ## Production / Staging
 
@@ -132,10 +142,23 @@ DRAFT  ──→  IN_REVIEW  ──→  VOTING  ──→  ADOPTED  ──→  A
 
 Коли `Standard.status === 'IN_REVIEW'`, прямий WYSIWYG-edit body (тіла стандарту І `bodyHtml` прикріплених документів) заборонений для всіх крім ADMIN. Користувачі вносять зміни через Suggestions. Реалізовано через проп `standardStatus` у `StandardBodyEditor` + перевірки `lockedAt` у suggestion router. Не плутати з voting-lock (це окрема, абсолютна заборона після закриття голосування).
 
+## Модуль «Завдання» (поточний стан)
+
+- **Задача** (`Task`) — статус/пріоритет/виконавець/дедлайн, прив'язана до стандарту, веде `ActivityLog`.
+- **Підзадача** (`TaskChecklistItem`) — рівно один рівень вкладеності, поля як у задачі
+  (`title`/`description`/`isDone`/`dueDate`/`assigneeId`/`order`), але **без** статус-машини,
+  пріоритету й власного аудиту. Не враховується в KPI дашборда й у лічильниках простроченого (ADR-0007).
+- **Шаблон** — `Standard.isTaskTemplate`. `task.copyFromTemplate` клонує задачі з підзадачами й
+  **перераховує** дедлайни: зсув у днях від найближчого етапу джерела → той самий зсув від
+  відповідного етапу цілі. Виконавці скидаються. Режими `append` / `replace` (ADR-0008).
+- **Списки** — `/tasks` (дерево РГ → Стандарт або плоский список) і вкладка «Завдання» стандарту.
+  Розгортання підзадач і режим перегляду зберігаються per-user у localStorage.
+
 ## Що зараз у роботі
 
 → `CONTINUATION.md` (живий документ): поточна гілка, останній коміт, що закрито/відкрито,
-блокери, контекст архітектурних рішень. Останній QA-цикл — `QA-tests/2026-05-26/`.
+блокери, контекст архітектурних рішень. Повний опис архітектури й функціоналу — `docs/ARCHITECTURE.md`.
+Останній QA-цикл — `QA-tests/2026-05-26/`.
 
 ## ⛔ Що НЕ робити без узгодження з Kir
 

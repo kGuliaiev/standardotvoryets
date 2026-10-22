@@ -9,33 +9,43 @@
 ## ▶ ПОТОЧНИЙ СТАН (оновлювати щоразу)
 
 - **Гілка:** `main`
-- **Останній коміт:** `8ca4bbb` — `fix(standard): IN_REVIEW gate keys off STANDARD doc, not TECH_SPEC`.
-- **Активний цикл:** voting + document lifecycle (рефакторинг типів документів + lock-on-close + clone-on-reject). Завершено: 5-пункт UX-пакет (TZ gate refined → STANDARD gate, auto-edit on create, smart default type, filled top-right toasts, VOTE_OPENED → WG + DIRECTOR). Voting quorum виправлений (`forVotes/eligibleCount > 0.5`).
-- **Цикл QA 2026-05-26 закрито:** security (B-1…B-9), designer (D-1/2/3/4/9 + D-15/F-6/F-7), frontend HIGH (F-2/F-10), quick wins (D-5/7/10/18 + F-3/F-5), test infra (Vitest 48/48 + qa-smoke). State machine (B-16) + IN_REVIEW body lock — у проді.
-- **UI-патерн:** підтвердження — `ConfirmModal` (type-to-confirm); сповіщення — `toast` (`success/error/info`/`notify`, всі top-right, filled cards). Нативні `confirm()/alert()` під забороною.
-- **Документна модель (новий стан):** `DocumentType` = `STANDARD` | `TECH_SPEC` | `FEEDBACK` | `AGENDA` | `ATTACHMENT` (+ legacy `MEETING_MINUTES`, ховається з пікера). Видалено: `DRAFT_STANDARD` (→ `STANDARD`), `FINAL` (→ `ATTACHMENT`). Bckфіл у `scripts/pre-db-push.sql` (запускається перед `prisma db push` через `scripts/pre-db-push.sh`). `isCurrent` працює тільки для `STANDARD` і `TECH_SPEC` (інші ховаються, бекенд forces false).
-- **Voting (новий стан):** ціль голосування — активний `STANDARD`-документ. На закриття: `Document.lockedAt`/`lockedByVotingId`, ім'я доповнюється `(Голосування №N, прийнято/відхилено DD.MM.YYYY)`, `Voting.documentId` тримає посилання. **REJECTED → standard.status = DRAFT** (не REJECTED) + клон документа з версією `vN+1` як новий editable. **ADOPTED → ADOPTED**, новий клон НЕ створюється. Голосування не видаляються. Поріг — `forVotes/eligibleCount > 0.5`, де `eligibleCount` = активні `LEADER/DEPUTY/MEMBER` (snapshot у `Voting.eligibleAtClose`).
+- **Останній коміт коду:** `911085b` — `ui(tasks): scroll the task list itself, not the whole page` (2026-08-06).
+- **Активний цикл:** закрито цикл «Завдання» (підзадачі → шаблони → дерево). Розділ voting/documents з 2026-06-02 не змінювався — він стабільний, опис нижче та в ADR-0005/0006.
+- **Що додалось після 2026-06-02** (23 коміти, деталі — `CHANGELOG.md`):
+  - **Підзадачі** `TaskChecklistItem` — поля як у задачі (опис/дедлайн/виконавець/порядок), drag-and-drop, розгортання просто в списку, стан у localStorage (ADR-0007).
+  - **Шаблони задач** — `Standard.isTaskTemplate` + `task.copyFromTemplate` з перерахунком дедлайнів за поетапним планом цілі (ADR-0008). Разовий прогін по всіх стандартах виконано на проді 2026-08-03.
+  - **Дерево `/tasks`** — групування РГ → Стандарт, перемикач «Дерево / Список», власний скрол списку.
+  - **Метадані Програми** — `partProgram` / `programNumber` / `indeks` / `oldTitle`; чипсик завдання показує індекс-гриф.
+  - **Редаговані терміни етапів** після створення стандарту (кнопка «Терміни»).
+  - **Форми:** Enter = головна дія; модалка не закривається при виділенні тексту; форма нового завдання не скидається фоновим полінгом.
+  - **(i) з описом** у рядку задачі й підзадачі (`src/components/ui/DescriptionNote.tsx`).
+- **UI-патерн:** підтвердження — `ConfirmModal` (type-to-confirm); сповіщення — `toast` (`success/error/info`/`notify`, всі top-right, filled cards). Нативні `confirm()/alert()` під забороною. Тіло модалки з формою — у `<form onSubmit>`, головна кнопка `type="submit"`.
+- **Документна модель:** `DocumentType` = `STANDARD` | `TECH_SPEC` | `FEEDBACK` | `AGENDA` | `ATTACHMENT` (+ legacy `MEETING_MINUTES`, ховається з пікера). Видалено: `DRAFT_STANDARD` (→ `STANDARD`), `FINAL` (→ `ATTACHMENT`). Бекфіл у `scripts/pre-db-push.sql` (через `scripts/pre-db-push.sh` перед `prisma db push`). `isCurrent` — тільки для `STANDARD` і `TECH_SPEC`.
+- **Voting:** ціль голосування — активний `STANDARD`-документ. На закриття: `Document.lockedAt`/`lockedByVotingId`, ім'я доповнюється `(Голосування №N, прийнято/відхилено DD.MM.YYYY)`, `Voting.documentId` тримає посилання. **REJECTED → standard.status = DRAFT** + клон документа з версією `vN+1`. **ADOPTED → ADOPTED**, клон НЕ створюється. Голосування не видаляються. Поріг — `forVotes/eligibleCount > 0.5`, `eligibleCount` = активні `LEADER/DEPUTY/MEMBER` (snapshot у `Voting.eligibleAtClose`).
 - **DRAFT → IN_REVIEW gate:** потрібен ≥1 активний `STANDARD`-документ (НЕ ТЗ — ТЗ опціональний). Server + UI. ADMIN bypass.
-- **Admin tools:** `/admin/settings` → «Небезпечна зона» → `vote.adminWipeAll` (type-to-confirm `WIPE-ALL-VOTINGS`) — видаляє всі Voting + Vote, повертає VOTING/ADOPTED/REJECTED стандарти у IN_REVIEW з аудит-історією.
-- **Останній QA-цикл:** `QA-tests/2026-05-26/` (34 backend / 20 designer / 11 frontend). Зведення — `QA-tests/2026-05-26/summary.md`. Наступний QA-pass — після стабілізації documents/voting циклу.
+- **Admin tools:** `/admin/settings` → «Небезпечна зона» → `vote.adminWipeAll` (type-to-confirm `WIPE-ALL-VOTINGS`).
+- **Останній QA-цикл:** `QA-tests/2026-05-26/` (34 backend / 20 designer / 11 frontend). **Після нього формального QA не було** — цикл «Завдання» не проходив QA-прогону.
 
 ### Відкриті задачі (за пріоритетом)
 
-**🟢 P0 — Voting/documents lifecycle** — у роботі / стабілізація. Виконано: rename DRAFT_STANDARD→STANDARD, drop FINAL, lock-on-close, clone-on-reject, REJECT→DRAFT, eligibleAtClose, adminWipeAll, IN_REVIEW gate by STANDARD. Слідкуй за `Document.lockedAt`/`Voting.documentId` при роботі з документами.
+**🔴 P0 — Акаунти з `wg4-add-missing.ts`.** Скрипт створив на проді 5 реальних акаунтів ДДК Адміністрації Держспецзв'язку з паролем `User123!` і був закомічений у **публічний** репозиторій (коміт `847a55e`). Файл прибрано з робочого дерева, але він лишається в історії git. Треба примусово змінити паролі цим 5 користувачам; історію без force-push (заборонений) не вичистити.
 
-**🟡 P1 — Product Tour / Онбординг** (`feat/onboarding-tour`, заплановано): guided walkthrough для нового користувача — overlay+spotlight+tooltip, role-aware кроки, кнопка «Навчання» в /profile або /admin/settings, флаг `onboarding_completed` у `User`. Бібліотека-кандидат: Driver.js або Shepherd.js (вибір — окремий ADR).
+**🟠 P1 — QA-прогін по модулю «Завдання».** Підзадачі, шаблони, дерево й перерахунок дат на проді формального QA не проходили. Окремо: `task.copyFromTemplate` у режимі `replace` (видаляє існуючі задачі) і RBAC на `checklist*`-процедурах.
 
-**🟠 P1 — Frontend / UX backlog:** D-6/D-8/D-11–D-14/D-16/D-17/D-19/D-20 (mobile QA окремо), F-8/F-9/F-11 (mobile), F-4 (closed раніше — toast unification).
+**🟡 P1 — Product Tour / Онбординг** (`feat/onboarding-tour`, заплановано): overlay+spotlight+tooltip, role-aware кроки, флаг `onboarding_completed` у `User`. Кандидати: Driver.js або Shepherd.js (вибір — окремий ADR).
+
+**🟠 P1 — Frontend / UX backlog:** D-6/D-8/D-11–D-14/D-16/D-17/D-19/D-20 (mobile QA окремо), F-8/F-9/F-11 (mobile).
 
 **🟡 P2 — Backend security backlog:** B-8 follow-up (інвалідація активних JWT + `maxAge`), `meeting.list`/`task.list` single-WG bypass (як B-1), B-15…B-34 (last-leader guard B-18, транзакції B-20/B-25/B-27, cron-secret query B-28, `/api/version` leak B-29, CSP, iCal-token model B-32).
 
-**Backlog (не цей цикл):** перехід з `db push` на `prisma migrate deploy` (ADR-0004 risk зростає з кожним destructive change — bckфіл `pre-db-push.sql` — поточний обхід), CSP headers, MEETING_MINUTES → повний редирект на Протоколи модуль (зараз тільки picker hidden).
+**Backlog (не цей цикл):** перехід з `db push` на `prisma migrate deploy` (ADR-0004 — ризик росте з кожною destructive-зміною), CSP headers, MEETING_MINUTES → повний редирект на модуль Протоколи, `public/favicon.svg` важить 2.3 МБ (генератор вшив растр) — пересторити.
 
 ### Відомі блокери та обхідні шляхи
 
 - **iCloud lock:** репо НЕ тримати в `~/Documents`/`~/Desktop` — sync вішає `tsc`/`eslint`/`next build` на `read()` `node_modules`. Перенесено в `~/Private/Claude/standardotvoryets` (2026-05-26). Обхід: працювати з не-синхронізованої копії.
 - **Порт-конфлікт з `buildco-platform`:** на машині Kir інфра-порти (3000/5432/6379/9000/9001/1025/8025) бувають зайняті. Обхід: локальний `docker-compose.override.yml` (`ports: !override`, зміщені порти) + `PORT=3001 pnpm dev`. Файл — у `.gitignore`. Деталі в `HANDOFF.md`.
 - **Prisma client (pnpm):** генерується в `.pnpm`-стор, не в `node_modules/.prisma/client`. Перед typecheck — `pnpm exec prisma generate`.
+- **Репозиторій ПУБЛІЧНИЙ** (`github.com/kGuliaiev/standardotvoryets`). Усе закомічене видно всім — зокрема `prisma/seed.ts` з демо-паролями (`Admin123!`/`User123!`). Одноразові скрипти з реальними ПІБ/поштами/паролями не комітити: історію git назад не перепишеш без force-push, який заборонений.
 
 ### Контекст архітектурних рішень (останні цикли)
 

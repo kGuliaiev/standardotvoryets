@@ -140,6 +140,20 @@ When the user **does** need to take action to fill the empty state (e.g. "Add th
 - Desktop: panel centres
 - For editors / long forms, use `size="full"` (max-w-7xl)
 - Confirmation dialogs use red `btn-primary bg-red-600 hover:bg-red-700` for the destructive action
+- **Drag-select guard.** Backdrop click dismisses only when the press *started*
+  outside the panel. `Modal` tracks this with a `mouseDownInside` ref set on
+  `onMouseDown`; without it, selecting text in a field and releasing the mouse
+  outside the window closes the modal and loses the input.
+
+### ConfirmModal — підтвердження замість `confirm()`
+
+`src/components/ui/ConfirmModal.tsx`. Нативні `confirm()` / `alert()` **під
+забороною** — вони не темізуються, не локалізуються і блокують потік.
+
+- Звичайне підтвердження — заголовок + текст + пара кнопок.
+- Деструктивна дія — `destructive` + **type-to-confirm**: користувач вводить
+  точну фразу (`WIPE-ALL-VOTINGS`) або згенерований код, кнопка розблоковується
+  лише на збіг. Enter спрацьовує за тих самих умов, що й кнопка.
 
 ### Sticky toolbars inside modals
 
@@ -195,9 +209,37 @@ Every screen must be usable on iPhone-sized viewports (375×667 minimum). Breakp
 
 ### Submit
 
+- **Тіло форми в модалці загортається у `<form onSubmit>`**, головна кнопка —
+  `type="submit"`, «Скасувати» лишається `type="button"`. Так Enter в будь-якому
+  однорядковому полі виконує головну дію; у `textarea` Enter і далі дає новий
+  рядок. Обробник робить `e.preventDefault()` і виходить, якщо мутація вже в
+  польоті. Застосовано в `TaskFormModal`, `DocumentUploadModal`,
+  `DocumentEditMetaModal`, `TaskCopyFromTemplateModal`, «Редагувати стандарт» і
+  «Терміни етапів».
 - `<button className="btn-primary">` (brand) or `btn-secondary` (outlined)
 - Loading state: prepend `<Loader2 className="w-4 h-4 animate-spin" />`, change label to "Збереження…" / "Завантаження…"
 - Disable the button (`disabled:opacity-50 disabled:cursor-not-allowed`) while pending
+
+---
+
+## 7a. Toasts — зворотний зв'язок після дії
+
+`src/lib/toast.tsx` — рендериться через `createPortal` у `document.body`.
+
+| Варіант | Коли | Вигляд |
+|---|---|---|
+| `toast.success` | дія вдалась | заливка `bg-emerald-600`, білий текст |
+| `toast.error` | дія не вдалась (текст з `e.message`) | заливка `bg-rose-600`, білий текст |
+| `toast.info` | нейтральне повідомлення | нейтральна картка на токенах |
+| `toast.notify` | вхідне сповіщення | як `info`, з іконкою типу |
+
+Правила:
+
+- **Усі варіанти — зверху праворуч**, одною колонкою з попапом сповіщень; не
+  розкидати по кутах, інакше користувач не знає, куди дивитись.
+- Заливка, а не рамка: `rounded-2xl border-2 px-5 py-4 shadow-2xl`, ширина 380px.
+- Помилка мутації завжди має доходити до користувача — мовчазний `onError` під
+  забороною (клас багів «натиснув, нічого не сталось»).
 
 ---
 
