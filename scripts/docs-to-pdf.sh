@@ -14,6 +14,7 @@ CHROME="/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
 [ -x "$CHROME" ] || { echo "Немає Google Chrome за шляхом $CHROME" >&2; exit 1; }
 
 DOCS=(
+  docs/INFO-BRIEF.md
   docs/ARCHITECTURE.md
   docs/RESOURCE-REQUIREMENTS.md
   docs/DEPLOY-ONPREM.md
