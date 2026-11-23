@@ -28,6 +28,7 @@
     "test:modules": "tsx scripts/test-modules.ts",
     "qa:smoke": "bash scripts/qa-smoke.sh",
     "docs:pdf": "bash scripts/docs-to-pdf.sh",
+    "docs:docx": "bash scripts/docs-to-docx.sh",
     "prepare": "husky"
   },
   "dependencies": {
