@@ -15,6 +15,7 @@ CHROME="/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
 
 DOCS=(
   docs/ARCHITECTURE.md
+  docs/DEPLOY-ONPREM.md
   README.md
   HANDOFF.md
   CONTINUATION.md
