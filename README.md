@@ -15,6 +15,7 @@
 | [`CONTINUATION.md`](CONTINUATION.md) | Поточний стан, що відкрито, блокери | щодня |
 | [`docs/DECISIONS.md`](docs/DECISIONS.md) | ADR — **чому** саме так | перед тим, як переробляти |
 | [`OPS.md`](OPS.md) | Деплой, дебаг, відновлення | коли щось впало |
+| [`docs/RESOURCE-REQUIREMENTS.md`](docs/RESOURCE-REQUIREMENTS.md) | **Вимоги до ресурсів** — документ для замовника | коли просять вимоги до середовища |
 | [`docs/DEPLOY-ONPREM.md`](docs/DEPLOY-ONPREM.md) | Розгортання в закритій мережі: вимоги, залізо, покроково | перенесення on-prem |
 | [`DESIGN.md`](DESIGN.md) | Токени, патерни UI, чекліст екрана | перед новим екраном |
 | [`TASKS.md`](TASKS.md) | Нумерований беклог і історія виконаного | при постановці задач |
